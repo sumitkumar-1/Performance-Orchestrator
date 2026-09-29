@@ -64,39 +64,42 @@ public class SecretServerTokens {
           "credentials", "Username and password are required and must fit the configured limits");
     // Reauthentication never retains a previous token after a failed exchange.
     session.removeAttribute(PREFIX + id);
-    String form =
-        "grant_type=password&username=" + encode(username.trim()) + "&password=" + encode(password);
+    Token token = exchange(server, username, password);
+    session.setAttribute(PREFIX + id, token);
+    return status(id, session);
+  }
+
+  public Map<String, Object> useToken(String id, String value, long expiresInSeconds, HttpSession session) {
+    if (!server(id).mode().equals("token")) throw Problem.invalid("connection", "Select token authentication first");
+    session.removeAttribute(PREFIX + id);
+    RequestAuthentication.bearer(value);
+    if (expiresInSeconds < 1 || expiresInSeconds > 28800)
+      throw Problem.invalid("expiresInSeconds", "Provide remaining token lifetime, at most 8 hours");
+    session.setAttribute(PREFIX + id, new Token(value, clock.instant().plusSeconds(expiresInSeconds), config.generation()));
+    return status(id, session);
+  }
+
+  private Token exchange(ConnectionConfig.SecretServer server, String username, String password) {
+    String form = "grant_type=password&username=" + encode(username.trim()) + "&password=" + encode(password);
     var response = http.tokenForm(URI.create(server.tokenUrl()), form);
     if (response.status() < 200 || response.status() >= 300)
-      throw new Problem(
-          response.status() == 400 || response.status() == 401 || response.status() == 403
-              ? 401
-              : 502,
-          "SECRET_AUTH_FAILED",
-          "credentials",
-          "Secret Server authentication failed; verify credentials and connection configuration");
+      throw new Problem(response.status() == 400 || response.status() == 401 || response.status() == 403 ? 401 : 502,
+          "SECRET_AUTH_FAILED", "credentials", "Secret Server authentication failed; verify credentials and connection configuration");
     try {
       var body = Json.MAPPER.readTree(response.body());
       String value = body.path("access_token").asText("");
-      String type = body.path("token_type").asText("Bearer");
       long seconds = body.path("expires_in").asLong(0);
-      if (!type.equalsIgnoreCase("Bearer") || !validToken(value) || seconds <= 0)
+      if (!body.path("token_type").asText("Bearer").equalsIgnoreCase("Bearer") || !validToken(value) || seconds <= 0)
         throw new IllegalArgumentException();
-      Instant expires = clock.instant().plusSeconds(seconds);
-      session.setAttribute(PREFIX + id, new Token(value, expires, config.generation()));
-      return status(id, session);
+      return new Token(value, clock.instant().plusSeconds(seconds), config.generation());
     } catch (Exception error) {
-      throw new Problem(
-          502,
-          "SECRET_TOKEN_SCHEMA",
-          "connection",
-          "Token response must contain a Bearer access_token and positive expires_in");
+      throw new Problem(502, "SECRET_TOKEN_SCHEMA", "connection", "Token response must contain a Bearer access_token and positive expires_in");
     }
   }
 
   public Map<String, Object> status(String id, HttpSession session) {
     var server = server(id);
-    if (!server.mode().equals("portal"))
+    if (!Set.of("portal", "token").contains(server.mode()))
       return Map.of("mode", server.mode(), "state", "ADMINISTRATOR_PROVIDED");
     Token token = session == null ? null : (Token) session.getAttribute(PREFIX + id);
     if (token != null
@@ -105,8 +108,8 @@ public class SecretServerTokens {
       token = null;
     }
     return token == null
-        ? Map.of("mode", "portal", "state", "SIGN_IN_REQUIRED")
-        : Map.of("mode", "portal", "state", "AUTHENTICATED", "expiresAt", token.expires.toString());
+        ? Map.of("mode", server.mode(), "state", "SIGN_IN_REQUIRED")
+        : Map.of("mode", server.mode(), "state", server.mode().equals("token") ? "TOKEN_PROVIDED" : "AUTHENTICATED", "expiresAt", token.expires.toString());
   }
 
   public Map<String, Object> statuses(HttpSession session) {
@@ -121,10 +124,18 @@ public class SecretServerTokens {
   }
 
   public String authorization(String id) {
+    return authorization(id, ref -> { throw unavailable(); });
+  }
+
+  public String authorization(String id, Function<String, CredentialResolver.Secret> resolver) {
     var server = server(id);
     String value;
     switch (server.mode()) {
-      case "portal" -> {
+      case "secret-server" -> {
+        var credential = resolver.apply(server.credentialRef());
+        value = credential.token() ? credential.password() : exchange(server, credential.username(), credential.password()).value;
+      }
+      case "portal", "token" -> {
         HttpSession session = currentSession();
         status(id, session); // Evict expired token before use.
         Token token = session == null ? null : (Token) session.getAttribute(PREFIX + id);
@@ -147,7 +158,7 @@ public class SecretServerTokens {
   }
 
   public void rejected(String id) {
-    if (server(id).mode().equals("portal")) {
+    if (Set.of("portal", "token").contains(server(id).mode())) {
       signOut(id, currentSession());
       throw signInRequired();
     }

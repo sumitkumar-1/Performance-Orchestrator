@@ -25,12 +25,24 @@ connections:
     office:
       apiBaseUrl: https://artifactory.domain/artifactory/api/docker
       credentialRef: registry-reader
+      authMode: secret-server # ad: request-only username/password; token: request-only Bearer token
+  bitbucket:
+    office-stash:
+      apiBaseUrl: https://stash.domain.net/rest/api
+      authMode: secret-server
+      credentialRef: bitbucket-reader
   secretServers:
     office-vault:
       apiBaseUrl: https://domain/SecretServer/api/v1
       authMode: portal
       tokenUrl: https://domain/SecretServer/oauth2/token
   credentials:
+    bitbucket-reader:
+      provider: delinea
+      secretServerRef: office-vault
+      secretId: '12346' # EXAMPLE: replace with the approved Bitbucket secret ID
+      usernameFieldSlug: username
+      passwordFieldSlug: password
     registry-reader:
       provider: delinea
       secretServerRef: office-vault
@@ -109,15 +121,7 @@ connections:
       secretId: '20011' # EXAMPLE ONLY: replace for perf3 metrics
       usernameFieldSlug: username
       passwordFieldSlug: password
-  imageSources:
-    office-dev:
-      displayName: Dev images (example - configure before use)
-      connectionRef: office
-      repositoryKey: REPLACE_WITH_DOCKER_REPOSITORY
-      imagePaths:
-        ps-spoolers-ps-load-gen: REPLACE_WITH_IMAGE_PATH
-      usernameRequired: false
-      pullRepositoryTemplate: artifactory.domain/{repositoryKey}/{image}
+  imageSources: {} # Legacy mappings remain importable; new mappings belong to services
 # Existing Kubernetes Secret with environment-variable keys; no values in this chart.
 environmentSecret: ""
 # Optional existing Secret containing a plain bearer token under key `token`.
@@ -206,6 +210,17 @@ catalog:
   services:
     ps-spoolers-ps-load-gen:
       projectPath: projects/ps-spoolers-ps-load-gen
+      containerImage:
+        connectionRef: office
+        repoStage: dev # Produces docker-dev; independent of deployment environment
+        teamId: ps-spoolers
+        imageName: ps-spoolers-ps-load-gen
+      sourceProject:
+        connectionRef: office-stash
+        projectKey: SP
+        repository: ps-spoolers-ps-load-gen
+        revision: REPLACE_WITH_APPROVED_GIT_TAG
+        chartPath: ckp/helm/ps-spoolers-ps-load-gen
       dependencies: []
       deploymentDefaults:
         namespace: ps-spoolers-smtp-data-producer

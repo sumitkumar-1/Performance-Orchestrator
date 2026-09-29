@@ -4,6 +4,8 @@ import static com.example.perforchestrator.domain.Model.*;
 
 import com.example.perforchestrator.domain.*;
 import com.example.perforchestrator.infrastructure.config.Json;
+import com.example.perforchestrator.infrastructure.config.Catalog;
+import com.example.perforchestrator.infrastructure.secrets.RequestAuthentication;
 import com.example.perforchestrator.infrastructure.secrets.CredentialResolver;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
@@ -19,9 +21,16 @@ public class ArtifactoryImages {
   private final ConnectionConfig config;
   private final ReadOnlyHttp http;
   private final CredentialResolver credentials;
+  private final Catalog catalog;
 
   public ArtifactoryImages(
       ConnectionConfig config, ReadOnlyHttp http, CredentialResolver credentials) {
+    this(config, http, credentials, null);
+  }
+
+  @org.springframework.beans.factory.annotation.Autowired
+  public ArtifactoryImages(ConnectionConfig config, ReadOnlyHttp http, CredentialResolver credentials, Catalog catalog) {
+    this.catalog = catalog;
     this.config = config;
     this.http = http;
     this.credentials = credentials;
@@ -34,8 +43,22 @@ public class ArtifactoryImages {
     }
   }
 
-  private Target target(String service, String source, String username) {
-    var mapping = config.data().imageSources().get(source);
+  public Map<String, ConnectionConfig.Source> sources() {
+    var sources = new TreeMap<>(config.data().imageSources());
+    if (catalog != null) catalog.data().services().forEach((id, service) -> {
+      var image = service.containerImage();
+      if (image != null) {
+        var connection = config.data().artifactory().get(image.connectionRef());
+        if (connection != null) sources.put("service:" + id, new ConnectionConfig.Source(id,
+            image.connectionRef(), "docker-" + image.repoStage(), Map.of(id, image.teamId() + "/" + image.imageName()), false,
+            URI.create(connection.apiBaseUrl()).getAuthority() + "/{repositoryKey}/{image}"));
+      }
+    });
+    return Collections.unmodifiableMap(sources);
+  }
+
+  private Target target(String service, String source, String username, RequestAuthentication input) {
+    var mapping = sources().get(source);
     if (mapping == null) throw Problem.invalid("source", "Unknown configured Artifactory source");
     if (mapping.usernameRequired()
         && (username == null || !username.matches("[a-zA-Z0-9][a-zA-Z0-9_-]{0,39}")))
@@ -49,14 +72,7 @@ public class ArtifactoryImages {
         ConnectionConfig.safePath(
             registered.replace("{username}", username == null ? "" : username));
     var connection = config.data().artifactory().get(mapping.connectionRef());
-    var secret = credentials.resolve(connection.credentialRef());
-    if (secret.username().contains(":"))
-      throw Problem.invalid("credentialRef", "Basic-auth username cannot contain a colon");
-    String authorization =
-        "Basic "
-            + Base64.getEncoder()
-                .encodeToString(
-                    (secret.username() + ":" + secret.password()).getBytes(StandardCharsets.UTF_8));
+    String authorization = RequestAuthentication.authorization(connection.mode(), connection.credentialRef(), input, credentials);
     String repository =
         mapping
             .pullRepositoryTemplate()
@@ -76,13 +92,17 @@ public class ArtifactoryImages {
   }
 
   public Page discover(String service, String source, String username, String cursor, int limit) {
+    return discover(service, source, username, cursor, limit, null);
+  }
+
+  public Page discover(String service, String source, String username, String cursor, int limit, RequestAuthentication input) {
     if (limit < 1
         || limit > 100
         || (cursor != null
             && !cursor.isBlank()
             && !cursor.matches("[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}")))
       throw Problem.invalid("cursor", "Invalid registry pagination");
-    Target target = target(service, source, username);
+    Target target = target(service, source, username, input);
     String query =
         "?n="
             + limit
@@ -119,9 +139,13 @@ public class ArtifactoryImages {
   }
 
   public Image resolve(String service, String source, String username, String tag) {
+    return resolve(service, source, username, tag, null);
+  }
+
+  public Image resolve(String service, String source, String username, String tag, RequestAuthentication input) {
     if (tag == null || !tag.matches("[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}") || tag.equals("latest"))
       throw Problem.invalid("version", "Select a concrete image tag; latest is not supported");
-    Target target = target(service, source, username);
+    Target target = target(service, source, username, input);
     var response =
         http.get(
             URI.create(target.api() + "/manifests/" + tag),

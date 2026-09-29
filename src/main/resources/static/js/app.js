@@ -1,5 +1,6 @@
 import { el, labeled, input, select } from "./dom.js";
 import { secretSignInPrompt } from "./secret-sign-in.js";
+import { operationAuthentication } from "./operation-auth.js";
 import { configurationManager } from "./configuration-manager.js";
 import { deploymentEditor } from "./deployments.js";
 const app = document.querySelector("#app");
@@ -720,6 +721,7 @@ async function configurationEditor() {
     ["catalog.imageSources", "Mock image sources & versions"],
     ["catalog.scenarios", "Load scenario templates"],
     ["connections.artifactory", "Artifactory connections"],
+    ["connections.bitbucket", "Bitbucket connections"],
     ["connections.secretServers", "Secret Server authentication"],
     ["connections.credentials", "Credential references & secret IDs"],
     ["connections.imageSources", "Real image-source mappings"],
@@ -771,6 +773,7 @@ async function configurationEditor() {
           || Object.keys(imported).some(key => !["revision", "catalog", "connections"].includes(key))
           || !imported.catalog || !imported.connections)
         throw new Error("Import a configuration export containing catalog and connections.");
+      imported.connections.bitbucket ||= {}; // Older exports did not include Bitbucket.
       for (const [key] of sections.filter(([key]) => key !== "all")) {
         const [group, section] = key.split(".");
         const value = imported[group][section];
@@ -823,7 +826,7 @@ async function settings() {
   const authStates = await api("/secret-auth");
   app.append(heading("WORKSPACE SETTINGS", "Connections & catalog", "Manage connections and service settings. Changes apply when saved."),
     el("p", { class: "banner" }, session.mode === "real"
-      ? "Real mode · Vault authentication and image discovery are available. Helm execution and live monitoring are not connected yet."
+      ? "Real mode · Vault authentication, image discovery and Bitbucket references are available. Helm execution and live monitoring are not connected yet."
       : "Simulation mode · Deployments and results are synthetic. Registry diagnostics use configured real connections."),
     el("p", { class: "muted" }, startup.runtimeOverride
       ? "Startup defaults + saved dashboard changes. Export your configuration below to keep a backup."
@@ -833,7 +836,7 @@ async function settings() {
       onSignIn: id => busy(() => vaultPrompt.open(id)) }));
   app.append(await configurationEditor());
   const diagnostics = el("details", { class: "card spacer" }, el("summary", {}, "Connection diagnostics"),
-    el("p", { class: "muted" }, "Test image discovery with your configured registry and credentials. These requests do not deploy anything."));
+    el("p", { class: "muted" }, "Test registry tags and Bitbucket references with configured connections. These requests do not deploy anything."));
   app.append(diagnostics);
   const config = await api("/connections");
   if (!Object.keys(config.imageSources).length) diagnostics.append(el("p", {}, "Add an image repository to test discovery."));
@@ -845,7 +848,8 @@ async function settings() {
       const username = input("");
       username.disabled = !source.usernameRequired;
       const versions = select([["", "Choose a discovered version"]], "");
-      const evidence = el("pre", {}, "No request made yet.");
+      const evidence = el("pre", { role: "status" }, "No request made yet.");
+      const authentication = operationAuthentication(config.artifactory[source.connectionRef]);
       const diagnosticButton = (label, fn) => el("button", { type: "button", onclick: async event => {
         event.currentTarget.disabled = true;
         const control = event.currentTarget;
@@ -856,12 +860,9 @@ async function settings() {
       const browse = async (more = false) => {
         if (!service.value) throw new Error("Configure a service image path first.");
         const base = `/registry-sources/${encodeURIComponent(sourceId)}/services/${encodeURIComponent(service.value)}/images`;
-        const params = new URLSearchParams({
-          limit: "50",
-          cursor: more ? cursor : "",
-        });
-        if (source.usernameRequired) params.set("username", username.value);
-        const result = await api(base + "?" + params);
+        const result = await authentication.run(auth => api(base + "/query", {
+          method: "POST", body: { limit: 50, cursor: more ? cursor : "", username: source.usernameRequired ? username.value : null, authentication: auth }
+        }));
         if (!more)
           versions.replaceChildren(
             el("option", { value: "" }, "Choose a discovered version"),
@@ -888,6 +889,7 @@ async function settings() {
             source.usernameRequired ? labeled("Artifact-owner username", username) : null,
             labeled("Available version", versions),
           ),
+          authentication.node,
           el(
             "div",
             { class: "card-actions" },
@@ -898,15 +900,9 @@ async function settings() {
             diagnosticButton("Resolve digest", async () => {
               if (!versions.value)
                 throw new Error("Choose a discovered version first");
-              const params = new URLSearchParams();
-              if (source.usernameRequired)
-                params.set("username", username.value);
-              evidence.textContent = pretty(
-                await api(
-                  `/registry-sources/${encodeURIComponent(sourceId)}/services/${encodeURIComponent(service.value)}/images/${encodeURIComponent(versions.value)}?` +
-                    params,
-                ),
-              );
+              evidence.textContent = pretty(await authentication.run(auth => api(
+                `/registry-sources/${encodeURIComponent(sourceId)}/services/${encodeURIComponent(service.value)}/images/query`,
+                { method: "POST", body: { tag: versions.value, username: source.usernameRequired ? username.value : null, authentication: auth } })));
             }),
           ),
           evidence,
@@ -917,7 +913,7 @@ async function settings() {
         button("Browse versions", () => {
           const dialog = el("dialog", { class: "deployment-dialog", "aria-label": "Browse image versions" }, content,
             el("div", { class: "dialog-actions" }, el("button", { type: "button", onclick: () => dialog.close() }, "Close")));
-          dialog.addEventListener("close", () => dialog.remove());
+          dialog.addEventListener("close", () => { authentication.clear(); dialog.remove(); });
           document.body.append(dialog); dialog.showModal();
         })));
       service.addEventListener("change", () => {
@@ -933,11 +929,43 @@ async function settings() {
         cursor = "";
       });
     }
+  for (const [serviceId, service] of Object.entries(active.catalog.services)) {
+    const project = service.sourceProject;
+    if (!project) continue;
+    diagnostics.append(el("div", { class: "config-row" },
+      el("div", {}, el("strong", {}, serviceId), el("p", { class: "muted" }, `${project.connectionRef} → ${project.projectKey}/${project.repository}`)),
+      button("Browse Git references", () => {
+        const auth = operationAuthentication(config.bitbucket[project.connectionRef]);
+        const kind = select([["tags", "Tags"], ["branches", "Branches"]], "tags");
+        const output = el("pre", { role: "status" }, "No request made yet.");
+        let nextStart = null;
+        const query = async start => {
+          const result = await auth.run(authentication => api(`/service-projects/${encodeURIComponent(serviceId)}/references/query`, {
+            method: "POST", body: { kind: kind.value, start, authentication }
+          }));
+          nextStart = result.nextStart;
+          output.textContent = pretty(result);
+        };
+        const request = (label, operation) => el("button", { type: "button", onclick: async event => {
+          const node = event.currentTarget; node.disabled = true;
+          try { await operation(); } catch (error) { output.textContent = error.message; }
+          finally { node.disabled = false; }
+        } }, label);
+        kind.addEventListener("change", () => { nextStart = null; output.textContent = "No request made yet."; auth.clear(); });
+        const dialog = el("dialog", { class: "deployment-dialog", "aria-label": "Browse Bitbucket references" },
+          el("h2", {}, "Browse Bitbucket references"), labeled("Reference type", kind), auth.node,
+          el("div", { class: "card-actions" }, request("Fetch references", () => query(0)), request("Next page", () => nextStart === null ? (output.textContent = "No next page available.") : query(nextStart))),
+          output, el("div", { class: "dialog-actions" }, el("button", { type: "button", onclick: () => dialog.close() }, "Close")));
+        dialog.addEventListener("close", () => { auth.clear(); dialog.remove(); });
+        document.body.append(dialog); dialog.showModal();
+      })));
+  }
+
 }
 function realOverview() {
   app.append(heading("REAL INTEGRATIONS", "Connect your services", "Real connections only. No demo services or synthetic test results are loaded."),
     el("section", { class: "card" }, el("h2", {}, "Available now"),
-      el("p", {}, "Configure Artifactory URLs, repository paths and credential references. Authenticate to Delinea, discover image versions and resolve their digests."),
+      el("p", {}, "Configure Artifactory, Bitbucket and Delinea authentication. Discover image versions, resolve digests, and browse service Git branches and tags."),
       link("Configure connections", "#settings", "button primary")),
     el("section", { class: "card spacer" }, el("h2", {}, "Execution is not connected yet"),
       el("p", {}, "Real deployment, readiness, load-generator control and metrics need their organizational integration contracts. Planning and run submission are unavailable in this mode."),
@@ -974,7 +1002,7 @@ async function route() {
 }
 session = await api("/session");
 vaultPrompt = secretSignInPrompt(api, async state => {
-  toast(`Signed in until ${time(state.expiresAt)}`);
+  toast(`Vault session available until ${time(state.expiresAt)}`);
   await route();
 }, session.mode === "real");
 $("#mode-badge").textContent = session.mode === "real" ? "REAL · READ-ONLY" : "SIMULATION";

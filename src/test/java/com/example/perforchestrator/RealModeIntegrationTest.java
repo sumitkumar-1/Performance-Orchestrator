@@ -52,7 +52,8 @@ class RealModeIntegrationTest {
         .andExpect(jsonPath("$.configuration.connections.artifactory").isNotEmpty())
         .andExpect(jsonPath("$.configuration.connections.secretServers").isNotEmpty())
         .andExpect(jsonPath("$.configuration.connections.credentials").isNotEmpty())
-        .andExpect(jsonPath("$.configuration.connections.imageSources").isNotEmpty());
+        .andExpect(jsonPath("$.configuration.connections.bitbucket").isNotEmpty())
+        .andExpect(jsonPath("$.configuration.catalog.services.ps-spoolers-ps-load-gen.containerImage.teamId").value("ps-spoolers"));
   }
 
   @Test
@@ -123,6 +124,22 @@ class RealModeIntegrationTest {
     assertThatThrownBy(() -> configuration.update(Json.read(Json.write(altered), RuntimeConfiguration.Document.class)))
         .hasMessageContaining("Invalid catalog");
     assertThat(configuration.current()).isEqualTo(original);
+  }
+
+  @Test
+  void bitbucketReferenceQueryUsesConfiguredCredentialsAndRequiresCsrf() throws Exception {
+    String endpoint = "/api/v1/service-projects/ps-spoolers-ps-load-gen/references/query";
+    mvc.perform(post(endpoint).header("Host", "localhost").contentType("application/json")
+        .content("{\"kind\":\"tags\",\"start\":0}"))
+        .andExpect(status().isForbidden());
+    when(credentials.resolve("bitbucket-reader")).thenReturn(new CredentialResolver.Secret("reader", "private-password"));
+    when(http.get(any(), any(), any())).thenReturn(new ReadOnlyHttp.Response(200, Map.of(),
+        "{\"values\":[{\"id\":\"refs/tags/v1\",\"displayId\":\"v1\"}],\"isLastPage\":true}".getBytes(StandardCharsets.UTF_8)));
+    mvc.perform(post(endpoint).header("Host", "localhost").with(csrf()).contentType("application/json")
+        .content("{\"kind\":\"tags\",\"start\":0}"))
+        .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
+        .andExpect(jsonPath("$.values[0].displayName").value("v1"))
+        .andExpect(jsonPath("$.authentication").doesNotExist());
   }
 
   @Test

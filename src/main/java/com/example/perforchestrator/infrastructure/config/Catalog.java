@@ -51,13 +51,23 @@ public class Catalog {
     }
   }
 
+  public record ContainerImage(String connectionRef, String repoStage, String teamId, String imageName) {}
+  public record SourceProject(String connectionRef, String projectKey, String repository, String revision, String chartPath) {}
+
   public record Service(
       String projectPath,
       List<String> dependencies,
       Map<String, Destination> deploymentByEnvironment,
       Binding installationBindings,
       List<String> allowedOverridePaths,
-      Destination deploymentDefaults) {
+      Destination deploymentDefaults,
+      ContainerImage containerImage,
+      SourceProject sourceProject) {
+    public Service(String projectPath, List<String> dependencies, Map<String, Destination> deploymentByEnvironment,
+        Binding installationBindings, List<String> allowedOverridePaths, Destination deploymentDefaults) {
+      this(projectPath, dependencies, deploymentByEnvironment, installationBindings, allowedOverridePaths, deploymentDefaults, null, null);
+    }
+    @org.springframework.boot.context.properties.bind.ConstructorBinding
     public Service {
       dependencies = ImmutableConfiguration.list(dependencies);
       deploymentByEnvironment = ImmutableConfiguration.map(deploymentByEnvironment == null ? Map.of() : deploymentByEnvironment);
@@ -146,7 +156,7 @@ public class Catalog {
         data().services().forEach((id, service) -> {
           var destination = service.deploymentByEnvironment().getOrDefault(target, service.deploymentDefaults());
           if (destination != null) services.put(id, new Service(service.projectPath(), service.dependencies(),
-              (service.deploymentByEnvironment().containsKey(target) ? Map.of(target, destination) : Map.of()), service.installationBindings(), service.allowedOverridePaths(), service.deploymentDefaults()));
+              (service.deploymentByEnvironment().containsKey(target) ? Map.of(target, destination) : Map.of()), service.installationBindings(), service.allowedOverridePaths(), service.deploymentDefaults(), service.containerImage(), service.sourceProject()));
         });
         replace(new Data(mode, Map.of(target, selected), services, data().imageSources(), data().scenarios()));
       }

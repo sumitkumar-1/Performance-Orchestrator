@@ -35,6 +35,7 @@ public class RuntimeConfiguration {
     this.connections = connections;
     this.file = Path.of(file).toAbsolutePath().normalize();
     this.startup = new Document(null, catalog.data(), connections.data());
+    validate(this.startup);
     if (Files.exists(this.file)) {
       String content = ConfigurationResources.read(this.file.toString());
       var tree = Json.MAPPER.readTree(content);
@@ -79,6 +80,22 @@ public class RuntimeConfiguration {
     catalog.validate(next.catalog());
     try {
       new ConnectionConfig(next.connections());
+      next.catalog().services().values().forEach(service -> {
+        var image = service.containerImage();
+        if (image != null) {
+          if (!next.connections().artifactory().containsKey(image.connectionRef())) throw new IllegalArgumentException("Unknown image connection");
+          for (String part : new String[] { image.repoStage(), image.teamId(), image.imageName() })
+            if (part == null || !part.matches("[A-Za-z0-9][A-Za-z0-9_.-]{0,99}")) throw new IllegalArgumentException("Invalid image path component");
+        }
+        var source = service.sourceProject();
+        if (source != null) {
+          if (!next.connections().bitbucket().containsKey(source.connectionRef())) throw new IllegalArgumentException("Unknown Bitbucket connection");
+          for (String part : new String[] { source.projectKey(), source.repository() })
+            if (part == null || !part.matches("[A-Za-z0-9][A-Za-z0-9_.-]{0,99}")) throw new IllegalArgumentException("Invalid Bitbucket project/repository");
+          if (source.revision() == null || source.revision().isBlank() || source.revision().length() > 250) throw new IllegalArgumentException("Missing source revision");
+          ConnectionConfig.safePath(source.chartPath());
+        }
+      });
       next.catalog().environments().values().forEach(env -> {
         if (env.monitoring() != null) env.monitoring().namespaceCredentials().values().forEach(refs -> {
           for (String ref : java.util.List.of(

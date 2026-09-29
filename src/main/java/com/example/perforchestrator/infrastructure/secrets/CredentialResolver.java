@@ -6,11 +6,19 @@ public interface CredentialResolver {
 
   final class Secret {
     private final String username, password;
+    private final boolean token;
 
     public Secret(String username, String password) {
+      this(username, password, false);
+    }
+
+    public Secret(String username, String password, boolean token) {
       this.username = username;
       this.password = password;
+      this.token = token;
     }
+
+    public boolean token() { return token; }
 
     public String username() {
       return username;

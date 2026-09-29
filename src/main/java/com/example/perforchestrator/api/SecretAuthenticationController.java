@@ -38,6 +38,17 @@ public class SecretAuthenticationController {
     return result;
   }
 
+  public record TokenInput(String token, long expiresInSeconds) {
+    @Override public String toString() { return "[REDACTED]"; }
+  }
+
+  @PostMapping("/{connection}/token")
+  public Object useToken(@PathVariable String connection, @RequestBody TokenInput input, HttpServletRequest request) {
+    var result = tokens.useToken(connection, input.token(), input.expiresInSeconds(), request.getSession());
+    request.changeSessionId();
+    return result;
+  }
+
   @DeleteMapping("/{connection}")
   public Object signOut(@PathVariable String connection, HttpServletRequest request) {
     tokens.signOut(connection, request.getSession(false));

@@ -2,6 +2,7 @@ package com.example.perforchestrator.api;
 
 import com.example.perforchestrator.infrastructure.registry.*;
 import org.springframework.web.bind.annotation.*;
+import com.example.perforchestrator.infrastructure.secrets.RequestAuthentication;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -16,7 +17,20 @@ public class ConnectionsController {
 
   @GetMapping("/connections")
   public Object connections() {
-    return config.publicView();
+    var view = new java.util.LinkedHashMap<>(config.publicView());
+    view.put("imageSources", images.sources());
+    return view;
+  }
+
+  public record ImageQuery(String username, String cursor, Integer limit, String tag, RequestAuthentication authentication) {
+    @Override public String toString() { return "[REDACTED image query]"; }
+  }
+
+  @PostMapping("/registry-sources/{source}/services/{service}/images/query")
+  public Object query(@PathVariable String source, @PathVariable String service, @RequestBody ImageQuery query) {
+    return query.tag() == null
+        ? images.discover(service, source, query.username(), query.cursor(), query.limit() == null ? 50 : query.limit(), query.authentication())
+        : images.resolve(service, source, query.username(), query.tag(), query.authentication());
   }
 
   @GetMapping("/registry-sources/{source}/services/{service}/images")

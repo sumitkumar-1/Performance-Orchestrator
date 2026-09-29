@@ -49,6 +49,20 @@ class SecretAuthenticationApiTest {
   }
 
   @Test
+  void tokenInputRequiresCsrfAndReturnsOnlyStatus() throws Exception {
+    String endpoint = "/api/v1/secret-auth/organization/token";
+    String input = "{\"token\":\"private-token\",\"expiresInSeconds\":900}";
+    mvc.perform(post(endpoint).header("Host", "localhost").contentType("application/json").content(input))
+        .andExpect(status().isForbidden());
+    when(tokens.useToken(eq("organization"), eq("private-token"), eq(900L), any()))
+        .thenReturn(Map.of("state", "TOKEN_PROVIDED"));
+    mvc.perform(post(endpoint).header("Host", "localhost").with(csrf()).contentType("application/json").content(input))
+        .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
+        .andExpect(jsonPath("$.state").value("TOKEN_PROVIDED"))
+        .andExpect(jsonPath("$.token").doesNotExist());
+  }
+
+  @Test
   void rotatesSessionAndReturnsOnlyStatusThenClearsConnection() throws Exception {
     var session = new MockHttpSession();
     String previousId = session.getId();

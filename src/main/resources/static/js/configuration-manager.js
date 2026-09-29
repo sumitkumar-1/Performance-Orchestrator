@@ -31,7 +31,7 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, aut
     const value = structuredClone(entry || {});
     const readers = [];
     const field = (label, initial = "", options = {}) => {
-      const node = options.choices ? select(options.choices.map(v => [v, v || "None"]), initial ?? "")
+      const node = options.choices ? select(options.choices.map(v => Array.isArray(v) ? v : [v, v || "None"]), initial ?? "")
         : options.multiline ? el("textarea", { rows: 3 }, initial ?? "") : input(initial ?? "");
       node.required = !!options.required;
       node.disabled = !!options.disabled;
@@ -83,35 +83,53 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, aut
         { key: "metricsCredentialRef", label: "Metrics credential", choices: refs("credentials") }]);
       readers.push(() => { value.monitoring.namespaceCredentials = read(); });
       if (!real) note("Simulator limits and action permissions remain available in Advanced JSON.");
-    } else if (key === "artifactory") {
-      bind("Docker API base URL", "apiBaseUrl", { required: true });
-      note("Example: https://artifactory.domain/artifactory/api/docker. Repository and image paths are configured under Image repositories.");
-      bind("Credential reference", "credentialRef", { required: true, choices: refs("credentials") });
+    } else if (key === "artifactory" || key === "bitbucket") {
+      bind(key === "artifactory" ? "Docker API base URL" : "Bitbucket REST API base URL", "apiBaseUrl", { required: true });
+      note(key === "artifactory" ? "Example: https://artifactory.domain/artifactory/api/docker. Service settings supply docker-{stage} and {teamId}/{imageName}." : "Example: https://stash.domain.net/rest/api. Service settings identify the project, repository, Git revision and Helm chart.");
+      value.authMode ||= "secret-server";
+      const mode = bind("Authentication", "authMode", { choices: [["ad", "AD username/password per request"], ["token", "Bearer token per request"], ["secret-server", "Resolve credential reference"]] });
+      const credential = bind("Credential reference", "credentialRef", { choices: refs("credentials") });
+      const toggle = () => { credential.parentElement.hidden = mode.value !== "secret-server"; credential.required = mode.value === "secret-server"; };
+      mode.addEventListener("change", toggle); toggle();
+      readers.push(() => { if (value.authMode !== "secret-server") value.credentialRef = null; });
+      note("Enter AD credentials or tokens only in the operation dialog. They are not saved in configuration or sessions. AD requires Basic authentication enabled on the destination server.");
     } else if (key === "secretServers") {
       bind("Secret Server API base URL", "apiBaseUrl", { required: true });
       note("Use https://domain/SecretServer/api/v1. The client appends /secrets/{secretId}.");
       value.authMode ||= "portal";
-      const mode = bind("Authentication", "authMode", { choices: ["portal", "environment", "file"] });
+      const mode = bind("Authentication", "authMode", { choices: [["portal", "AD login → session token"], ["token", "Provide session token"], ["secret-server", "Resolve from another credential reference"], ["environment", "Token from environment variable"], ["file", "Token from mounted file"]] });
+      const credential = bind("Bootstrap credential reference", "credentialRef", { choices: refs("credentials") });
       const token = bind("OAuth token URL", "tokenUrl");
       const env = bind("Token environment variable name", "bearerTokenEnvironmentVariable");
       const file = bind("Absolute token file path", "bearerTokenFile");
-      const toggle = () => [[token, "portal"], [env, "environment"], [file, "file"]].forEach(([node, match]) => { node.parentElement.hidden = mode.value !== match; node.required = mode.value === match; });
-      mode.addEventListener("change", toggle); toggle();
-      readers.push(() => { if (value.authMode !== "portal") value.tokenUrl = null; if (value.authMode !== "environment") value.bearerTokenEnvironmentVariable = null; if (value.authMode !== "file") value.bearerTokenFile = null; });
-      note("Portal authentication uses the Sign in dialog. Store token references here, never token values.");
+      const needsExchange = () => mode.value === "portal" || (mode.value === "secret-server" && !active.connections.credentials[credential.value]?.tokenFieldSlug && !active.connections.credentials[credential.value]?.tokenEnvironmentVariable);
+      const toggle = () => {
+        [[credential, mode.value === "secret-server"], [token, needsExchange()], [env, mode.value === "environment"], [file, mode.value === "file"]].forEach(([node, shown]) => { node.parentElement.hidden = !shown; node.required = shown; });
+      };
+      mode.addEventListener("change", toggle); credential.addEventListener("change", toggle); toggle();
+      readers.push(() => { if (!needsExchange()) value.tokenUrl = null; if (value.authMode !== "environment") value.bearerTokenEnvironmentVariable = null; if (value.authMode !== "file") value.bearerTokenFile = null; if (value.authMode !== "secret-server") value.credentialRef = null; });
+      note("A vault cannot authenticate using a secret inside itself. Another vault must already have an AD/token session or an administrator-provided token. Circular dependencies are rejected.");
     } else if (key === "credentials") {
       value.provider ||= "delinea";
       const provider = bind("Provider", "provider", { choices: ["delinea", "environment"] });
+      const kind = field("Credential content", value.tokenFieldSlug || value.tokenEnvironmentVariable ? "token" : "basic", { choices: [["basic", "Username and password"], ["token", "Bearer token"]] });
       const vault = bind("Secret Server", "secretServerRef", { choices: refs("secretServers") });
       const secret = bind("Secret ID", "secretId");
       value.usernameFieldSlug ??= "username"; value.passwordFieldSlug ??= "password";
       const userSlug = bind("Username field slug", "usernameFieldSlug");
       const passSlug = bind("Password field slug", "passwordFieldSlug");
+      const tokenSlug = bind("Token field slug", "tokenFieldSlug");
       const userEnv = bind("Username environment variable name", "usernameEnvironmentVariable");
       const passEnv = bind("Password environment variable name", "passwordEnvironmentVariable");
-      const toggle = () => [[vault, "delinea"], [secret, "delinea"], [userSlug, "delinea"], [passSlug, "delinea"], [userEnv, "environment"], [passEnv, "environment"]].forEach(([node, match]) => { node.parentElement.hidden = provider.value !== match; node.required = provider.value === match; });
-      provider.addEventListener("change", toggle); toggle();
-      readers.push(() => { for (const key of value.provider === "delinea" ? ["usernameEnvironmentVariable", "passwordEnvironmentVariable"] : ["secretServerRef", "secretId", "usernameFieldSlug", "passwordFieldSlug"]) value[key] = null; });
+      const tokenEnv = bind("Token environment variable name", "tokenEnvironmentVariable");
+      const toggle = () => {
+        const vaultMode = provider.value === "delinea", tokenMode = kind.value === "token";
+        [[vault, vaultMode], [secret, vaultMode], [userSlug, vaultMode && !tokenMode], [passSlug, vaultMode && !tokenMode], [tokenSlug, vaultMode && tokenMode], [userEnv, !vaultMode && !tokenMode], [passEnv, !vaultMode && !tokenMode], [tokenEnv, !vaultMode && tokenMode]].forEach(([node, visible]) => { node.parentElement.hidden = !visible; node.required = visible; });
+      };
+      provider.addEventListener("change", toggle); kind.addEventListener("change", toggle); toggle();
+      readers.push(() => {
+        for (const [node, key] of [[vault, "secretServerRef"], [secret, "secretId"], [userSlug, "usernameFieldSlug"], [passSlug, "passwordFieldSlug"], [tokenSlug, "tokenFieldSlug"], [userEnv, "usernameEnvironmentVariable"], [passEnv, "passwordEnvironmentVariable"], [tokenEnv, "tokenEnvironmentVariable"]]) if (node.parentElement.hidden) value[key] = null;
+      });
     } else if (key === "imageSources") {
       bind("Display name", "displayName", { required: true });
       bind("Artifactory connection", "connectionRef", { required: true, choices: refs("artifactory") });
@@ -123,7 +141,29 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, aut
       readers.push(() => { value.usernameRequired = owner.value === "true"; value.imagePaths = Object.fromEntries(Object.entries(read()).map(([k, v]) => [k, v.path])); });
     } else if (key === "services") {
       bind("Project path", "projectPath", { required: true });
-      note("Relative project path. Remote Git checkout and Helm execution are not connected in real mode yet.");
+      note("Relative checkout destination. Bitbucket reference discovery is available; Git checkout and Helm execution are not yet connected.");
+      if (real) {
+        const containerImage = value.containerImage ||= {};
+        note("Container image · Artifactory Docker tags");
+        const imageConnection = bind("Artifactory connection (optional)", "connectionRef", { choices: refs("artifactory") }, value.containerImage);
+        const stage = bind("Repository stage (dev, stable, etc.)", "repoStage", {}, value.containerImage);
+        const team = bind("Team ID", "teamId", {}, value.containerImage);
+        const image = bind("Docker image name", "imageName", {}, value.containerImage);
+        note("Tags API: {Artifactory API base}/docker-{stage}/v2/{teamId}/{imageName}/tags/list");
+        const sourceProject = value.sourceProject ||= {};
+        note("Source repository · Bitbucket / Stash");
+        const gitConnection = bind("Bitbucket connection (optional)", "connectionRef", { choices: refs("bitbucket") }, value.sourceProject);
+        const project = bind("Bitbucket project key", "projectKey", {}, value.sourceProject);
+        const repository = bind("Bitbucket repository slug", "repository", {}, value.sourceProject);
+        const revision = bind("Git tag, branch or commit", "revision", {}, value.sourceProject);
+        const chart = bind("Helm chart path within repository", "chartPath", {}, value.sourceProject);
+        const toggle = () => {
+          for (const [connection, fields] of [[imageConnection, [stage, team, image]], [gitConnection, [project, repository, revision, chart]]])
+            fields.forEach(node => { node.parentElement.hidden = !connection.value; node.required = !!connection.value; });
+        };
+        imageConnection.addEventListener("change", toggle); gitConnection.addEventListener("change", toggle); toggle();
+        readers.push(() => { value.containerImage = imageConnection.value ? containerImage : null; value.sourceProject = gitConnection.value ? sourceProject : null; });
+      }
       bind("Dependencies (one service ID per line)", "dependencies", { multiline: true });
       bind("Allowed values override paths (one per line)", "allowedOverridePaths", { multiline: true });
       value.deploymentByEnvironment ||= {};
@@ -163,13 +203,14 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, aut
     ui.form.addEventListener("submit", event => { event.preventDefault(); const draft = structuredClone(active); delete draft[group][key][id]; persist(draft, ui); });
     ui.dialog.showModal();
   }
-  const titles = { environments: "environment", artifactory: "Artifactory connection", secretServers: "Secret Server", credentials: "credential reference", imageSources: "image repository", services: "service project" };
+  const titles = { environments: "environment", artifactory: "Artifactory connection", bitbucket: "Bitbucket connection", secretServers: "Secret Server", credentials: "credential reference", imageSources: "image repository", services: "service project" };
   const sections = [
     ["catalog", "environments", "Environment", "Monitoring URLs and namespace credentials for this instance."],
-    ["connections", "secretServers", "Secret Servers", "Vault endpoints and authentication. Use Sign in to start an AD session."],
+    ["connections", "secretServers", "Secret Servers", "Vault endpoints and authentication. Use Sign in for AD or a supplied token."],
     ["connections", "credentials", "Credential references", "Secret IDs and field names, shared by registry and monitoring connections."],
     ["connections", "artifactory", "Artifactory connections", "Registry server URLs and their credential references."],
-    ["connections", "imageSources", "Image repositories", "Repository keys and service image paths on an Artifactory connection."],
+    ["connections", "bitbucket", "Bitbucket connections", "Source-control servers with AD, token or Secret Server credentials."],
+    ...(Object.keys(active.connections.imageSources).length ? [["connections", "imageSources", "Legacy image mappings", "Existing mappings remain usable. Configure new image mappings inside Service projects."]] : []),
     ["catalog", "services", "Service projects", "Project paths, namespaces, Helm releases and values files."],
   ];
   const root = el("div", { class: "configuration-sections" });
@@ -186,16 +227,16 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, aut
     entries.forEach(([id, entry]) => {
       let description = entry.apiBaseUrl || entry.displayName || entry.projectPath || "";
       if (key === "credentials") description = entry.provider === "delinea" ? `${entry.secretServerRef} · Secret ${entry.secretId}` : "Environment variable references";
-      if (key === "artifactory") description += ` · Credential: ${entry.credentialRef}`;
+      if (["artifactory", "bitbucket"].includes(key)) description += ` · ${entry.authMode || "secret-server"}${entry.credentialRef ? " · " + entry.credentialRef : ""}`;
       if (key === "imageSources") description = `${entry.connectionRef} → ${entry.repositoryKey} · ${Object.keys(entry.imagePaths).length} image mappings`;
       const controls = el("div", { class: "config-row-actions" }, action("Edit", () => edit(group, key, id, entry)));
       if (!locked) controls.append(action("Delete", () => remove(group, key, id)));
       const text = el("div", {}, el("strong", {}, id), el("p", { class: "muted" }, description));
       if (key === "secretServers") {
         const state = authStates[id];
-        text.append(el("small", {}, state?.state === "AUTHENTICATED" ? `Signed in until ${new Date(state.expiresAt).toLocaleString()}` : `${entry.authMode || "environment"} authentication`));
-        if (state?.mode === "portal") controls.prepend(action(state.state === "AUTHENTICATED" ? "Sign out" : "Sign in", async () => {
-          if (state.state !== "AUTHENTICATED") return onSignIn(id);
+        text.append(el("small", {}, ["AUTHENTICATED", "TOKEN_PROVIDED"].includes(state?.state) ? `Session available until ${new Date(state.expiresAt).toLocaleString()}` : `${entry.authMode || "environment"} authentication`));
+        if (["portal", "token"].includes(state?.mode)) controls.prepend(action(["AUTHENTICATED", "TOKEN_PROVIDED"].includes(state.state) ? "Sign out" : "Sign in", async () => {
+          if (!["AUTHENTICATED", "TOKEN_PROVIDED"].includes(state.state)) return onSignIn(id);
           const ui = modal("Sign out of Secret Server?");
           ui.body.append(el("p", {}, "The current vault session will be cleared.")); ui.save.textContent = "Sign out";
           ui.form.addEventListener("submit", async event => { event.preventDefault(); try { await api(`/secret-auth/${encodeURIComponent(id)}`, { method: "DELETE" }); ui.dialog.close(); await onSaved(); } catch (error) { ui.status.hidden = false; ui.status.textContent = error.message; } }); ui.dialog.showModal();

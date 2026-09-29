@@ -36,14 +36,13 @@ public class ConfiguredCredentials implements CredentialResolver {
     var credential = config.data().credentials().get(reference);
     if (credential == null) throw Problem.invalid("credentialRef", "Unknown credential reference");
     if ("environment".equals(credential.provider()))
-      return new Secret(
-          env(credential.usernameEnvironmentVariable()),
-          env(credential.passwordEnvironmentVariable()));
+      return credential.token() ? new Secret(null, env(credential.tokenEnvironmentVariable()), true)
+          : new Secret(env(credential.usernameEnvironmentVariable()), env(credential.passwordEnvironmentVariable()));
     var server = config.data().secretServers().get(credential.secretServerRef());
     URI uri =
         URI.create(server.apiBaseUrl().replaceAll("/$", "") + "/secrets/" + credential.secretId());
     var response =
-        http.get(uri, tokens.authorization(credential.secretServerRef()), "application/json");
+        http.get(uri, tokens.authorization(credential.secretServerRef(), this::resolve), "application/json");
     if (response.status() == 401) tokens.rejected(credential.secretServerRef());
     ReadOnlyHttp.requireSuccess(response, "secretServer");
     try {
@@ -52,18 +51,18 @@ public class ConfiguredCredentials implements CredentialResolver {
       for (var item : body.path("items")) {
         if (item.path("slug").asText().equals(credential.usernameFieldSlug()))
           username = item.path("itemValue").asText(null);
-        if (item.path("slug").asText().equals(credential.passwordFieldSlug()))
+        if (item.path("slug").asText().equals(credential.token() ? credential.tokenFieldSlug() : credential.passwordFieldSlug()))
           password = item.path("itemValue").asText(null);
       }
-      if (username == null || password == null || username.isBlank() || password.isBlank())
+      if ((!credential.token() && (username == null || username.isBlank())) || password == null || password.isBlank())
         throw new IllegalArgumentException();
-      return new Secret(username, password);
+      return new Secret(username, password, credential.token());
     } catch (Exception e) {
       throw new Problem(
           502,
           "SECRET_SCHEMA",
           "credentialRef",
-          "Secret response lacks the configured username/password fields; verify API version and"
+          "Secret response lacks the configured credential fields; verify API version and"
               + " field slugs");
     }
   }

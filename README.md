@@ -2,7 +2,7 @@
 
 A Java application for preparing service deployments, configuring performance tests, and reviewing run history and reports. The browser UI provides deployment selection, plan previews, run controls, connection management, and runtime configuration editing.
 
-**Current operation:** deployment and load execution are simulated. Configured Artifactory discovery and Delinea secret retrieval make real read-only requests. Live CKP service deployment, load-generator control, metrics querying and shared-user authentication are not implemented yet.
+**Current operation:** deployment and load execution are simulated. Configured Artifactory discovery, Bitbucket branch/tag discovery and Delinea secret retrieval make real read-only requests. Live CKP service deployment, load-generator control, metrics querying and shared-user authentication are not implemented yet.
 
 ## Requirements
 
@@ -66,11 +66,11 @@ For CKP, set `mode: simulation` or `mode: real` in your Helm values. Changing it
 - `docs/integration/examples/`: optional bootstrap examples, not packaged runtime configuration.
 - `src/main/resources/mocks/`: demonstration catalog, chart/values inputs and starter profile.
 
-Use **Connections & catalog** to edit environment monitoring, service destinations, Secret Servers, credential references, Artifactory connections and image repositories using forms. Connection and service entries can be added or deleted; referenced entries cannot be deleted until their references are updated. The real instance environment/cluster is fixed at startup. Simulator project additions and simulation-only fields remain in Advanced JSON. Scenario templates are read-only in the normal settings view; real profile creation from the overview is not implemented. Saves are validated and applied without restart. Conflicting edits are rejected; active runs retain their prepared inputs. Connection changes invalidate portal tokens and require a fresh sign-in.
+Use **Connections & catalog** to edit environment monitoring, service destinations, Secret Servers, credential references, Artifactory/Bitbucket connections and service image/source mappings using forms. Connection and service entries can be added or deleted; referenced entries cannot be deleted until their references are updated. The real instance environment/cluster is fixed at startup. Simulator project additions and simulation-only fields remain in Advanced JSON. Scenario templates are read-only in the normal settings view; real profile creation from the overview is not implemented. Saves are validated and applied without restart. Conflicting edits are rejected; active runs retain their prepared inputs. Connection changes invalidate portal tokens and require a fresh sign-in.
 
 Field-level overrides in `data/configuration.json` (or `data/real/configuration.json` in real mode) are applied over packaged or externally supplied defaults on restart. Untouched fields receive new defaults. Changes to resource files alone are not watched. Port, database, worker scheduling and application mode remain startup settings.
 
-Delinea authentication supports portal sign-in, an environment token or a mounted token file. Secrets are fetched using configured secret IDs and field slugs; passwords and tokens do not belong in configuration files. See [connection configuration](docs/adapters/connections.md) and [connection examples](docs/integration/examples/connections.yaml).
+Delinea authentication supports AD sign-in, a supplied session token, a credential resolved through another vault, an environment token or a mounted token file. Artifactory and Bitbucket support request-only AD credentials, request-only Bearer tokens, or credential references. Secrets are fetched using configured secret IDs and field slugs; passwords and tokens do not belong in configuration files. See [connection configuration](docs/adapters/connections.md) and [connection examples](docs/integration/examples/connections.yaml).
 
 ## Helm environment overrides
 
@@ -80,7 +80,7 @@ The pilot uses embedded H2 in the application process, backed by the PVC on CKP.
 
 Organization secret provisioning is deferred until the `secretDockerImage`/`pistol` contract is available. An init container can write files on a shared volume; it cannot directly set another container's environment. A future integration can read those files through Spring configuration or an application entrypoint. Existing Delinea, environment Secret and token-file support for external integrations remains available.
 
-`values.yaml` and `application.yaml` include the supplied sanitized Delinea and Artifactory URL patterns. Secret ID `12345` and `REPLACE_WITH_*` repository/image paths are examples only: replace them and verify field slugs. These defaults do not make outbound requests at startup.
+`values.yaml` and `application.yaml` include the supplied sanitized Delinea and Artifactory URL patterns. Secret IDs, service image paths and Git revisions are examples only: replace them and verify field slugs. These defaults do not make outbound requests at startup.
 
 Override `connections` in the chosen `values-env.yaml`. Helm mounts it as a connections file; it overrides the application's `orchestrator.connection-defaults`. For example:
 
@@ -122,7 +122,7 @@ All editable sections have a startup configuration location:
 
 | Section | Application YAML | Helm values |
 | --- | --- | --- |
-| Artifactory, Secret Server, credentials, real image sources | `orchestrator.connection-defaults` | `connections` |
+| Artifactory, Bitbucket, Secret Server, credentials, legacy image sources | `orchestrator.connection-defaults` | `connections` |
 | Environments, services, mock image sources, scenarios | `orchestrator.catalog-defaults` | `catalog` |
 
 Real defaults cover sandbox, dev, qa, stable, perf and perf3. Each instance exposes only its startup-selected environment. Service namespace/release/values defaults are shared, with optional per-environment exceptions. Monitoring URLs and secret IDs are illustrative and must be replaced with organization-approved values. Real mode no longer requires simulation limits or allowedActions. Simulation still loads its packaged mock catalog. An explicit `orchestrator.catalog` or `orchestrator.connections` file takes precedence over the corresponding inline defaults. Real service entries validate metadata, namespace references, dependencies and relative paths without requiring a local checkout. Simulation still validates project files and installation bindings. Remote Git retrieval and real execution remain unavailable.
@@ -265,7 +265,20 @@ Example secret IDs/URLs are placeholders, not live organization credentials. Das
 - **Secret Servers**: `office-vault` is the example Delinea connection. Configure its API base and OAuth token URL, then use **Sign in** for the AD dialog. Password fields are not displayed in the settings list.
 - **Credential references**: map a secret ID and username/password field slugs to that vault. Environments can select different references for each namespace's logs and metrics.
 - **Artifactory connections**: `office` is the example registry server and its credential reference.
-- **Image repositories**: `office-dev` selects `office`, a Docker repository key, and service-to-image paths. The Docker tags request is `{apiBaseUrl}/{repositoryKey}/v2/{imagePath}/tags/list`, authenticated with the resolved credential. These IDs are examples, not additional servers.
+- **Service projects → Container image**: select `office`, repository stage `dev` or `stable`, team ID and image name. The tags request is `{apiBaseUrl}/docker-{repoStage}/v2/{teamId}/{imageName}/tags/list`. Existing `office-dev` image-source mappings remain supported as legacy configuration.
+- **Bitbucket connections**: `office-stash` is the example Stash REST API connection. Service projects specify project key, repository slug, Git revision and Helm chart path. Use **Browse Git references** in diagnostics to query branches/tags. Checkout and Helm execution are not implemented.
 - **Connection diagnostics → Browse versions** opens a focused read-only registry test. Sign in from the Secret Servers section first when required.
 
 Real-mode environment exports omit simulator limits, allowed actions, dashboard URLs and legacy namespace lists. Service destinations and monitoring namespace credentials hold the real namespace mappings. Old real-mode imports containing those simulator fields remain readable; the unused fields are discarded. Simulation keeps its existing controls.
+
+### Authentication choices and credential lifetime
+
+Artifactory and Bitbucket connections accept `authMode: ad`, `token`, or `secret-server`. AD uses Basic authentication against the configured HTTPS server; the organization must enable Basic/AD support there. This is not Kerberos or browser SSO. Token mode sends `Authorization: Bearer …`. These modes follow [JFrog authentication](https://docs.jfrog.com/integrations/docs/curl-integration) and [Bitbucket Data Center HTTP access tokens](https://confluence.atlassian.com/bitbucketserver100/http-access-tokens-1680278187.html).
+
+- **AD/token direct entry**: enter credentials in the diagnostics operation dialog. Inputs are cleared upon submission/close and used only for that request. They are never added to server sessions, runtime JSON, exports or the database. Enter them again for the next page or digest request.
+- **Secret Server reference**: configure `credentialRef`. The referenced credential can contain username/password slugs or a single `tokenFieldSlug`; values are fetched on demand. Configure only references, never the secret values themselves.
+- **Vault AD (`portal`)**: username/password are exchanged once for a server-side session token. Passwords are not retained.
+- **Vault token (`token`)**: provide a token in the sign-in dialog and its remaining lifetime (maximum 8 hours). The token stays in server memory for that browser session, is checked on use, and is not returned in responses. The supplied lifetime is a local upper bound, not verification of the issuer's expiry. A 401 clears the token.
+- **Vault via Secret Server (`secret-server`)**: choose a credential from another already-authenticated vault. Token credentials are used directly; username/password credentials use the target vault's `tokenUrl` to obtain a token for that request. Self-references and cycles are rejected. An initial AD/token session or administrator-provided token is always needed to bootstrap the chain.
+
+When changing modes in YAML/Helm, remove incompatible inherited fields with `null` (for example `credentialRef: null` for Artifactory `ad`, or `tokenUrl: null` for vault `token`). The dashboard forms do this automatically. Existing saved dashboard overrides still take precedence over changed defaults.

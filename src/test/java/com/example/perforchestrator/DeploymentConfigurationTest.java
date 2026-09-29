@@ -8,7 +8,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 class DeploymentConfigurationTest {
   @Test
-  void everyRealEnvironmentHasDefaultsForAllSevenEditableSections() {
+  void everyRealEnvironmentHasConnectionsAndServiceImageDefaults() {
     for (String target : new String[] {"sandbox", "dev", "qa", "stable", "perf", "perf3"}) {
       new ApplicationContextRunner()
           .withInitializer(new ConfigDataApplicationContextInitializer())
@@ -24,7 +24,8 @@ class DeploymentConfigurationTest {
             assertThat(connections.data().artifactory()).isNotEmpty();
             assertThat(connections.data().secretServers()).isNotEmpty();
             assertThat(connections.data().credentials()).isNotEmpty();
-            assertThat(connections.data().imageSources()).isNotEmpty();
+            assertThat(connections.data().bitbucket()).isNotEmpty();
+            assertThat(catalog.data().services().get("ps-spoolers-ps-load-gen").containerImage().repoStage()).isEqualTo("dev");
             var monitoring = catalog.environment(target).monitoring();
             assertThat(monitoring.logsApiBaseUrl()).isNotBlank();
             assertThat(monitoring.metricsApiBaseUrl()).isNotBlank();

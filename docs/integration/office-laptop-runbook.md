@@ -121,7 +121,7 @@ Checkpoint: one known tag resolves successfully. Record the timestamp and non-se
 
 The startup YAML is a bootstrap file. Once settings are saved through the UI, `data/real/configuration.json` takes precedence, including after restart. Resource files are not watched.
 
-Use the forms in **Connections & catalog** for subsequent changes. Configure Secret Servers, then credential references, then Artifactory connections and image repositories. Environment monitoring and service destinations also have editing forms. Each save validates the complete configuration, including references. Reauthenticate with **Secret Servers → Sign in** after changing connections. Use **Connection diagnostics → Browse versions** to test registry access.
+Use the forms in **Connections & catalog** for subsequent changes. Configure Secret Servers, then credential references, then Artifactory/Bitbucket connections and image/source mappings under each service. Environment monitoring and service destinations also have editing forms. Each save validates the complete configuration, including references. Reauthenticate with **Secret Servers → Sign in** after changing connections. Use **Connection diagnostics → Browse versions** to test registry access, and **Browse Git references** for Bitbucket. Choose AD, token or a credential reference on each connection; direct AD/token inputs are entered in the operation dialog and cleared after each request.
 
 For bulk changes or backups, expand **Advanced JSON · import, export & restore**. The selector exposes separate configuration maps; paste only the selected map as JSON, without its outer section name. Do not paste Spring YAML. Import loads a complete export into the editor for review before saving.
 

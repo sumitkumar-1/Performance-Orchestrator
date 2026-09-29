@@ -15,17 +15,28 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class ConnectionConfig {
-  public record Artifactory(String apiBaseUrl, String credentialRef) {}
+  public record Artifactory(String apiBaseUrl, String credentialRef, String authMode) {
+    @org.springframework.boot.context.properties.bind.ConstructorBinding public Artifactory {}
+    public Artifactory(String apiBaseUrl, String credentialRef) { this(apiBaseUrl, credentialRef, "secret-server"); }
+    public String mode() { return authMode == null ? "secret-server" : authMode; }
+  }
+  public record Bitbucket(String apiBaseUrl, String credentialRef, String authMode) {
+    public String mode() { return authMode == null ? "secret-server" : authMode; }
+  }
 
   public record SecretServer(
       String apiBaseUrl,
       String bearerTokenEnvironmentVariable,
       String authMode,
       String tokenUrl,
-      String bearerTokenFile) {
+      String bearerTokenFile,
+      String credentialRef) {
     @org.springframework.boot.context.properties.bind.ConstructorBinding
     public SecretServer {}
 
+    public SecretServer(String apiBaseUrl, String bearerTokenEnvironmentVariable, String authMode, String tokenUrl, String bearerTokenFile) {
+      this(apiBaseUrl, bearerTokenEnvironmentVariable, authMode, tokenUrl, bearerTokenFile, null);
+    }
     public SecretServer(String apiBaseUrl, String bearerTokenEnvironmentVariable) {
       this(apiBaseUrl, bearerTokenEnvironmentVariable, "environment", null, null);
     }
@@ -42,7 +53,16 @@ public class ConnectionConfig {
       String secretServerRef,
       String secretId,
       String usernameFieldSlug,
-      String passwordFieldSlug) {}
+      String passwordFieldSlug,
+      String tokenFieldSlug,
+      String tokenEnvironmentVariable) {
+    @org.springframework.boot.context.properties.bind.ConstructorBinding public Credential {}
+    public Credential(String provider, String usernameEnvironmentVariable, String passwordEnvironmentVariable,
+        String secretServerRef, String secretId, String usernameFieldSlug, String passwordFieldSlug) {
+      this(provider, usernameEnvironmentVariable, passwordEnvironmentVariable, secretServerRef, secretId, usernameFieldSlug, passwordFieldSlug, null, null);
+    }
+    public boolean token() { return tokenFieldSlug != null || tokenEnvironmentVariable != null; }
+  }
 
   public record Source(
       String displayName,
@@ -60,8 +80,15 @@ public class ConnectionConfig {
       Map<String, Artifactory> artifactory,
       Map<String, SecretServer> secretServers,
       Map<String, Credential> credentials,
-      Map<String, Source> imageSources) {
+      Map<String, Source> imageSources,
+      Map<String, Bitbucket> bitbucket) {
+    public Data(Map<String, Artifactory> artifactory, Map<String, SecretServer> secretServers,
+        Map<String, Credential> credentials, Map<String, Source> imageSources) {
+      this(artifactory, secretServers, credentials, imageSources, Map.of());
+    }
+    @org.springframework.boot.context.properties.bind.ConstructorBinding
     public Data {
+      bitbucket = ImmutableConfiguration.map(bitbucket == null ? Map.of() : bitbucket);
       artifactory = ImmutableConfiguration.map(artifactory);
       secretServers = ImmutableConfiguration.map(secretServers);
       credentials = ImmutableConfiguration.map(credentials);
@@ -97,7 +124,7 @@ public class ConnectionConfig {
     return new Data(data.artifactory() == null ? Map.of() : data.artifactory(),
         data.secretServers() == null ? Map.of() : data.secretServers(),
         data.credentials() == null ? Map.of() : data.credentials(),
-        data.imageSources() == null ? Map.of() : data.imageSources());
+        data.imageSources() == null ? Map.of() : data.imageSources(), data.bitbucket());
   }
 
   private static Data readFile(String file) throws IOException {
@@ -116,15 +143,27 @@ public class ConnectionConfig {
         .forEach(
             c -> {
               base(c.apiBaseUrl());
-              if (!data.credentials().containsKey(c.credentialRef()))
-                throw new IllegalArgumentException("Unknown credential reference");
+              validateAuth(data, c.mode(), c.credentialRef());
             });
+    data.bitbucket().values().forEach(c -> { base(c.apiBaseUrl()); validateAuth(data, c.mode(), c.credentialRef()); });
     data.secretServers()
         .values()
         .forEach(
             c -> {
               base(c.apiBaseUrl());
+              if (!"secret-server".equals(c.mode()) && c.credentialRef() != null)
+                throw new IllegalArgumentException("Credential reference is only used by Secret Server authentication");
               switch (c.mode()) {
+                case "token" -> {
+                  if (c.tokenUrl() != null || c.bearerTokenFile() != null || c.bearerTokenEnvironmentVariable() != null)
+                    throw new IllegalArgumentException("Interactive token mode accepts no stored token configuration");
+                }
+                case "secret-server" -> {
+                  if (!data.credentials().containsKey(c.credentialRef()) || c.bearerTokenFile() != null || c.bearerTokenEnvironmentVariable() != null)
+                    throw new IllegalArgumentException("Invalid bootstrap credential reference");
+                  if (!data.credentials().get(c.credentialRef()).token()) base(c.tokenUrl());
+                  else if (c.tokenUrl() != null) throw new IllegalArgumentException("A token credential does not use an OAuth endpoint");
+                }
                 case "environment" -> {
                   envName(c.bearerTokenEnvironmentVariable());
                   if (c.tokenUrl() != null || c.bearerTokenFile() != null)
@@ -154,17 +193,22 @@ public class ConnectionConfig {
         .forEach(
             c -> {
               if ("environment".equals(c.provider())) {
-                envName(c.usernameEnvironmentVariable());
-                envName(c.passwordEnvironmentVariable());
+                if (c.token()) {
+                  envName(c.tokenEnvironmentVariable());
+                  if (c.usernameEnvironmentVariable() != null || c.passwordEnvironmentVariable() != null || c.tokenFieldSlug() != null)
+                    throw new IllegalArgumentException("Ambiguous token credential");
+                } else { envName(c.usernameEnvironmentVariable()); envName(c.passwordEnvironmentVariable()); }
               } else if ("delinea".equals(c.provider())) {
                 if (!data.secretServers().containsKey(c.secretServerRef())
                     || c.secretId() == null
                     || !c.secretId().matches("[0-9]{1,12}")
-                    || c.usernameFieldSlug() == null
-                    || c.passwordFieldSlug() == null)
+                    || (c.token() ? c.tokenFieldSlug() == null || c.tokenFieldSlug().isBlank()
+                        || c.usernameFieldSlug() != null || c.passwordFieldSlug() != null || c.tokenEnvironmentVariable() != null
+                        : c.usernameFieldSlug() == null || c.passwordFieldSlug() == null))
                   throw new IllegalArgumentException("Invalid Delinea credential mapping");
               } else throw new IllegalArgumentException("Unsupported credential provider");
             });
+    data.secretServers().keySet().forEach(id -> validateVaultChain(data, id, new HashSet<>()));
     data.imageSources()
         .forEach(
             (id, s) -> {
@@ -180,6 +224,22 @@ public class ConnectionConfig {
                 throw new IllegalArgumentException(
                     "Configure a Docker pull repository template, not a URL");
             });
+  }
+
+  private static void validateAuth(Data data, String mode, String reference) {
+    if (!Set.of("ad", "token", "secret-server").contains(mode)) throw new IllegalArgumentException("Unsupported authentication mode");
+    if ("secret-server".equals(mode)) {
+      if (!data.credentials().containsKey(reference)) throw new IllegalArgumentException("Unknown credential reference");
+    } else if (reference != null) throw new IllegalArgumentException("Interactive authentication cannot use a stored credential reference");
+  }
+
+  private static void validateVaultChain(Data data, String id, Set<String> visited) {
+    if (!visited.add(id)) throw new IllegalArgumentException("Secret Server authentication cannot depend on itself or form a cycle");
+    var server = data.secretServers().get(id);
+    if ("secret-server".equals(server.mode())) {
+      var credential = data.credentials().get(server.credentialRef());
+      if ("delinea".equals(credential.provider())) validateVaultChain(data, credential.secretServerRef(), visited);
+    }
   }
 
   public void replace(Data next) {
@@ -238,12 +298,14 @@ public class ConnectionConfig {
                         "apiBaseUrl",
                         c.apiBaseUrl(),
                         "credentialRef",
-                        c.credentialRef(),
+                        Objects.toString(c.credentialRef(), ""),
+                        "authMode", c.mode(),
                         "capability",
                         "read-only Artifactory Docker V2")));
     return Map.of(
         "artifactory",
         connections,
+        "bitbucket", data().bitbucket(),
         "secretServers",
         data().secretServers().keySet(),
         "credentialReferences",
