@@ -1,86 +1,79 @@
-# Monitoring and secret provisioning contract
+# Shared Loki monitoring configuration
 
-Updated 2026-09-28 from user-supplied examples. This document records the intended monitoring configuration, not an executable telemetry adapter. No organization endpoints have been contacted.
+Updated 2026-09-29: the organization confirmed **Loki / LogQL** for both logs and log-derived metrics. The configuration described here is implemented; the live telemetry polling/execution adapter is still pending. No organization endpoints have been contacted.
 
-## Standard query APIs and organization mapping
+## Configuration ownership
 
-The confirmed dev Loki base is `https://logs.dev-domain/loki/api/v1`; other environments select different configured URLs. Each namespace selects its own secret reference. Use a consistent internal template variable `clusterEnv`; the newly supplied `clustEnv` spelling must map to the same explicit environment value when importing templates.
+- `connections.loki` defines named, shared Loki API endpoints once.
+- Each environment's `monitoring.connectionRef` selects a Loki connection. Sandbox/dev/qa can reference `lower`; perf/perf3/stable can reference `higher`. The grouping and URLs are configurable examples, not network discovery.
+- Each service's `deploymentDefaults.namespace` defines its namespace, with `deploymentByEnvironment` only for exceptions. Monitoring uses the same selected deployment namespace; environments do not duplicate it.
+- Each service's `monitoringCredentials` maps environment IDs to credential references. One reference authenticates both log and LogQL metric queries for that service/environment.
+- Credential references identify a Delinea secret and its username/password or token field slugs. Secret values are never written into configuration.
 
-For Prometheus-compatible metrics, the standard routes are `GET /api/v1/query` for an instant evaluation and `GET /api/v1/query_range` with `query`, `start`, `end` and `step` for a time series. The base URL must come from the organization's datasource; it cannot be inferred by replacing `logs` with `metrics`. See the [Prometheus HTTP API](https://prometheus.io/docs/prometheus/latest/querying/api/).
-
-If access is through Grafana, its documented datasource proxy route is `/api/datasources/proxy/uid/:uid/*`. Confirm the installed Grafana version, datasource UID, proxy permissions and authentication before selecting that route. See the [Grafana datasource HTTP API](https://grafana.com/docs/grafana/latest/developer-resources/api-reference/http-api/api-legacy/data_source/).
-
-Loki range queries use `/loki/api/v1/query_range`. Loki also supports metric queries derived from logs using LogQL, but these are not arbitrary Prometheus metric queries. Counting matching log lines measures messages only if the logging contract guarantees the appropriate event/line relationship and completeness. See the [Loki HTTP API](https://grafana.com/docs/loki/latest/reference/loki-http-api/).
-
-Prefer actual generator and downstream counters for throughput where available; retain bounded logs for diagnosis. See the [deployment and load contract](deployment-load-contract.md) for generated-versus-processed signal semantics and the remaining Helm lifecycle details.
-
-## Secret provisioning
-
-Secrets are normally fetched by CKP init containers. This application should also resolve configured secret IDs on demand, with separate mappings for destinations and namespaces.
-
-Two intended identity models:
-
-1. Portal sign-in: the user authenticates to Delinea through the portal; its server-side session token retrieves the configured secrets.
-2. Later shared/tenant identity: a provisioned token, potentially delivered by a CKP init container. Tenant-to-connection authorization must be defined before shared hosting. A configured global token must never silently replace a missing user session token.
-
-The local app now supports portal token exchange plus explicit environment/file token delivery. It does not deploy init containers or implement tenant authorization. An init container runs at startup; ongoing token renewal needs a separately agreed mechanism. Long-running/background performance runs will need an explicit credential-lifetime model beyond a browser session.
-
-Namespace credentials can use the common `credentials` map in `connections.yaml`:
+Example within `application.yaml` (Helm equivalents: `connections` and `catalog`):
 
 ```yaml
-credentials:
-  logs-service-a:
-    provider: delinea
-    secretServerRef: organization
-    secretId: '12345'
-    usernameFieldSlug: username
-    passwordFieldSlug: password
-  logs-service-b:
-    provider: delinea
-    secretServerRef: organization
-    secretId: '12346'
-    usernameFieldSlug: username
-    passwordFieldSlug: password
+orchestrator:
+  connection-defaults:
+    loki:
+      lower:
+        apiBaseUrl: https://logs.dev-domain/loki/api/v1
+      higher:
+        apiBaseUrl: https://logs.perf-domain/loki/api/v1
+  catalog-defaults:
+    environments:
+      sandbox:
+        monitoring:
+          connectionRef: lower
+      perf:
+        monitoring:
+          connectionRef: higher
+    services:
+      smtp-receiver:
+        deploymentDefaults:
+          namespace: ps-spoolers-smtp-receiver
+          releaseName: ps-spoolers-smtp-receiver
+          valuesFiles: [ckp/helm/ps-spoolers-smtp-receiver/values.yaml]
+        monitoringCredentials:
+          sandbox: sandbox-receiver
+          perf: perf-receiver
 ```
 
-IDs/slugs above are examples, not validated values. Namespace names select credential references; they are not themselves secret values. Each reference selects its own Delinea connection and secret ID.
+This is a partial example: service project metadata, credential definitions and environment cluster identity are configured alongside these fields.
 
-## Logs
+## Standard APIs
 
-The supplied reference configuration selects a default config, a Loki base URL, cluster/environment, polling interval (5000 ms), maximum wait (60000 ms), query template, and namespace-to-secret-ID mappings. Keep the default config explicit and map target environments to named configurations rather than substituting arbitrary user input into hostnames.
+Both log queries and LogQL metric range queries use `GET {apiBaseUrl}/query_range` with `query`, `start`, `end`, and appropriate `step`/`limit`. Instant evaluation at `GET {apiBaseUrl}/query` supports metric queries; use a range query for log streams. See the official [Loki HTTP API](https://grafana.com/docs/loki/latest/reference/loki-http-api/) and [LogQL metric queries](https://grafana.com/docs/loki/latest/query/metric_queries/).
 
-User-supplied per-message LogQL:
+A Grafana dashboard URL is not automatically a Loki API URL. If an organization gateway adds tenant headers or proxies requests, its contract still needs confirmation.
+
+Example individual-message query:
 
 ```logql
 {cluster_env="{{clusterEnv}}", namespace="{{namespace}}"} |= "{{mtid}}"
 ```
 
-This is for individual-message troubleshooting. `mtid` is not a required performance-run identifier. Do not send this template with an empty identifier to pretend to scope a run. A namespace-wide log view needs an explicit approved template and bounded query window. Log credentials may differ by namespace as in the reference application.
+Example log-event rate (replace the event filter with the actual log contract):
 
-The supplied JSON's `secretServerTokenUrl: ""` is a placeholder, not a portal token endpoint. Configure the previously supplied `/SecretServer/oauth2/token` URL for portal mode. Normalize Markdown-wrapped URLs to plain URL strings. The executable app config uses a central `secretServerRef` and `apiBaseUrl` ending in `/SecretServer/api/v1`; it appends `/secrets/{secretId}`. The reference application's full secret-URL template is not an interchangeable config field.
-
-The supplied `maxWaitTimeMs` describes a bounded message lookup; performance monitoring needs its polling duration tied to the run and cancellation lifecycle rather than stopping after an assumed 60 seconds.
-
-## Performance metrics
-
-Users normally select a dashboard datasource and namespace. Supplied PromQL:
-
-```promql
-sum by (outcome) (
-  rate(message_total{namespace="ps-spoolers-smtp-data-producer"}[1m])
-)
+```logql
+sum(rate({cluster_env="{{clusterEnv}}", namespace="{{namespace}}"} |= "processed" [1m]))
 ```
 
-Assuming `message_total` is a counter, this reports a per-second message rate over a one-minute lookback, grouped by outcome. It is not a total message count. `rate` before aggregation preserves counter-reset handling. See [Prometheus rate documentation](https://prometheus.io/docs/prometheus/latest/querying/functions/#rate).
+Example count of matching events over five minutes:
 
-Metrics and Loki logs need separate connection/query definitions. Do not send this metric query to the supplied Loki log endpoint. Namespace-wide results represent all matching traffic during that interval, including other traffic. Show this scope in the UI and reports; do not label it as traffic generated solely by a particular test.
+```logql
+sum(count_over_time({cluster_env="{{clusterEnv}}", namespace="{{namespace}}"} |= "processed" [5m]))
+```
 
-Still needed to implement the metrics adapter:
+These measure matching log entries. They equal processed-message rates/counts only if each relevant message produces exactly one matching event and ingestion is complete. Namespace-wide queries can include traffic outside the current run. The earlier `message_total{...}` expression is PromQL, not an executable LogQL example; do not send it unchanged to Loki. A future Prometheus datasource, if needed, would require its own integration.
 
-- Grafana base URL and selected datasource UID/type, or the approved direct metrics API URL. Confirm whether requests should go through Grafana or directly to that datasource.
-- Credential reference and any organization/tenant headers for that route. Do not assume Loki's namespace credentials also authorize metrics.
-- Environment → datasource → namespace mapping. If a datasource spans clusters with overlapping namespace names, identify the cluster label/filter or a datasource that isolates the target cluster.
-- A sanitized query request/response from the selected panel, including query interval/step. The one-minute rate window needs sufficient scrape samples; confirm the scrape interval and ingestion delay.
-- Meaning of each `outcome` value, including which count as success/failure; whether signals are display-only or feed pass/fail thresholds.
+## Remaining organization inputs
 
-LogQL template escaping, query limits, partial results, and unavailable/stale telemetry will be handled explicitly when implementing the live telemetry adapter.
+- One actual generator-rate and one downstream processing-rate LogQL query with sanitized responses; identify success/failure/retry events and deduplication rules.
+- Approved lower/higher URLs and environment-to-connection mapping, namespace secret IDs/field slugs, optional tenant headers.
+- Cluster label, optional run/correlation labels, query time window and step, ingestion delay, partial/stale result handling and pass/fail thresholds.
+- Credential lifetime for long-running background tests. Current browser sessions do not authorize unattended jobs after they expire.
+
+## Legacy configuration
+
+Old inline log URLs are migrated to shared Loki entries on load/import. Matching namespace credential assignments move to service/environment references using the service's deployment namespace. Identical URLs are deduplicated. Unmatched namespaces and distinct old metrics endpoints/credentials are preserved in Advanced JSON rather than silently discarded; review them before removal. They are not used as an implicit Loki metric datasource. New defaults contain no separate metrics URL or metrics credential map.

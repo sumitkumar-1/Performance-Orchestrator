@@ -11,7 +11,14 @@ import org.springframework.stereotype.Component;
 @Component
 public class RuntimeConfiguration {
   public record Document(
-      String revision, Catalog.Data catalog, ConnectionConfig.Data connections) {}
+      String revision, Catalog.Data catalog, ConnectionConfig.Data connections) {
+    public Document {
+      if (catalog != null && connections != null) {
+        var migrated = MonitoringConfiguration.migrate(catalog, connections);
+        catalog = migrated.catalog(); connections = migrated.connections();
+      }
+    }
+  }
 
   private final Catalog catalog;
   private final ConnectionConfig connections;
@@ -36,6 +43,8 @@ public class RuntimeConfiguration {
     this.file = Path.of(file).toAbsolutePath().normalize();
     this.startup = new Document(null, catalog.data(), connections.data());
     validate(this.startup);
+    catalog.installValidated(startup.catalog());
+    if (!startup.connections().equals(connections.data())) connections.installValidated(startup.connections());
     if (Files.exists(this.file)) {
       String content = ConfigurationResources.read(this.file.toString());
       var tree = Json.MAPPER.readTree(content);
@@ -81,6 +90,10 @@ public class RuntimeConfiguration {
     try {
       new ConnectionConfig(next.connections());
       next.catalog().services().values().forEach(service -> {
+        service.monitoringCredentials().forEach((environment, reference) -> {
+          if (environment == null || !environment.matches("[a-zA-Z0-9_-]{1,80}") || !next.connections().credentials().containsKey(reference))
+            throw new IllegalArgumentException("Unknown service monitoring credential reference");
+        });
         var image = service.containerImage();
         if (image != null) {
           if (!next.connections().artifactory().containsKey(image.connectionRef())) throw new IllegalArgumentException("Unknown image connection");
@@ -97,7 +110,9 @@ public class RuntimeConfiguration {
         }
       });
       next.catalog().environments().values().forEach(env -> {
-        if (env.monitoring() != null) env.monitoring().namespaceCredentials().values().forEach(refs -> {
+        if (env.monitoring() != null && env.monitoring().connectionRef() != null
+            && !next.connections().loki().containsKey(env.monitoring().connectionRef())) throw new IllegalArgumentException("Unknown Loki connection reference");
+        if (env.monitoring() != null && env.monitoring().namespaceCredentials() != null) env.monitoring().namespaceCredentials().values().forEach(refs -> {
           for (String ref : java.util.List.of(
               java.util.Objects.toString(refs.logsCredentialRef(), ""),
               java.util.Objects.toString(refs.metricsCredentialRef(), "")))

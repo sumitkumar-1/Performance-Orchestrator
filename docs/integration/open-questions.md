@@ -1,6 +1,6 @@
 # Open organization integration questions
 
-Updated 2026-09-29. Fill in answers here; do not include passwords or tokens.
+Updated 2026-09-29. Confirmed: monitoring uses Loki/LogQL for logs and log-derived metrics, with shared Loki connections referenced by environments and credentials selected per service/environment. Supply concrete query/response examples next. Fill in answers here; do not include passwords or tokens.
 
 ## Load-generator chart and profile
 
@@ -26,9 +26,9 @@ Confirmed: the tool has a configured runtime; operators can scale pods to zero o
 Confirmed: the Java load generator exposes actual generation-rate metrics; configuration specifies the desired messages/second. Every namespace has its own secret.
 
 - What metric names and labels identify generated, received, processed and failed messages for load-gen, SMTP-R and RDA? Supply one working query and sanitized response for each.
-- What metrics backend/datasource type is used? Provide its direct API base or Grafana base + datasource UID for each environment.
-- Which secret ID/reference and username/password field slugs belong to each `(environment, namespace)`? Do logs and metrics use the same credentials? Any tenant headers?
-- What are scrape interval, expected ingestion delay and outcome meanings? Are counters per message, attempt, recipient or batch?
+- Loki/LogQL is confirmed. Provide the shared Loki API bases and environment assignments, plus working log-derived rate/count queries and sanitized responses.
+- Which secret ID/reference and username/password field slugs belong to each `(environment, namespace)`? Are tenant headers required in addition to the shared logs/LogQL-metrics credentials?
+- What are log emission interval, expected ingestion delay and outcome meanings? Are counters per message, attempt, recipient or batch?
 - Can a run-specific label isolate traffic? If not, is the namespace dedicated during the test?
 - What are acceptable throughput/error thresholds and the completion criteria?
 

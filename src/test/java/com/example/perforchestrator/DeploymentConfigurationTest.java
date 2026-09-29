@@ -27,10 +27,11 @@ class DeploymentConfigurationTest {
             assertThat(connections.data().bitbucket()).isNotEmpty();
             assertThat(catalog.data().services().get("ps-spoolers-ps-load-gen").containerImage().repoStage()).isEqualTo("dev");
             var monitoring = catalog.environment(target).monitoring();
-            assertThat(monitoring.logsApiBaseUrl()).isNotBlank();
-            assertThat(monitoring.metricsApiBaseUrl()).isNotBlank();
-            monitoring.namespaceCredentials().values().forEach(ref ->
-                assertThat(connections.data().credentials()).containsKeys(ref.logsCredentialRef(), ref.metricsCredentialRef()));
+            assertThat(connections.data().loki()).containsKey(monitoring.connectionRef());
+            assertThat(monitoring.logsApiBaseUrl()).isNull();
+            assertThat(monitoring.metricsApiBaseUrl()).isNull();
+            assertThat(monitoring.namespaceCredentials()).isNull();
+            assertThat(connections.data().credentials()).containsKey(catalog.data().services().get("ps-spoolers-ps-load-gen").monitoringCredentials().get(target));
           });
     }
   }

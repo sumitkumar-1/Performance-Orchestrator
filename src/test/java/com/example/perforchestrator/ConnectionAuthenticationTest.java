@@ -47,7 +47,7 @@ class ConnectionAuthenticationTest {
     assertThat(request.getSession(false)).isNull();
     assertThat(Json.write(config.data())).doesNotContain("ad-user", "private-password");
     assertThat(input.toString()).isEqualTo("[REDACTED]");
-    assertThatThrownBy(() -> images.discover("receiver", "service:receiver", null, "", 50)).hasMessageContaining("Enter credentials");
+    assertThatThrownBy(() -> images.discover("receiver", "service:receiver", null, "", 50)).hasMessageContaining("Sign in");
     verifyNoInteractions(resolver);
   }
 

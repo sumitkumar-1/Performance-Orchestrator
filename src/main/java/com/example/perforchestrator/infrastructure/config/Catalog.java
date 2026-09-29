@@ -28,8 +28,13 @@ public class Catalog {
   }
 
   public record NamespaceCredentials(String logsCredentialRef, String metricsCredentialRef) {}
+  @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
   public record Monitoring(String logsApiBaseUrl, String metricsApiBaseUrl,
-      Map<String, NamespaceCredentials> namespaceCredentials) {
+      Map<String, NamespaceCredentials> namespaceCredentials, String connectionRef) {
+    public Monitoring(String logsApiBaseUrl, String metricsApiBaseUrl, Map<String, NamespaceCredentials> namespaceCredentials) {
+      this(logsApiBaseUrl, metricsApiBaseUrl, namespaceCredentials, null);
+    }
+    @org.springframework.boot.context.properties.bind.ConstructorBinding
     public Monitoring { namespaceCredentials = ImmutableConfiguration.map(namespaceCredentials); }
   }
 
@@ -62,13 +67,20 @@ public class Catalog {
       List<String> allowedOverridePaths,
       Destination deploymentDefaults,
       ContainerImage containerImage,
-      SourceProject sourceProject) {
+      SourceProject sourceProject,
+      Map<String, String> monitoringCredentials) {
+    public Service(String projectPath, List<String> dependencies, Map<String, Destination> deploymentByEnvironment,
+        Binding installationBindings, List<String> allowedOverridePaths, Destination deploymentDefaults,
+        ContainerImage containerImage, SourceProject sourceProject) {
+      this(projectPath, dependencies, deploymentByEnvironment, installationBindings, allowedOverridePaths, deploymentDefaults, containerImage, sourceProject, Map.of());
+    }
     public Service(String projectPath, List<String> dependencies, Map<String, Destination> deploymentByEnvironment,
         Binding installationBindings, List<String> allowedOverridePaths, Destination deploymentDefaults) {
       this(projectPath, dependencies, deploymentByEnvironment, installationBindings, allowedOverridePaths, deploymentDefaults, null, null);
     }
     @org.springframework.boot.context.properties.bind.ConstructorBinding
     public Service {
+      monitoringCredentials = ImmutableConfiguration.map(monitoringCredentials == null ? Map.of() : monitoringCredentials);
       dependencies = ImmutableConfiguration.list(dependencies);
       deploymentByEnvironment = ImmutableConfiguration.map(deploymentByEnvironment == null ? Map.of() : deploymentByEnvironment);
       allowedOverridePaths = ImmutableConfiguration.list(allowedOverridePaths);
@@ -156,7 +168,7 @@ public class Catalog {
         data().services().forEach((id, service) -> {
           var destination = service.deploymentByEnvironment().getOrDefault(target, service.deploymentDefaults());
           if (destination != null) services.put(id, new Service(service.projectPath(), service.dependencies(),
-              (service.deploymentByEnvironment().containsKey(target) ? Map.of(target, destination) : Map.of()), service.installationBindings(), service.allowedOverridePaths(), service.deploymentDefaults(), service.containerImage(), service.sourceProject()));
+              (service.deploymentByEnvironment().containsKey(target) ? Map.of(target, destination) : Map.of()), service.installationBindings(), service.allowedOverridePaths(), service.deploymentDefaults(), service.containerImage(), service.sourceProject(), service.monitoringCredentials()));
         });
         replace(new Data(mode, Map.of(target, selected), services, data().imageSources(), data().scenarios()));
       }
@@ -240,7 +252,7 @@ public class Catalog {
                       Objects.toString(monitoring.logsApiBaseUrl(), ""),
                       Objects.toString(monitoring.metricsApiBaseUrl(), "")))
                     if (!url.isBlank()) com.example.perforchestrator.infrastructure.registry.ConnectionConfig.base(url);
-                  if (monitoring.namespaceCredentials() == null) throw new IllegalArgumentException();
+                  if (monitoring.connectionRef() != null) identifier(monitoring.connectionRef());
                 }
                 if (env.dashboardUrl() != null && !env.dashboardUrl().isBlank())
                   com.example.perforchestrator.infrastructure.registry.ConnectionConfig.base(

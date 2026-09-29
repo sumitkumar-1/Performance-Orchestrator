@@ -6,6 +6,7 @@ import com.example.perforchestrator.domain.*;
 import com.example.perforchestrator.infrastructure.config.Json;
 import com.example.perforchestrator.infrastructure.config.Catalog;
 import com.example.perforchestrator.infrastructure.secrets.RequestAuthentication;
+import com.example.perforchestrator.infrastructure.secrets.ConnectionSessions;
 import com.example.perforchestrator.infrastructure.secrets.CredentialResolver;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
@@ -22,14 +23,19 @@ public class ArtifactoryImages {
   private final ReadOnlyHttp http;
   private final CredentialResolver credentials;
   private final Catalog catalog;
+  private final ConnectionSessions sessions;
 
   public ArtifactoryImages(
       ConnectionConfig config, ReadOnlyHttp http, CredentialResolver credentials) {
     this(config, http, credentials, null);
   }
 
-  @org.springframework.beans.factory.annotation.Autowired
   public ArtifactoryImages(ConnectionConfig config, ReadOnlyHttp http, CredentialResolver credentials, Catalog catalog) {
+    this(config, http, credentials, catalog, new ConnectionSessions(config, credentials));
+  }
+  @org.springframework.beans.factory.annotation.Autowired
+  public ArtifactoryImages(ConnectionConfig config, ReadOnlyHttp http, CredentialResolver credentials, Catalog catalog, ConnectionSessions sessions) {
+    this.sessions = sessions;
     this.catalog = catalog;
     this.config = config;
     this.http = http;
@@ -72,7 +78,7 @@ public class ArtifactoryImages {
         ConnectionConfig.safePath(
             registered.replace("{username}", username == null ? "" : username));
     var connection = config.data().artifactory().get(mapping.connectionRef());
-    String authorization = RequestAuthentication.authorization(connection.mode(), connection.credentialRef(), input, credentials);
+    String authorization = sessions.authorization("artifactory", mapping.connectionRef(), input);
     String repository =
         mapping
             .pullRepositoryTemplate()
@@ -114,6 +120,7 @@ public class ArtifactoryImages {
             URI.create(target.api() + "/tags/list" + query),
             target.authorization(),
             "application/json");
+    if (response.status() == 401) sessions.rejected("artifactory", sources().get(source).connectionRef());
     ReadOnlyHttp.requireSuccess(response, "imageSource");
     try {
       var tags = Json.MAPPER.readTree(response.body()).get("tags");
@@ -153,6 +160,7 @@ public class ArtifactoryImages {
             "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json,"
                 + " application/vnd.docker.distribution.manifest.list.v2+json,"
                 + " application/vnd.docker.distribution.manifest.v2+json");
+    if (response.status() == 401) sessions.rejected("artifactory", sources().get(source).connectionRef());
     ReadOnlyHttp.requireSuccess(response, "version");
     String digest =
         response

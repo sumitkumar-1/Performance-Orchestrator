@@ -14,8 +14,14 @@ public class BitbucketReferences {
   private final ConnectionConfig config;
   private final CredentialResolver credentials;
   private final ReadOnlyHttp http;
+  private final ConnectionSessions sessions;
 
   public BitbucketReferences(Catalog catalog, ConnectionConfig config, CredentialResolver credentials, ReadOnlyHttp http) {
+    this(catalog, config, credentials, http, new ConnectionSessions(config, credentials));
+  }
+  @org.springframework.beans.factory.annotation.Autowired
+  public BitbucketReferences(Catalog catalog, ConnectionConfig config, CredentialResolver credentials, ReadOnlyHttp http, ConnectionSessions sessions) {
+    this.sessions = sessions;
     this.catalog = catalog; this.config = config; this.credentials = credentials; this.http = http;
   }
 
@@ -32,7 +38,8 @@ public class BitbucketReferences {
     if (connection == null) throw Problem.invalid("connection", "Unknown Bitbucket connection");
     var uri = URI.create(connection.apiBaseUrl().replaceAll("/$", "") + "/1.0/projects/"
         + source.projectKey() + "/repos/" + source.repository() + "/" + kind + "?limit=50&start=" + start);
-    var response = http.get(uri, RequestAuthentication.authorization(connection.mode(), connection.credentialRef(), authentication, credentials), "application/json");
+    var response = http.get(uri, sessions.authorization("bitbucket", source.connectionRef(), authentication), "application/json");
+    if (response.status() == 401) sessions.rejected("bitbucket", source.connectionRef());
     ReadOnlyHttp.requireSuccess(response, "bitbucket");
     try {
       var body = Json.MAPPER.readTree(response.body());

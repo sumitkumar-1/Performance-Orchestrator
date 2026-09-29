@@ -20,6 +20,8 @@ public class ConnectionConfig {
     public Artifactory(String apiBaseUrl, String credentialRef) { this(apiBaseUrl, credentialRef, "secret-server"); }
     public String mode() { return authMode == null ? "secret-server" : authMode; }
   }
+  public record Loki(String apiBaseUrl) {}
+
   public record Bitbucket(String apiBaseUrl, String credentialRef, String authMode) {
     public String mode() { return authMode == null ? "secret-server" : authMode; }
   }
@@ -81,13 +83,19 @@ public class ConnectionConfig {
       Map<String, SecretServer> secretServers,
       Map<String, Credential> credentials,
       Map<String, Source> imageSources,
-      Map<String, Bitbucket> bitbucket) {
+      Map<String, Bitbucket> bitbucket,
+      Map<String, Loki> loki) {
+    public Data(Map<String, Artifactory> artifactory, Map<String, SecretServer> secretServers,
+        Map<String, Credential> credentials, Map<String, Source> imageSources, Map<String, Bitbucket> bitbucket) {
+      this(artifactory, secretServers, credentials, imageSources, bitbucket, Map.of());
+    }
     public Data(Map<String, Artifactory> artifactory, Map<String, SecretServer> secretServers,
         Map<String, Credential> credentials, Map<String, Source> imageSources) {
       this(artifactory, secretServers, credentials, imageSources, Map.of());
     }
     @org.springframework.boot.context.properties.bind.ConstructorBinding
     public Data {
+      loki = ImmutableConfiguration.map(loki == null ? Map.of() : loki);
       bitbucket = ImmutableConfiguration.map(bitbucket == null ? Map.of() : bitbucket);
       artifactory = ImmutableConfiguration.map(artifactory);
       secretServers = ImmutableConfiguration.map(secretServers);
@@ -124,7 +132,7 @@ public class ConnectionConfig {
     return new Data(data.artifactory() == null ? Map.of() : data.artifactory(),
         data.secretServers() == null ? Map.of() : data.secretServers(),
         data.credentials() == null ? Map.of() : data.credentials(),
-        data.imageSources() == null ? Map.of() : data.imageSources(), data.bitbucket());
+        data.imageSources() == null ? Map.of() : data.imageSources(), data.bitbucket(), data.loki());
   }
 
   private static Data readFile(String file) throws IOException {
@@ -145,6 +153,10 @@ public class ConnectionConfig {
               base(c.apiBaseUrl());
               validateAuth(data, c.mode(), c.credentialRef());
             });
+    data.loki().forEach((id, connection) -> {
+      if (!id.matches("[a-zA-Z0-9_-]{1,80}")) throw new IllegalArgumentException("Invalid Loki connection ID");
+      base(connection.apiBaseUrl());
+    });
     data.bitbucket().values().forEach(c -> { base(c.apiBaseUrl()); validateAuth(data, c.mode(), c.credentialRef()); });
     data.secretServers()
         .values()
@@ -306,6 +318,7 @@ public class ConnectionConfig {
         "artifactory",
         connections,
         "bitbucket", data().bitbucket(),
+        "loki", data().loki(),
         "secretServers",
         data().secretServers().keySet(),
         "credentialReferences",

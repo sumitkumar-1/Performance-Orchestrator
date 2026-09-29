@@ -722,6 +722,7 @@ async function configurationEditor() {
     ["catalog.scenarios", "Load scenario templates"],
     ["connections.artifactory", "Artifactory connections"],
     ["connections.bitbucket", "Bitbucket connections"],
+    ["connections.loki", "Shared Loki connections"],
     ["connections.secretServers", "Secret Server authentication"],
     ["connections.credentials", "Credential references & secret IDs"],
     ["connections.imageSources", "Real image-source mappings"],
@@ -773,6 +774,7 @@ async function configurationEditor() {
           || Object.keys(imported).some(key => !["revision", "catalog", "connections"].includes(key))
           || !imported.catalog || !imported.connections)
         throw new Error("Import a configuration export containing catalog and connections.");
+      imported.connections.loki ||= {};
       imported.connections.bitbucket ||= {}; // Older exports did not include Bitbucket.
       for (const [key] of sections.filter(([key]) => key !== "all")) {
         const [group, section] = key.split(".");
@@ -833,7 +835,15 @@ async function settings() {
       : "Showing startup defaults from application.yaml and local / Helm overrides."),
     configurationManager(active, { api, mode: session.mode, authStates,
       onSaved: async () => { await route(); toast("Settings updated."); },
-      onSignIn: id => busy(() => vaultPrompt.open(id)) }));
+      onSignIn: id => busy(() => vaultPrompt.open(id)),
+      onConnectionSession: (kind, id) => {
+        const auth = operationAuthentication(active.connections[kind][id], { api, kind, id });
+        const dialog = el("dialog", { class: "deployment-dialog auth-dialog", "aria-label": "Connection session" },
+          el("h2", {}, `Connection: ${id}`), auth.node,
+          el("div", { class: "dialog-actions" }, el("button", { type: "button", onclick: () => dialog.close() }, "Close")));
+        dialog.addEventListener("close", () => { auth.clear(); dialog.remove(); });
+        document.body.append(dialog); dialog.showModal();
+      } }));
   app.append(await configurationEditor());
   const diagnostics = el("details", { class: "card spacer" }, el("summary", {}, "Connection diagnostics"),
     el("p", { class: "muted" }, "Test registry tags and Bitbucket references with configured connections. These requests do not deploy anything."));
@@ -849,7 +859,7 @@ async function settings() {
       username.disabled = !source.usernameRequired;
       const versions = select([["", "Choose a discovered version"]], "");
       const evidence = el("pre", { role: "status" }, "No request made yet.");
-      const authentication = operationAuthentication(config.artifactory[source.connectionRef]);
+      const authentication = operationAuthentication(config.artifactory[source.connectionRef], { api, kind: "artifactory", id: source.connectionRef });
       const diagnosticButton = (label, fn) => el("button", { type: "button", onclick: async event => {
         event.currentTarget.disabled = true;
         const control = event.currentTarget;
@@ -935,7 +945,7 @@ async function settings() {
     diagnostics.append(el("div", { class: "config-row" },
       el("div", {}, el("strong", {}, serviceId), el("p", { class: "muted" }, `${project.connectionRef} → ${project.projectKey}/${project.repository}`)),
       button("Browse Git references", () => {
-        const auth = operationAuthentication(config.bitbucket[project.connectionRef]);
+        const auth = operationAuthentication(config.bitbucket[project.connectionRef], { api, kind: "bitbucket", id: project.connectionRef });
         const kind = select([["tags", "Tags"], ["branches", "Branches"]], "tags");
         const output = el("pre", { role: "status" }, "No request made yet.");
         let nextStart = null;

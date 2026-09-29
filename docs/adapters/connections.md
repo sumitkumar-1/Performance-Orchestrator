@@ -53,17 +53,29 @@ The real read-only registry browser is available in Settings and via the REST AP
 
 Sign-in requests cannot supply an outbound token URL; configure it through runtime settings or startup defaults. Error bodies from the token/secret servers are not returned or logged. No live authentication has been validated yet.
 
-## Request-only authentication and Bitbucket discovery
+## Connection sessions and Bitbucket discovery
 
 Artifactory/Bitbucket `authMode` values are `ad`, `token`, and `secret-server` (default for older Artifactory configs). Direct `ad` and `token` modes must omit `credentialRef`; `secret-server` mode requires it. A reference may use a Delinea secret or environment provider and contain either Basic credentials or a Bearer token.
 
-Direct credentials are accepted in CSRF-protected POST bodies only, never URLs. They are not persisted, placed in sessions, cached or returned. The operation dialog clears input on submission and close. Backend validation errors do not include upstream response bodies or authorization headers. AD means server-supported HTTP Basic, not integrated Windows authentication; passwords cannot be automatically replayed for another request.
+Direct credentials are accepted in CSRF-protected POST bodies only, never URLs. They can be encrypted in the current server-side browser session, but are never persisted to files, the database or configuration, and are never returned. The operation dialog clears input on submission and close. Backend validation errors do not include upstream response bodies or authorization headers. AD means server-supported HTTP Basic, not integrated Windows authentication; requests reuse the session credentials for the same registered connection until expiry or sign-out.
 
 - `POST /api/v1/registry-sources/{source}/services/{service}/images/query`: `{username?, cursor?, limit?, tag?, authentication?}`. `username` is the legacy artifact-owner path selector; it is not the login username. Omit `tag` to list tags; include it to resolve a digest. Service-derived sources have the ID `service:{serviceId}`.
 - `POST /api/v1/service-projects/{service}/references/query`: `{kind: "tags"|"branches", start: 0, authentication?}`. Returns up to 50 references and `nextStart`.
-- `authentication` for direct AD is `{username, password}`; for direct token it is `{token}`. Omit it for Secret Server references.
+- `authentication` for the compatibility request-only API is `{username, password}` or `{token}`. The UI instead starts a connection session once and omits authentication from subsequent operation requests; Secret Server references also omit it.
 - `POST /api/v1/secret-auth/{connection}/token`: `{token, expiresInSeconds}`. Returns status/expiry only and rotates the browser session ID.
 
 Bitbucket service configuration is `sourceProject: {connectionRef, projectKey, repository, revision, chartPath}`. The configured connection API base ends at `/rest/api`; branch/tag discovery uses `/1.0/projects/{projectKey}/repos/{repository}/{branches|tags}`. Only the validated configured repository is queried; server-supplied URLs are never followed. The `revision` and `chartPath` are saved metadata for future checkout/Helm execution, not a claim that checkout is implemented.
 
 Protocol references: [JFrog Basic/Bearer authentication](https://docs.jfrog.com/integrations/docs/curl-integration), [Bitbucket Data Center HTTP access tokens](https://confluence.atlassian.com/bitbucketserver100/http-access-tokens-1680278187.html). No live organization authentication has been verified.
+
+## Session lifecycle API
+
+- `GET /api/v1/connection-auth/{artifactory|bitbucket}/{connection}` returns mode, credential availability and expiry only. Credential availability is not a claim that the upstream has authenticated successfully.
+- `POST` to that path takes `{authentication: {username, password} | {token}, lifetimeSeconds: 1800}` and rotates the browser session ID. CSRF and same-origin checks apply. Lifetime is 60–28800 seconds; the UI defaults to 30 minutes.
+- `DELETE` clears that connection's credentials for this browser session.
+
+Credentials are stored as AES-GCM ciphertext in non-serializable session entries using a process-only key. Expiry is enforced on every use; background cleanup wipes retained ciphertext within 10 seconds of expiry/configuration invalidation. Session invalidation, explicit sign-out and shutdown also wipe entries. Upstream 401 clears the corresponding connection session. This protects stored session data; a compromised running JVM can still access the process key and active requests.
+
+An idle browser session expires after 30 minutes by default; closing a tab is not a reliable immediate logout signal. The server cannot keep authenticating after restart or resume these browser credentials in unattended workers.
+
+Shared Loki configuration and service namespace ownership are described in [the monitoring contract](../integration/monitoring-contract.md). Loki supports both log streams and numeric LogQL results through its query API; live telemetry polling is not yet implemented.

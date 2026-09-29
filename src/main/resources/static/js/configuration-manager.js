@@ -1,7 +1,7 @@
 import { el, input, labeled, select } from "./dom.js";
 
 // Forms edit a copy of the complete document; the server validates references and revision atomically.
-export function configurationManager(active, { api, mode, onSaved, onSignIn, authStates }) {
+export function configurationManager(active, { api, mode, onSaved, onSignIn, onConnectionSession, authStates }) {
   const real = mode === "real";
   const action = (text, fn) => el("button", { type: "button", onclick: fn }, text);
   const lines = value => (value || []).join("\n");
@@ -76,39 +76,30 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, aut
       bind("Cluster identity", "clusterIdentity", { required: true, disabled: real });
       if (real) note("This instance's environment and cluster are fixed by startup configuration. Monitoring settings can be changed here.");
       value.monitoring ||= {};
-      bind("Loki logs API URL", "logsApiBaseUrl", {}, value.monitoring);
-      bind("Metrics API URL", "metricsApiBaseUrl", {}, value.monitoring);
-      const read = mapping("Namespace credentials", value.monitoring.namespaceCredentials, [
-        { key: "logsCredentialRef", label: "Logs credential", choices: refs("credentials") },
-        { key: "metricsCredentialRef", label: "Metrics credential", choices: refs("credentials") }]);
-      readers.push(() => { value.monitoring.namespaceCredentials = read(); });
+      bind("Shared Loki connection", "connectionRef", { choices: refs("loki") }, value.monitoring);
+      note("Logs and LogQL metric queries use this shared connection. Namespace and per-environment credentials belong to Services.");
+      if (value.monitoring.metricsApiBaseUrl || value.monitoring.namespaceCredentials)
+        note("Some legacy monitoring fields were preserved in Advanced JSON to avoid losing distinct credentials or unmatched namespaces. Review them before removing them.");
       if (!real) note("Simulator limits and action permissions remain available in Advanced JSON.");
+    } else if (key === "loki") {
+      bind("Loki API base URL", "apiBaseUrl", { required: true });
+      note("Example: https://logs.dev-domain/loki/api/v1. Multiple environments can reference this endpoint. Credentials are selected per service/environment.");
     } else if (key === "artifactory" || key === "bitbucket") {
       bind(key === "artifactory" ? "Docker API base URL" : "Bitbucket REST API base URL", "apiBaseUrl", { required: true });
       note(key === "artifactory" ? "Example: https://artifactory.domain/artifactory/api/docker. Service settings supply docker-{stage} and {teamId}/{imageName}." : "Example: https://stash.domain.net/rest/api. Service settings identify the project, repository, Git revision and Helm chart.");
       value.authMode ||= "secret-server";
-      const mode = bind("Authentication", "authMode", { choices: [["ad", "AD username/password per request"], ["token", "Bearer token per request"], ["secret-server", "Resolve credential reference"]] });
+      const mode = bind("Authentication", "authMode", { choices: [["ad", "AD username/password session"], ["token", "Bearer token session"], ["secret-server", "Resolve credential reference"]] });
       const credential = bind("Credential reference", "credentialRef", { choices: refs("credentials") });
       const toggle = () => { credential.parentElement.hidden = mode.value !== "secret-server"; credential.required = mode.value === "secret-server"; };
       mode.addEventListener("change", toggle); toggle();
       readers.push(() => { if (value.authMode !== "secret-server") value.credentialRef = null; });
-      note("Enter AD credentials or tokens only in the operation dialog. They are not saved in configuration or sessions. AD requires Basic authentication enabled on the destination server.");
+      note("Use Session to sign in once for this connection. Credentials stay encrypted in server memory with a fixed expiry and are never written to configuration. AD requires Basic authentication enabled on the destination server.");
     } else if (key === "secretServers") {
       bind("Secret Server API base URL", "apiBaseUrl", { required: true });
       note("Use https://domain/SecretServer/api/v1. The client appends /secrets/{secretId}.");
-      value.authMode ||= "portal";
-      const mode = bind("Authentication", "authMode", { choices: [["portal", "AD login → session token"], ["token", "Provide session token"], ["secret-server", "Resolve from another credential reference"], ["environment", "Token from environment variable"], ["file", "Token from mounted file"]] });
-      const credential = bind("Bootstrap credential reference", "credentialRef", { choices: refs("credentials") });
-      const token = bind("OAuth token URL", "tokenUrl");
-      const env = bind("Token environment variable name", "bearerTokenEnvironmentVariable");
-      const file = bind("Absolute token file path", "bearerTokenFile");
-      const needsExchange = () => mode.value === "portal" || (mode.value === "secret-server" && !active.connections.credentials[credential.value]?.tokenFieldSlug && !active.connections.credentials[credential.value]?.tokenEnvironmentVariable);
-      const toggle = () => {
-        [[credential, mode.value === "secret-server"], [token, needsExchange()], [env, mode.value === "environment"], [file, mode.value === "file"]].forEach(([node, shown]) => { node.parentElement.hidden = !shown; node.required = shown; });
-      };
-      mode.addEventListener("change", toggle); credential.addEventListener("change", toggle); toggle();
-      readers.push(() => { if (!needsExchange()) value.tokenUrl = null; if (value.authMode !== "environment") value.bearerTokenEnvironmentVariable = null; if (value.authMode !== "file") value.bearerTokenFile = null; if (value.authMode !== "secret-server") value.credentialRef = null; });
-      note("A vault cannot authenticate using a secret inside itself. Another vault must already have an AD/token session or an administrator-provided token. Circular dependencies are rejected.");
+      note("AD login exchanges your username/password for a Secret Server session token. Other bootstrap methods are deferred.");
+      bind("OAuth token URL", "tokenUrl", { required: true });
+      readers.push(() => { value.authMode = "portal"; value.credentialRef = null; value.bearerTokenEnvironmentVariable = null; value.bearerTokenFile = null; });
     } else if (key === "credentials") {
       value.provider ||= "delinea";
       const provider = bind("Provider", "provider", { choices: ["delinea", "environment"] });
@@ -164,6 +155,14 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, aut
         imageConnection.addEventListener("change", toggle); gitConnection.addEventListener("change", toggle); toggle();
         readers.push(() => { value.containerImage = imageConnection.value ? containerImage : null; value.sourceProject = gitConnection.value ? sourceProject : null; });
       }
+      if (real) {
+        const credentials = value.monitoringCredentials ||= {};
+        note("Loki monitoring · Uses the deployment namespace below for both logs and LogQL metrics.");
+        for (const environment of Object.keys(active.catalog.environments)) {
+          const credential = field(`Monitoring credential for ${environment}`, credentials[environment] || "", { choices: refs("credentials") });
+          readers.push(() => { if (credential.value) credentials[environment] = credential.value; else delete credentials[environment]; });
+        }
+      }
       bind("Dependencies (one service ID per line)", "dependencies", { multiline: true });
       bind("Allowed values override paths (one per line)", "allowedOverridePaths", { multiline: true });
       value.deploymentByEnvironment ||= {};
@@ -203,15 +202,16 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, aut
     ui.form.addEventListener("submit", event => { event.preventDefault(); const draft = structuredClone(active); delete draft[group][key][id]; persist(draft, ui); });
     ui.dialog.showModal();
   }
-  const titles = { environments: "environment", artifactory: "Artifactory connection", bitbucket: "Bitbucket connection", secretServers: "Secret Server", credentials: "credential reference", imageSources: "image repository", services: "service project" };
+  const titles = { environments: "environment", artifactory: "Artifactory connection", bitbucket: "Bitbucket connection", secretServers: "Secret Server", credentials: "credential reference", imageSources: "image repository", services: "service", loki: "Loki connection" };
   const sections = [
-    ["catalog", "environments", "Environment", "Monitoring URLs and namespace credentials for this instance."],
+    ["catalog", "environments", "Environment", "Cluster identity and shared Loki connection for this instance."],
     ["connections", "secretServers", "Secret Servers", "Vault endpoints and authentication. Use Sign in for AD or a supplied token."],
     ["connections", "credentials", "Credential references", "Secret IDs and field names, shared by registry and monitoring connections."],
+    ["connections", "loki", "Loki connections", "Shared endpoints for logs and LogQL metrics. Referenced by environments."],
     ["connections", "artifactory", "Artifactory connections", "Registry server URLs and their credential references."],
     ["connections", "bitbucket", "Bitbucket connections", "Source-control servers with AD, token or Secret Server credentials."],
     ...(Object.keys(active.connections.imageSources).length ? [["connections", "imageSources", "Legacy image mappings", "Existing mappings remain usable. Configure new image mappings inside Service projects."]] : []),
-    ["catalog", "services", "Service projects", "Project paths, namespaces, Helm releases and values files."],
+    ["catalog", "services", "Services", "Project paths, namespaces, Helm releases and values files."],
   ];
   const root = el("div", { class: "configuration-sections" });
   sections.forEach(([group, key, title, description]) => {
@@ -230,6 +230,7 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, aut
       if (["artifactory", "bitbucket"].includes(key)) description += ` · ${entry.authMode || "secret-server"}${entry.credentialRef ? " · " + entry.credentialRef : ""}`;
       if (key === "imageSources") description = `${entry.connectionRef} → ${entry.repositoryKey} · ${Object.keys(entry.imagePaths).length} image mappings`;
       const controls = el("div", { class: "config-row-actions" }, action("Edit", () => edit(group, key, id, entry)));
+      if (["artifactory", "bitbucket"].includes(key) && ["ad", "token"].includes(entry.authMode)) controls.prepend(action("Session", () => onConnectionSession(key, id)));
       if (!locked) controls.append(action("Delete", () => remove(group, key, id)));
       const text = el("div", {}, el("strong", {}, id), el("p", { class: "muted" }, description));
       if (key === "secretServers") {
@@ -248,7 +249,17 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, aut
   });
   const scenarios = el("details", { class: "card config-section" }, el("summary", {}, "Scenario templates", el("span", { class: "config-count" }, String(Object.keys(active.catalog.scenarios).length))),
     el("p", { class: "muted" }, "Read-only here. Templates come from startup configuration or JSON import. Creating real load profiles from the overview is not available yet."));
-  Object.entries(active.catalog.scenarios).forEach(([id, scenario]) => scenarios.append(el("div", { class: "config-row" }, el("div", {}, el("strong", {}, scenario.displayName || id), el("p", { class: "muted" }, `${id} · ${scenario.revision}`), el("details", {}, el("summary", {}, "View template"), el("pre", {}, JSON.stringify(scenario.defaults, null, 2)))))));
+  const humanize = key => key.replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll("_", " ").replace(/^./, char => char.toUpperCase());
+  const renderValue = value => {
+    if (Array.isArray(value)) return value.length ? el("ul", {}, value.map(item => el("li", {}, renderValue(item)))) : el("span", { class: "muted" }, "None");
+    if (value && typeof value === "object") return el("dl", { class: "scenario-properties" }, Object.entries(value).flatMap(([key, child]) => [el("dt", {}, humanize(key)), el("dd", {}, renderValue(child))]));
+    return el("span", {}, value === null || value === undefined ? "Not set" : typeof value === "boolean" ? value ? "Yes" : "No" : String(value));
+  };
+  if (!Object.keys(active.catalog.scenarios).length) scenarios.append(el("p", { class: "muted" }, "No scenario templates configured."));
+  Object.entries(active.catalog.scenarios).forEach(([id, scenario]) => scenarios.append(
+    el("article", { class: "scenario-template" }, el("h3", {}, scenario.displayName || id),
+      el("p", { class: "muted" }, `${id} · Revision ${scenario.revision}`), renderValue(scenario.defaults),
+      el("p", { class: "muted" }, scenario.allowedOverridePaths?.length ? `Editable fields: ${scenario.allowedOverridePaths.join(", ")}` : "No template override fields configured."))));
   root.append(scenarios);
   return root;
 }
