@@ -52,7 +52,13 @@ public class RuntimeConfiguration {
         saved = Json.read(content, Document.class);
         runtimeOverride = true;
       }
-      validate(saved);
+      try {
+        validate(saved);
+      } catch (Problem error) {
+        throw new IllegalStateException("Saved runtime configuration failed validation at "
+            + error.field() + ". Start with a new orchestrator.configuration-file path to test startup defaults without changing the existing file. "
+            + error.getMessage());
+      }
       catalog.installValidated(saved.catalog());
       connections.installValidated(saved.connections());
     }

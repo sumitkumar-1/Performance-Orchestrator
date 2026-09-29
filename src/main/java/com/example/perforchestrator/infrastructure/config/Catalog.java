@@ -178,13 +178,20 @@ public class Catalog {
   }
 
   public void validate(Data candidate) {
+    if (candidate == null || candidate.environments() == null || candidate.services() == null
+        || candidate.imageSources() == null || candidate.scenarios() == null)
+      throw Problem.invalid("catalog", "Invalid catalog: environments, services, imageSources and scenarios maps are required");
+    if (!mode.equals(candidate.mode()))
+      throw Problem.invalid("catalog.mode", "Invalid catalog: saved/imported mode must match the startup mode");
+    if (!boundEnvironment.isBlank()) {
+      if (!candidate.environments().keySet().equals(Set.of(boundEnvironment)))
+        throw Problem.invalid("catalog.environments", "Invalid catalog: this instance requires exactly its startup target environment (orchestrator.target-environment); saved/imported configuration belongs to another environment or an older layout");
+      if (candidate.environments().get(boundEnvironment) == null
+          || !boundCluster.equals(candidate.environments().get(boundEnvironment).clusterIdentity()))
+        throw Problem.invalid("catalog.environments.clusterIdentity", "Invalid catalog: saved/imported cluster identity differs from the fixed startup cluster; review startup defaults and the saved configuration");
+    }
+    final String[] field = {"catalog"};
     try {
-      if (!boundEnvironment.isBlank()
-          && (!candidate.environments().keySet().equals(Set.of(boundEnvironment))
-              || !boundCluster.equals(candidate.environments().get(boundEnvironment).clusterIdentity())))
-        throw new IllegalArgumentException("The instance environment and cluster cannot change at runtime");
-      if (!mode.equals(candidate.mode()))
-        throw new IllegalArgumentException("Catalog must match the startup mode");
       if (mode.equals("simulation")
           && (candidate.environments().isEmpty()
               || candidate.services().isEmpty()
@@ -195,7 +202,10 @@ public class Catalog {
           .environments()
           .forEach(
               (id, env) -> {
+                field[0] = "catalog.environments";
                 identifier(id);
+                field[0] += "." + id;
+
                 required(env.displayName());
                 required(env.clusterIdentity());
                 if (mode.equals("simulation")) required(env.loadGeneratorNamespace());
@@ -207,6 +217,7 @@ public class Catalog {
                     || env.limits().maxRequestsPerSecond() < 1))
                   throw new IllegalArgumentException();
                 if (env.monitoring() != null) {
+                  field[0] = "catalog.environments." + id + ".monitoring";
                   var monitoring = env.monitoring();
                   for (String url : List.of(
                       Objects.toString(monitoring.logsApiBaseUrl(), ""),
@@ -222,7 +233,9 @@ public class Catalog {
           .imageSources()
           .forEach(
               (id, source) -> {
+                field[0] = "catalog.imageSources";
                 identifier(id);
+                field[0] += "." + id;
                 required(source.displayName());
                 required(source.repositoryTemplate());
                 if (source.versions().isEmpty()
@@ -235,7 +248,9 @@ public class Catalog {
           .services()
           .forEach(
               (id, service) -> {
+                field[0] = "catalog.services";
                 identifier(id);
+                field[0] += "." + id;
                 safeRelative(service.projectPath());
                 if (!candidate.services().keySet().containsAll(service.dependencies())
                     || service.dependencies().contains(id)
@@ -249,6 +264,7 @@ public class Catalog {
                   if (service.deploymentDefaults() != null) candidate.environments().keySet()
                       .forEach(env -> destinations.putIfAbsent(env, service.deploymentDefaults()));
                   destinations.forEach((environment, destination) -> {
+                    field[0] = "catalog.services." + id + ".deploymentDefaults/deploymentByEnvironment";
                     var env = candidate.environments().get(environment);
                     if (env == null || destination.namespace() == null || destination.namespace().isBlank()
                         || destination.valuesFiles() == null || destination.valuesFiles().isEmpty())
@@ -283,13 +299,16 @@ public class Catalog {
                           destination.valuesFiles().forEach(file -> read(service, file));
                         });
               });
+      field[0] = "catalog.services.dependencies";
       for (String id : candidate.services().keySet())
         cycle(candidate, id, new HashSet<>(), new HashSet<>());
       candidate
           .scenarios()
           .forEach(
               (id, scenario) -> {
+                field[0] = "catalog.scenarios";
                 identifier(id);
+                field[0] += "." + id;
                 required(scenario.displayName());
                 required(scenario.revision());
                 if (scenario.allowedOverridePaths() == null || scenario.defaults() == null)
@@ -297,9 +316,9 @@ public class Catalog {
               });
     } catch (RuntimeException error) {
       throw Problem.invalid(
-          "catalog",
-          "Invalid catalog: check required fields, limits, references, dependencies and project"
-              + " files");
+          field[0],
+          "Invalid catalog at " + field[0]
+              + ": check required fields, paths, references and (for simulation) limits/project files");
     }
   }
 
