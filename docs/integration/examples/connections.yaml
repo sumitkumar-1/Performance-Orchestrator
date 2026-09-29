@@ -12,8 +12,7 @@ secretServers:
   organization:
     # Organization path supplied: /SecretServer/api/v1. Replace only the example host.
     apiBaseUrl: https://secrets.example.invalid/SecretServer/api/v1
-    authMode: portal
-    tokenUrl: https://secrets.example.invalid/SecretServer/oauth2/token
+    authMode: token
   # Alternative connection for a token provided by an init container on a shared volume.
   # This is token delivery only; tenant authorization/CKP deployment is not implemented.
   provisioned:
@@ -44,12 +43,10 @@ credentials:
     provider: delinea
     secretServerRef: organization
     secretId: '12345'
-    usernameFieldSlug: username
-    passwordFieldSlug: password
+    tokenFieldSlug: token
   jfrog-secondary:
     provider: environment
-    usernameEnvironmentVariable: JFROG_SECONDARY_USERNAME
-    passwordEnvironmentVariable: JFROG_SECONDARY_PASSWORD
+    tokenEnvironmentVariable: JFROG_SECONDARY_TOKEN
 imageSources:
   organization-dev:
     displayName: Organization dev

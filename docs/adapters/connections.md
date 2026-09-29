@@ -8,11 +8,10 @@ The YAML contains `artifactory`, `bitbucket`, `secretServers`, `credentials`, an
 
 ## Delinea
 
-A credential with `provider: delinea` has a `secretServerRef`, numeric `secretId`, `usernameFieldSlug`, and `passwordFieldSlug`. The selected server defines an API base, including the version, and exactly one authentication mode:
+A credential with `provider: delinea` has a `secretServerRef`, numeric `secretId`, and either `tokenFieldSlug` or namespace username/password field slugs. The selected server defines an API base, including the version, and exactly one authentication mode:
 
-- `authMode: portal`: configure an independent HTTPS `tokenUrl`. Users sign in under Connections & catalog. The backend sends form-encoded `grant_type=password`, `username`, and `password` based on the supplied reference client. It requires a Bearer `access_token` and positive `expires_in`. Tokens remain in the server-side browser session, never the API response or browser storage. Passwords are used for the exchange only; their whitespace is preserved. Expiry or a 401 from secret retrieval requires signing in again. Clearing the session forgets its token locally; it does not revoke it at Delinea.
 - `authMode: token`: users enter a Bearer token and its remaining lifetime in the sign-in dialog. It stays only in server session memory, capped at 8 hours. The status is `TOKEN_PROVIDED`, not a claim of successful upstream authentication; actual validity is checked when retrieving a secret.
-- `authMode: secret-server`: configure `credentialRef` from a separately authenticated vault (or environment provider). Token credentials are used directly; username/password credentials require this vault's `tokenUrl` for a request-scoped exchange. Configuration rejects self-dependencies and cycles.
+- `authMode: secret-server`: configure a token credential reference from another vault or environment provider. Password exchange is not supported; vault dependency cycles are rejected.
 - `authMode: environment`: configure `bearerTokenEnvironmentVariable`. This remains the default for existing configurations that omit `authMode`. Restart after rotating a process environment variable.
 - `authMode: file`: configure an absolute `bearerTokenFile` path to a plain bearer-token file, for example on a volume populated by an init container. The backend rereads at each secret retrieval, allowing replacement by an external rotation mechanism. Files are bounded to 64 KiB; surrounding whitespace is removed. The app does not provision or refresh this file. An init container alone does not renew tokens after startup.
 
@@ -20,9 +19,9 @@ Modes do not fall back to each other. Global modes are administrator-provided cr
 
 Secret IDs can be configured for each destination, including namespace credentials such as `logs-service-a`. The example shows these as reusable named credential references. Values are fetched on demand and not cached. Namespace-to-monitoring-source selection remains part of the planned telemetry integration.
 
-The backend performs `GET {apiBaseUrl}/secrets/{secretId}` with `Authorization: Bearer …`, then reads configured slugs from the response's `items[]`, using `itemValue`. The vault session token is never sent to Artifactory or Bitbucket. A resolved username/password is sent as HTTP Basic, or a resolved `tokenFieldSlug` value as Bearer. Token references omit username/password slugs. Environment-provider token references use `tokenEnvironmentVariable` instead of username/password environment variables.
+The backend performs `GET {apiBaseUrl}/secrets/{secretId}` with `Authorization: Bearer …`, then reads configured slugs from the response's `items[]`, using `itemValue`. The vault session token is never sent to Artifactory or Bitbucket. Artifactory/Bitbucket require a resolved token and send it as Bearer; password references are rejected. Token references omit username/password slugs. Environment-provider token references use `tokenEnvironmentVariable` instead of username/password environment variables.
 
-This response contract must be checked against the deployed Secret Server version/template. The portal flow follows the supplied Secret Server client; other OAuth grants, automatic refresh, integrated Windows auth, SDK registration, approval workflows and checked-out secret lifecycles are not implemented. An empty token URL is invalid in portal mode; there is no implicit Basic-auth fallback to the vault. Backend errors disclose only fixed diagnostic text, never secret bodies or HTTP authorization headers.
+This response contract must be checked against the deployed Secret Server version/template. Use a REST API Bearer access token accepted by that endpoint. Token issuance, automatic refresh, integrated Windows auth, SDK registration, approval workflows and checked-out secret lifecycles are not implemented. Backend errors disclose only fixed diagnostic text, never secret bodies or authorization headers.
 
 References: [Delinea version-specific REST APIs](https://docs.delinea.com/online-help/secret-server-11-6-x/api-scripting/rest-api-reference-download/index.htm), [Delinea Platform access to Secret Server APIs](https://docs.delinea.com/online-help/delinea-platform/api/ss-apis.htm).
 
@@ -48,20 +47,19 @@ The real read-only registry browser is available in Settings and via the REST AP
 ## Secret Server session API
 
 - `GET /api/v1/secret-auth`: authentication mode and session status for each registered server, without credentials or tokens. Global-provider status is not a live connectivity check.
-- `POST /api/v1/secret-auth/{connection}`: JSON username/password for a registered portal connection. Returns status/expiry only and rotates the browser session ID. The existing same-origin and CSRF checks apply.
 - `DELETE /api/v1/secret-auth/{connection}`: clear this browser's token for that connection. CSRF is required.
 
 Sign-in requests cannot supply an outbound token URL; configure it through runtime settings or startup defaults. Error bodies from the token/secret servers are not returned or logged. No live authentication has been validated yet.
 
 ## Connection sessions and Bitbucket discovery
 
-Artifactory/Bitbucket `authMode` values are `ad`, `token`, and `secret-server` (default for older Artifactory configs). Direct `ad` and `token` modes must omit `credentialRef`; `secret-server` mode requires it. A reference may use a Delinea secret or environment provider and contain either Basic credentials or a Bearer token.
+Artifactory/Bitbucket accept `token` or `secret-server`. Interactive token mode omits `credentialRef`; reference mode requires a token credential. Legacy `ad` and vault `portal` settings migrate to `token` on load.
 
-Direct credentials are accepted in CSRF-protected POST bodies only, never URLs. They can be encrypted in the current server-side browser session, but are never persisted to files, the database or configuration, and are never returned. The operation dialog clears input on submission and close. Backend validation errors do not include upstream response bodies or authorization headers. AD means server-supported HTTP Basic, not integrated Windows authentication; requests reuse the session credentials for the same registered connection until expiry or sign-out.
+Supplied Bearer tokens are accepted in CSRF-protected POST bodies, never URLs, configuration or exports. They are retained only in the browser-scoped server session. Artifactory/Bitbucket tokens are encrypted in memory. No AD login, Basic password authentication or OAuth password exchange is performed.
 
 - `POST /api/v1/registry-sources/{source}/services/{service}/images/query`: `{username?, cursor?, limit?, tag?, authentication?}`. `username` is the legacy artifact-owner path selector; it is not the login username. Omit `tag` to list tags; include it to resolve a digest. Service-derived sources have the ID `service:{serviceId}`.
 - `POST /api/v1/service-projects/{service}/references/query`: `{kind: "tags"|"branches", start: 0, authentication?}`. Returns up to 50 references and `nextStart`.
-- `authentication` for the compatibility request-only API is `{username, password}` or `{token}`. The UI instead starts a connection session once and omits authentication from subsequent operation requests; Secret Server references also omit it.
+- `authentication` for the compatibility request-only API is `{token}`. The UI instead starts a connection session once and omits authentication from subsequent operation requests; Secret Server references also omit it.
 - `POST /api/v1/secret-auth/{connection}/token`: `{token, expiresInSeconds}`. Returns status/expiry only and rotates the browser session ID.
 
 Bitbucket service configuration is `sourceProject: {connectionRef, projectKey, repository, revision, chartPath}`. The configured connection API base ends at `/rest/api`; branch/tag discovery uses `/1.0/projects/{projectKey}/repos/{repository}/{branches|tags}`. Only the validated configured repository is queried; server-supplied URLs are never followed. The `revision` and `chartPath` are saved metadata for future checkout/Helm execution, not a claim that checkout is implemented.

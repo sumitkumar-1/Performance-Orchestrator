@@ -1,5 +1,7 @@
 # Organization connection details received
 
+> Authentication update: the AD/password-exchange details below are historical reference only. The application now accepts supplied Bearer access tokens for Secret Server, Artifactory and Bitbucket. No AD login is supported. See [current connection configuration](../adapters/connections.md).
+
 Updated: 2026-09-28. These details were supplied by the user; they are not evidence of a successful live connection. Hostnames are sanitized patterns, not configured or tested destinations. The entries below are integration notes, not an executable configuration schema.
 
 ## Bitbucket / Stash

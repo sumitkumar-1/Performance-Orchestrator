@@ -34,16 +34,16 @@ class ConnectionAuthenticationTest {
   }
   @AfterEach void cleanup() { RequestContextHolder.resetRequestAttributes(); }
 
-  @Test void registryUsesServiceStageAndImagePathWithRequestOnlyBasicCredentials() throws Exception {
-    var config = config("ad");
+  @Test void registryUsesServiceStageAndImagePathWithBearerToken() throws Exception {
+    var config = config("token");
     var request = new MockHttpServletRequest();
     RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
     when(http.get(any(), any(), any())).thenReturn(response("{\"tags\":[\"v1\"]}"));
     var images = new ArtifactoryImages(config, http, resolver, catalog());
-    var input = new RequestAuthentication("ad-user", "private-password", null);
+    var input = new RequestAuthentication(null, null, "private-token");
     assertThat(images.discover("receiver", "service:receiver", null, "", 50, input).versions()).containsExactly("v1");
     verify(http).get(URI.create("https://registry.invalid/artifactory/api/docker/docker-stable/v2/ps-spoolers/ps-spoolers-sng-smtp-receiver/tags/list?n=50"),
-        RequestAuthentication.basic("ad-user", "private-password"), "application/json");
+        "Bearer private-token", "application/json");
     assertThat(request.getSession(false)).isNull();
     assertThat(Json.write(config.data())).doesNotContain("ad-user", "private-password");
     assertThat(input.toString()).isEqualTo("[REDACTED]");
@@ -105,19 +105,14 @@ class ConnectionAuthenticationTest {
     verify(http, times(2)).get(URI.create("https://root.invalid/api/v1/secrets/123"), "Bearer root-token", "application/json");
   }
 
-  @Test void vaultCanExchangeReferencedAdCredentialsWithoutRetainingThemOrTheChildToken() {
-    var credential = new ConnectionConfig.Credential("environment", "VAULT_USER", "VAULT_PASSWORD", null, null, null, null);
-    var config = new ConnectionConfig(new ConnectionConfig.Data(Map.of(), Map.of("child",
-        new ConnectionConfig.SecretServer("https://child.invalid/api/v1", null, "secret-server", "https://child.invalid/oauth2/token", null, "bootstrap")),
-        Map.of("bootstrap", credential), Map.of()));
-    when(http.tokenForm(any(), any())).thenReturn(response("{\"access_token\":\"child-token\",\"expires_in\":60}"));
-    var tokens = new SecretServerTokens(config, http);
-    var request = new MockHttpServletRequest();
-    RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-    for (int i = 0; i < 2; i++) assertThat(tokens.authorization("child", ref -> new CredentialResolver.Secret("ad-user", "password")))
-        .isEqualTo("Bearer child-token");
-    assertThat(request.getSession(false)).isNull();
-    verify(http, times(2)).tokenForm(URI.create("https://child.invalid/oauth2/token"), "grant_type=password&username=ad-user&password=password");
+  @Test void rejectsPasswordAuthenticationEvenForLegacyAdConfiguration() {
+    assertThat(config("ad").data().artifactory().get("registry").mode()).isEqualTo("token");
+    assertThatThrownBy(() -> RequestAuthentication.authorization("token", null,
+        new RequestAuthentication("alice", "password", null), resolver)).hasMessageContaining("only a token");
+    when(resolver.resolve("password-reference")).thenReturn(new CredentialResolver.Secret("alice", "password"));
+    assertThatThrownBy(() -> RequestAuthentication.authorization("secret-server", "password-reference", null, resolver))
+        .hasMessageContaining("token credential");
+    verifyNoInteractions(http);
   }
 
   @Test void circularVaultAuthenticationIsRejectedAtConfigurationTime() {

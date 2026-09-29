@@ -49,6 +49,14 @@ class SecretAuthenticationApiTest {
   }
 
   @Test
+  void passwordLoginEndpointIsRemoved() throws Exception {
+    mvc.perform(post("/api/v1/secret-auth/organization").header("Host", "localhost").with(csrf())
+        .contentType("application/json").content("{\"username\":\"alice\",\"password\":\"private\"}"))
+        .andExpect(status().isMethodNotAllowed());
+    verifyNoInteractions(tokens);
+  }
+
+  @Test
   void tokenInputRequiresCsrfAndReturnsOnlyStatus() throws Exception {
     String endpoint = "/api/v1/secret-auth/organization/token";
     String input = "{\"token\":\"private-token\",\"expiresInSeconds\":900}";
@@ -66,18 +74,18 @@ class SecretAuthenticationApiTest {
   void rotatesSessionAndReturnsOnlyStatusThenClearsConnection() throws Exception {
     var session = new MockHttpSession();
     String previousId = session.getId();
-    when(tokens.signIn(eq("organization"), eq("alice"), eq(" password "), any()))
-        .thenReturn(Map.of("mode", "portal", "state", "AUTHENTICATED"));
+    when(tokens.useToken(eq("organization"), eq("private-token"), eq(900L), any()))
+        .thenReturn(Map.of("mode", "token", "state", "TOKEN_PROVIDED"));
     mvc.perform(
-            post("/api/v1/secret-auth/organization")
+            post("/api/v1/secret-auth/organization/token")
                 .header("Host", "localhost")
                 .session(session)
                 .with(csrf())
                 .contentType("application/json")
-                .content("{\"username\":\"alice\",\"password\":\" password \"}"))
+                .content("{\"token\":\"private-token\",\"expiresInSeconds\":900}"))
         .andExpect(status().isOk())
         .andExpect(header().string("Cache-Control", "no-store"))
-        .andExpect(jsonPath("$.state").value("AUTHENTICATED"))
+        .andExpect(jsonPath("$.state").value("TOKEN_PROVIDED"))
         .andExpect(jsonPath("$.access_token").doesNotExist());
     assertThat(session.getId()).isNotEqualTo(previousId);
     mvc.perform(
@@ -87,14 +95,14 @@ class SecretAuthenticationApiTest {
                 .with(csrf()))
         .andExpect(status().isOk());
     verify(tokens).signOut("organization", session);
-    assertThat(new SecretAuthenticationController.Credentials("alice", "password").toString())
+    assertThat(new SecretAuthenticationController.TokenInput("private-token", 900).toString())
         .isEqualTo("[REDACTED]");
   }
 
   @Test
   void exampleConfigurationLoadsWithExplicitAuthenticationModes() throws Exception {
     var config = new ConnectionConfig("docs/integration/examples/connections.yaml");
-    assertThat(config.data().secretServers().get("organization").mode()).isEqualTo("portal");
+    assertThat(config.data().secretServers().get("organization").mode()).isEqualTo("token");
     assertThat(config.data().secretServers().get("provisioned").mode()).isEqualTo("file");
     assertThat(config.data().credentials().get("logs-service-b").secretId()).isEqualTo("12346");
   }

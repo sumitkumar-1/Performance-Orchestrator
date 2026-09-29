@@ -43,18 +43,6 @@ public class ReadOnlyHttp {
     return send(request);
   }
 
-  /** Only called for the administrator-configured Secret Server token endpoint. */
-  public Response tokenForm(URI uri, String body) {
-    ConnectionConfig.base(uri.toString());
-    return send(
-        HttpRequest.newBuilder(uri)
-            .timeout(Duration.ofSeconds(12))
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .header("Accept", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(body))
-            .build());
-  }
-
   private Response send(HttpRequest request) {
     CompletableFuture<HttpResponse<byte[]>> future =
         client.sendAsync(request, info -> new LimitedBody(2 * 1024 * 1024));

@@ -49,10 +49,10 @@ Ask the vault and registry owners for these values. Actual passwords/tokens stay
 | Value | What to verify |
 | --- | --- |
 | Secret Server API base | For example `https://passwordvault.DOMAIN/SecretServer/api/v1`; omit `/secrets/{id}` here |
-| Token endpoint | Independent URL, for example `https://passwordvault.DOMAIN/SecretServer/oauth2/token` |
-| Supported login flow | This build uses form-encoded OAuth `grant_type=password`; confirm it is allowed for your account. Browser SSO/MFA-only login is not implemented |
+| Access token | Generate a REST API Bearer token in the respective service portal |
+| Supported login flow | Paste a supplied Bearer access token into the session dialog; no AD login or token exchange |
 | Secret ID | Numeric ID of a secret your account may read; no approval/checkout workflow supported yet |
-| Field slugs | Exact `items[].slug` names for registry username and password, not display labels |
+| Field slugs | Exact `items[].slug` names for registry token, not display labels |
 | Artifactory API base | Usually `https://artifactory.DOMAIN/artifactory/api/docker` |
 | Docker repository key | Exact repository containing the image, not an assumed Helm repository name |
 | Image path | Path within that repository, without tag or repository prefix |
@@ -67,7 +67,7 @@ Your `helm-dev/qa/stable/release-virtual` names need confirmation: chart reposit
 {apiBaseUrl}/{repositoryKey}/v2/{imagePath}/manifests/{tag}
 ```
 
-On 2026-09-28 you confirmed this repository + `/v2/` + image-path route and Basic authentication. Both match the current adapter. Supply the actual repository/image mappings and credential references for the pilot.
+On 2026-09-28 you confirmed this repository + `/v2/` + image-path route ; authentication now uses a supplied Bearer token. Supply the actual repository/image mappings and credential references for the pilot.
 
 ## 4. Create a minimal office configuration
 
@@ -77,10 +77,10 @@ The relationship is:
 
 ```text
 office-dev image source → office Artifactory connection → registry-reader credential
-registry-reader → office-vault Secret Server connection + secret ID + two field slugs
+registry-reader → office-vault Secret Server connection + secret ID + token field slug
 ```
 
-The portal username/password authenticates you to Delinea. The username/password retrieved from the selected secret authenticates the registry request to Artifactory. These are independent credentials and independent URLs. Do not put either password or a bearer token into this YAML.
+Supply a Secret Server Bearer token in its sign-in dialog. The registry can use its own supplied token or a token resolved from a vault secret. These are separate credentials; never put token values in YAML.
 
 For this read-only test, the service key under `imagePaths` is sufficient. You do not need to configure a deployment environment, chart, namespace, release or load scenario yet. Adding those catalog entries cannot enable real execution.
 

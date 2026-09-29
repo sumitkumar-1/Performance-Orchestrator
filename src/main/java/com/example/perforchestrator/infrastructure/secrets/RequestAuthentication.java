@@ -14,15 +14,15 @@ public record RequestAuthentication(String username, String password, String tok
       if (input != null && (input.username() != null || input.password() != null || input.token() != null))
         throw Problem.invalid("authentication", "This connection uses its configured credential reference");
       var secret = resolver.resolve(credentialRef);
-      return secret.token() ? bearer(secret.password()) : basic(secret.username(), secret.password());
+      if (!secret.token()) throw Problem.invalid("credentialRef", "This connection requires a token credential reference");
+      return bearer(secret.password());
     }
     if (input == null) throw Problem.invalid("authentication", "Enter credentials for this operation");
     if ("token".equals(mode)) {
       if (input.username() != null || input.password() != null) throw Problem.invalid("authentication", "Supply only a token");
       return bearer(input.token());
     }
-    if (!"ad".equals(mode) || input.token() != null) throw Problem.invalid("authentication", "Supply only AD username and password");
-    return basic(input.username(), input.password());
+    throw Problem.invalid("authentication", "AD authentication has been removed; supply an access token");
   }
 
   public static String basic(String username, String password) {

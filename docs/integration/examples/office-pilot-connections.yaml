@@ -7,15 +7,13 @@ artifactory:
 secretServers:
   office-vault:
     apiBaseUrl: https://passwordvault.example.invalid/SecretServer/api/v1
-    authMode: portal
-    tokenUrl: https://passwordvault.example.invalid/SecretServer/oauth2/token
+    authMode: token
 credentials:
   registry-reader:
     provider: delinea
     secretServerRef: office-vault
     secretId: '12345'
-    usernameFieldSlug: username
-    passwordFieldSlug: password
+    tokenFieldSlug: token
 imageSources:
   office-dev:
     displayName: Office dev pilot

@@ -4,19 +4,15 @@ import { el, input, labeled, select } from "./dom.js";
 export function operationAuthentication(connection, { api, kind, id }) {
   const mode = connection.authMode || "secret-server";
   const path = `/connection-auth/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`;
-  const username = input("", "text", { autocomplete: "off", maxlength: 512 });
-  const password = input("", "password", { autocomplete: "off", maxlength: 4096 });
   const token = input("", "password", { autocomplete: "off", maxlength: 65536 });
   const lifetime = select([["1800", "30 minutes"], ["3600", "1 hour"], ["28800", "8 hours"]], "1800");
   const status = el("p", { class: "muted", role: "status" });
   const error = el("p", { class: "error", role: "alert", hidden: true });
   let expiryTimer;
-  const clear = () => { clearTimeout(expiryTimer); username.value = ""; password.value = ""; token.value = ""; };
+  const clear = () => { clearTimeout(expiryTimer); token.value = ""; };
   const fields = el("div", { class: "config-form", hidden: true },
-    mode === "ad" ? labeled("AD username", username) : null,
-    mode === "ad" ? labeled("AD password", password) : null,
     mode === "token" ? labeled("Bearer token", token) : null,
-    labeled("Maximum session duration", lifetime));
+    labeled("Session duration (no longer than token validity)", lifetime));
   const login = el("button", { type: "button", hidden: true }, "Start connection session");
   const logout = el("button", { type: "button", hidden: true }, "Sign out of connection");
   const node = el("div", { class: "config-form" }, status, fields, el("div", { class: "card-actions" }, login, logout), error);
@@ -29,14 +25,14 @@ export function operationAuthentication(connection, { api, kind, id }) {
     logout.hidden = !available;
     status.textContent = mode === "secret-server" ? `Credentials are resolved through ${connection.credentialRef}.`
       : available ? `Session available until ${new Date(state.expiresAt).toLocaleString()}. Shared by services using this connection; server permissions are checked when used.`
-      : "Sign in once for services using this connection. Credentials stay encrypted in server memory until expiry, sign-out or server restart.";
+      : "Sign in once for services using this connection. Tokens stay encrypted in server memory until expiry, sign-out or server restart.";
   };
   const refresh = async () => {
     if (mode === "secret-server") { render({ state: "REFERENCE" }); return; }
     render(await api(path));
   };
   const remember = async () => {
-    const authentication = mode === "ad" ? { username: username.value, password: password.value } : { token: token.value };
+    const authentication = { token: token.value };
     clear();
     try { render(await api(path, { method: "POST", body: { authentication, lifetimeSeconds: Number(lifetime.value) } })); }
     finally { Object.keys(authentication).forEach(key => { authentication[key] = ""; }); }

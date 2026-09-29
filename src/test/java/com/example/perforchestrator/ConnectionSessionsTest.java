@@ -15,8 +15,8 @@ import org.springframework.web.context.request.*;
 
 class ConnectionSessionsTest {
   final ConnectionConfig config = new ConnectionConfig(new ConnectionConfig.Data(
-      Map.of("one", new ConnectionConfig.Artifactory("https://registry.invalid/api/docker", null, "ad"),
-          "two", new ConnectionConfig.Artifactory("https://registry2.invalid/api/docker", null, "ad")),
+      Map.of("one", new ConnectionConfig.Artifactory("https://registry.invalid/api/docker", null, "token"),
+          "two", new ConnectionConfig.Artifactory("https://registry2.invalid/api/docker", null, "token")),
       Map.of(), Map.of(), Map.of(), Map.of("one", new ConnectionConfig.Bitbucket("https://stash.invalid/rest/api", null, "token"))));
   final Clock clock = mock(Clock.class);
   final Instant now = Instant.parse("2026-09-29T15:00:00Z");
@@ -35,17 +35,17 @@ class ConnectionSessionsTest {
   byte[] encrypted(Object entry) throws Exception {
     Field field = entry.getClass().getDeclaredField("encrypted"); field.setAccessible(true); return (byte[]) field.get(entry);
   }
-  void login() { sessions.remember("artifactory", "one", new RequestAuthentication("reader", "private-password", null), 60, request.getSession()); }
+  void login() { sessions.remember("artifactory", "one", new RequestAuthentication(null, null, "private-token"), 60, request.getSession()); }
 
   @Test void credentialsAreReusedOnlyWithinTheSameBrowserAndConnection() throws Exception {
     login();
-    assertThat(sessions.authorization("artifactory", "one", null)).isEqualTo(RequestAuthentication.basic("reader", "private-password"));
-    assertThat(sessions.authorization("artifactory", "one", null)).isEqualTo(RequestAuthentication.basic("reader", "private-password"));
+    assertThat(sessions.authorization("artifactory", "one", null)).isEqualTo("Bearer private-token");
+    assertThat(sessions.authorization("artifactory", "one", null)).isEqualTo("Bearer private-token");
     var entry = retainedEntry();
     assertThat(entry).isNotInstanceOf(java.io.Serializable.class);
     assertThat(entry.toString()).isEqualTo("[REDACTED connection session]");
-    assertThat(new String(encrypted(entry), java.nio.charset.StandardCharsets.UTF_8)).doesNotContain("private-password", "reader");
-    assertThat(Json.write(sessions.status("artifactory", "one", request.getSession()))).doesNotContain("private-password", "reader", "Basic");
+    assertThat(new String(encrypted(entry), java.nio.charset.StandardCharsets.UTF_8)).doesNotContain("private-token", "reader");
+    assertThat(Json.write(sessions.status("artifactory", "one", request.getSession()))).doesNotContain("private-token", "reader", "Basic");
     assertThatThrownBy(() -> sessions.authorization("artifactory", "two", null)).hasMessageContaining("Sign in");
     assertThatThrownBy(() -> sessions.authorization("bitbucket", "one", null)).hasMessageContaining("Sign in");
     RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));

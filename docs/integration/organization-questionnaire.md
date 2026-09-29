@@ -1,5 +1,7 @@
 # Real services integration — organization questionnaire
 
+> Authentication update: the AD/password-exchange details below are historical reference only. The application now accepts supplied Bearer access tokens for Secret Server, Artifactory and Bitbucket. No AD login is supported. See [current connection configuration](../adapters/connections.md).
+
 Connection details received on 2026-09-17 are recorded in [the connection notes](confirmed-connection-details.md), together with unresolved path/authentication details. Use those answers when completing this worksheet. The subsequent [monitoring and provisioning contract](monitoring-contract.md) records portal sign-in, future init-container tokens, namespace secret IDs, and the supplied LogQL/PromQL examples; these do not need to be supplied again.
 
 Use this document to collect the technical contracts and approvals needed to connect the Performance Environment Orchestrator to organizational systems. It is an answer worksheet, not an executable configuration file.

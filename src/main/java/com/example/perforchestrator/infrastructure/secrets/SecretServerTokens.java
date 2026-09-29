@@ -1,11 +1,8 @@
 package com.example.perforchestrator.infrastructure.secrets;
 
 import com.example.perforchestrator.domain.Problem;
-import com.example.perforchestrator.infrastructure.config.Json;
 import com.example.perforchestrator.infrastructure.registry.*;
 import jakarta.servlet.http.HttpSession;
-import java.net.URI;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.*;
@@ -48,27 +45,6 @@ public class SecretServerTokens {
     return server;
   }
 
-  public Map<String, Object> signIn(
-      String id, String username, String password, HttpSession session) {
-    var server = server(id);
-    if (!server.mode().equals("portal"))
-      throw Problem.invalid(
-          "connection", "This connection uses administrator-provided authentication");
-    if (username == null
-        || username.isBlank()
-        || username.length() > 512
-        || password == null
-        || password.isEmpty()
-        || password.length() > 4096)
-      throw Problem.invalid(
-          "credentials", "Username and password are required and must fit the configured limits");
-    // Reauthentication never retains a previous token after a failed exchange.
-    session.removeAttribute(PREFIX + id);
-    Token token = exchange(server, username, password);
-    session.setAttribute(PREFIX + id, token);
-    return status(id, session);
-  }
-
   public Map<String, Object> useToken(String id, String value, long expiresInSeconds, HttpSession session) {
     if (!server(id).mode().equals("token")) throw Problem.invalid("connection", "Select token authentication first");
     session.removeAttribute(PREFIX + id);
@@ -79,27 +55,9 @@ public class SecretServerTokens {
     return status(id, session);
   }
 
-  private Token exchange(ConnectionConfig.SecretServer server, String username, String password) {
-    String form = "grant_type=password&username=" + encode(username.trim()) + "&password=" + encode(password);
-    var response = http.tokenForm(URI.create(server.tokenUrl()), form);
-    if (response.status() < 200 || response.status() >= 300)
-      throw new Problem(response.status() == 400 || response.status() == 401 || response.status() == 403 ? 401 : 502,
-          "SECRET_AUTH_FAILED", "credentials", "Secret Server authentication failed; verify credentials and connection configuration");
-    try {
-      var body = Json.MAPPER.readTree(response.body());
-      String value = body.path("access_token").asText("");
-      long seconds = body.path("expires_in").asLong(0);
-      if (!body.path("token_type").asText("Bearer").equalsIgnoreCase("Bearer") || !validToken(value) || seconds <= 0)
-        throw new IllegalArgumentException();
-      return new Token(value, clock.instant().plusSeconds(seconds), config.generation());
-    } catch (Exception error) {
-      throw new Problem(502, "SECRET_TOKEN_SCHEMA", "connection", "Token response must contain a Bearer access_token and positive expires_in");
-    }
-  }
-
   public Map<String, Object> status(String id, HttpSession session) {
     var server = server(id);
-    if (!Set.of("portal", "token").contains(server.mode()))
+    if (!server.mode().equals("token"))
       return Map.of("mode", server.mode(), "state", "ADMINISTRATOR_PROVIDED");
     Token token = session == null ? null : (Token) session.getAttribute(PREFIX + id);
     if (token != null
@@ -133,9 +91,10 @@ public class SecretServerTokens {
     switch (server.mode()) {
       case "secret-server" -> {
         var credential = resolver.apply(server.credentialRef());
-        value = credential.token() ? credential.password() : exchange(server, credential.username(), credential.password()).value;
+        if (!credential.token()) throw unavailable();
+        value = credential.password();
       }
-      case "portal", "token" -> {
+      case "token" -> {
         HttpSession session = currentSession();
         status(id, session); // Evict expired token before use.
         Token token = session == null ? null : (Token) session.getAttribute(PREFIX + id);
@@ -158,7 +117,7 @@ public class SecretServerTokens {
   }
 
   public void rejected(String id) {
-    if (Set.of("portal", "token").contains(server(id).mode())) {
+    if (server(id).mode().equals("token")) {
       signOut(id, currentSession());
       throw signInRequired();
     }
@@ -173,10 +132,6 @@ public class SecretServerTokens {
 
   private static boolean validToken(String value) {
     return value != null && value.length() <= 65536 && value.matches("[A-Za-z0-9._~+/=-]+");
-  }
-
-  private static String encode(String value) {
-    return URLEncoder.encode(value, StandardCharsets.UTF_8);
   }
 
   private static Problem signInRequired() {

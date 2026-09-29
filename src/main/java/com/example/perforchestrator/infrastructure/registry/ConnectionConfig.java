@@ -16,13 +16,14 @@ import org.springframework.stereotype.Component;
 @Component
 public class ConnectionConfig {
   public record Artifactory(String apiBaseUrl, String credentialRef, String authMode) {
-    @org.springframework.boot.context.properties.bind.ConstructorBinding public Artifactory {}
+    @org.springframework.boot.context.properties.bind.ConstructorBinding public Artifactory { if ("ad".equals(authMode)) authMode = "token"; }
     public Artifactory(String apiBaseUrl, String credentialRef) { this(apiBaseUrl, credentialRef, "secret-server"); }
     public String mode() { return authMode == null ? "secret-server" : authMode; }
   }
   public record Loki(String apiBaseUrl) {}
 
   public record Bitbucket(String apiBaseUrl, String credentialRef, String authMode) {
+    public Bitbucket { if ("ad".equals(authMode)) authMode = "token"; }
     public String mode() { return authMode == null ? "secret-server" : authMode; }
   }
 
@@ -34,7 +35,7 @@ public class ConnectionConfig {
       String bearerTokenFile,
       String credentialRef) {
     @org.springframework.boot.context.properties.bind.ConstructorBinding
-    public SecretServer {}
+    public SecretServer { if ("portal".equals(authMode)) { authMode = "token"; tokenUrl = null; } }
 
     public SecretServer(String apiBaseUrl, String bearerTokenEnvironmentVariable, String authMode, String tokenUrl, String bearerTokenFile) {
       this(apiBaseUrl, bearerTokenEnvironmentVariable, authMode, tokenUrl, bearerTokenFile, null);
@@ -173,19 +174,13 @@ public class ConnectionConfig {
                 case "secret-server" -> {
                   if (!data.credentials().containsKey(c.credentialRef()) || c.bearerTokenFile() != null || c.bearerTokenEnvironmentVariable() != null)
                     throw new IllegalArgumentException("Invalid bootstrap credential reference");
-                  if (!data.credentials().get(c.credentialRef()).token()) base(c.tokenUrl());
-                  else if (c.tokenUrl() != null) throw new IllegalArgumentException("A token credential does not use an OAuth endpoint");
+                  if (!data.credentials().get(c.credentialRef()).token()) throw new IllegalArgumentException("Secret Server bootstrap requires a token credential");
+                  if (c.tokenUrl() != null) throw new IllegalArgumentException("A token credential does not use an OAuth endpoint");
                 }
                 case "environment" -> {
                   envName(c.bearerTokenEnvironmentVariable());
                   if (c.tokenUrl() != null || c.bearerTokenFile() != null)
                     throw new IllegalArgumentException("Ambiguous Secret Server authentication");
-                }
-                case "portal" -> {
-                  base(c.tokenUrl());
-                  if (c.bearerTokenEnvironmentVariable() != null || c.bearerTokenFile() != null)
-                    throw new IllegalArgumentException(
-                        "Portal authentication cannot fall back to a global token");
                 }
                 case "file" -> {
                   if (c.bearerTokenFile() == null
@@ -239,7 +234,7 @@ public class ConnectionConfig {
   }
 
   private static void validateAuth(Data data, String mode, String reference) {
-    if (!Set.of("ad", "token", "secret-server").contains(mode)) throw new IllegalArgumentException("Unsupported authentication mode");
+    if (!Set.of("token", "secret-server").contains(mode)) throw new IllegalArgumentException("Unsupported authentication mode");
     if ("secret-server".equals(mode)) {
       if (!data.credentials().containsKey(reference)) throw new IllegalArgumentException("Unknown credential reference");
     } else if (reference != null) throw new IllegalArgumentException("Interactive authentication cannot use a stored credential reference");

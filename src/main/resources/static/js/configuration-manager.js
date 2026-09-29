@@ -87,19 +87,18 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, onC
     } else if (key === "artifactory" || key === "bitbucket") {
       bind(key === "artifactory" ? "Docker API base URL" : "Bitbucket REST API base URL", "apiBaseUrl", { required: true });
       note(key === "artifactory" ? "Example: https://artifactory.domain/artifactory/api/docker. Service settings supply docker-{stage} and {teamId}/{imageName}." : "Example: https://stash.domain.net/rest/api. Service settings identify the project, repository, Git revision and Helm chart.");
-      value.authMode ||= "secret-server";
-      const mode = bind("Authentication", "authMode", { choices: [["ad", "AD username/password session"], ["token", "Bearer token session"], ["secret-server", "Resolve credential reference"]] });
+      value.authMode ||= "token";
+      const mode = bind("Authentication", "authMode", { choices: [["token", "Bearer token session"], ["secret-server", "Resolve token reference"]] });
       const credential = bind("Credential reference", "credentialRef", { choices: refs("credentials") });
       const toggle = () => { credential.parentElement.hidden = mode.value !== "secret-server"; credential.required = mode.value === "secret-server"; };
       mode.addEventListener("change", toggle); toggle();
       readers.push(() => { if (value.authMode !== "secret-server") value.credentialRef = null; });
-      note("Use Session to sign in once for this connection. Credentials stay encrypted in server memory with a fixed expiry and are never written to configuration. AD requires Basic authentication enabled on the destination server.");
+      note("Use Session to sign in once for this connection. Tokens stay encrypted in server memory with a fixed expiry and are never written to configuration. Referenced credentials must contain a token.");
     } else if (key === "secretServers") {
       bind("Secret Server API base URL", "apiBaseUrl", { required: true });
       note("Use https://domain/SecretServer/api/v1. The client appends /secrets/{secretId}.");
-      note("AD login exchanges your username/password for a Secret Server session token. Other bootstrap methods are deferred.");
-      bind("OAuth token URL", "tokenUrl", { required: true });
-      readers.push(() => { value.authMode = "portal"; value.credentialRef = null; value.bearerTokenEnvironmentVariable = null; value.bearerTokenFile = null; });
+      note("Supply a REST API Bearer access token through Sign in. No AD credentials or token-generation endpoint are used.");
+      readers.push(() => { value.authMode = "token"; value.tokenUrl = null; value.credentialRef = null; value.bearerTokenEnvironmentVariable = null; value.bearerTokenFile = null; });
     } else if (key === "credentials") {
       value.provider ||= "delinea";
       const provider = bind("Provider", "provider", { choices: ["delinea", "environment"] });
@@ -205,7 +204,7 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, onC
   const titles = { environments: "environment", artifactory: "Artifactory connection", bitbucket: "Bitbucket connection", secretServers: "Secret Server", credentials: "credential reference", imageSources: "image repository", services: "service", loki: "Loki connection" };
   const sections = [
     ["catalog", "environments", "Environment", "Cluster identity and shared Loki connection for this instance."],
-    ["connections", "secretServers", "Secret Servers", "Vault endpoints and authentication. Use Sign in for AD or a supplied token."],
+    ["connections", "secretServers", "Secret Servers", "Vault endpoints and authentication. Use Sign in to supply a Bearer access token."],
     ["connections", "credentials", "Credential references", "Secret IDs and field names, shared by registry and monitoring connections."],
     ["connections", "loki", "Loki connections", "Shared endpoints for logs and LogQL metrics. Referenced by environments."],
     ["connections", "artifactory", "Artifactory connections", "Registry server URLs and their credential references."],
@@ -230,13 +229,13 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, onC
       if (["artifactory", "bitbucket"].includes(key)) description += ` · ${entry.authMode || "secret-server"}${entry.credentialRef ? " · " + entry.credentialRef : ""}`;
       if (key === "imageSources") description = `${entry.connectionRef} → ${entry.repositoryKey} · ${Object.keys(entry.imagePaths).length} image mappings`;
       const controls = el("div", { class: "config-row-actions" }, action("Edit", () => edit(group, key, id, entry)));
-      if (["artifactory", "bitbucket"].includes(key) && ["ad", "token"].includes(entry.authMode)) controls.prepend(action("Session", () => onConnectionSession(key, id)));
+      if (["artifactory", "bitbucket"].includes(key) && entry.authMode === "token") controls.prepend(action("Session", () => onConnectionSession(key, id)));
       if (!locked) controls.append(action("Delete", () => remove(group, key, id)));
       const text = el("div", {}, el("strong", {}, id), el("p", { class: "muted" }, description));
       if (key === "secretServers") {
         const state = authStates[id];
         text.append(el("small", {}, ["AUTHENTICATED", "TOKEN_PROVIDED"].includes(state?.state) ? `Session available until ${new Date(state.expiresAt).toLocaleString()}` : `${entry.authMode || "environment"} authentication`));
-        if (["portal", "token"].includes(state?.mode)) controls.prepend(action(["AUTHENTICATED", "TOKEN_PROVIDED"].includes(state.state) ? "Sign out" : "Sign in", async () => {
+        if (state?.mode === "token") controls.prepend(action(["AUTHENTICATED", "TOKEN_PROVIDED"].includes(state.state) ? "Sign out" : "Sign in", async () => {
           if (!["AUTHENTICATED", "TOKEN_PROVIDED"].includes(state.state)) return onSignIn(id);
           const ui = modal("Sign out of Secret Server?");
           ui.body.append(el("p", {}, "The current vault session will be cleared.")); ui.save.textContent = "Sign out";

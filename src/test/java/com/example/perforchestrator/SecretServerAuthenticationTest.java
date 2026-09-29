@@ -57,14 +57,6 @@ class SecretServerAuthenticationTest {
     return request;
   }
 
-  void successfulToken() {
-    when(http.tokenForm(any(), any()))
-        .thenReturn(
-            response(
-                200,
-                "{\"access_token\":\"private-token\",\"token_type\":\"Bearer\",\"expires_in\":60}"));
-  }
-
   @AfterEach
   void clearContext() {
     RequestContextHolder.resetRequestAttributes();
@@ -72,28 +64,23 @@ class SecretServerAuthenticationTest {
 
   @Test
   void connectionChangesInvalidatePortalTokensEvenIfConfigurationIsLaterRestored() {
-    successfulToken();
     var config = portalConfig();
     var tokens = tokens(config, now);
     var request = request();
-    tokens.signIn("organization", "alice", "password", request.getSession());
+    tokens.useToken("organization", "private-token", 60, request.getSession());
     config.replace(config.data());
     assertThatThrownBy(() -> tokens.authorization("organization")).hasMessageContaining("Sign in");
   }
 
   @Test
-  void exchangesPasswordWithoutTrimmingAndKeepsTokensOutOfPublicStatus() {
-    successfulToken();
+  void suppliedTokenStaysOutOfPublicStatus() {
     var tokens = tokens(portalConfig(), now);
     var request = request();
-    var result = tokens.signIn("organization", " alice ", " p&+= ", request.getSession());
-    verify(http)
-        .tokenForm(
-            URI.create("https://vault.invalid/SecretServer/oauth2/token"),
-            "grant_type=password&username=alice&password=+p%26%2B%3D+");
+    var result = tokens.useToken("organization", "private-token", 60, request.getSession());
+    verifyNoInteractions(http);
     assertThat(tokens.authorization("organization")).isEqualTo("Bearer private-token");
     assertThat(Json.write(result))
-        .contains("AUTHENTICATED")
+        .contains("TOKEN_PROVIDED")
         .doesNotContain("private-token", "alice");
     assertThat(Json.write(tokens.statuses(request.getSession()))).doesNotContain("private-token");
     tokens.signOut("organization", request.getSession());
@@ -102,10 +89,9 @@ class SecretServerAuthenticationTest {
 
   @Test
   void isolatesBrowserSessionsAndExpiresAtServerDeadline() {
-    successfulToken();
     var tokens = tokens(portalConfig(), now);
     var first = request();
-    tokens.signIn("organization", "alice", "password", first.getSession());
+    tokens.useToken("organization", "private-token", 60, first.getSession());
     request();
     assertThatThrownBy(() -> tokens.authorization("organization")).hasMessageContaining("Sign in");
     RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(first));
@@ -117,36 +103,23 @@ class SecretServerAuthenticationTest {
   }
 
   @Test
-  void rejectsInvalidTokenResponsesAndDoesNotRetainOldAuthentication() {
-    successfulToken();
+  void rejectsInvalidTokenAndDoesNotRetainOldAuthentication() {
     var tokens = tokens(portalConfig(), now);
     var session = request().getSession();
-    tokens.signIn("organization", "alice", "password", session);
-    when(http.tokenForm(any(), any())).thenReturn(response(400, "private-password secret-body"));
-    assertThatThrownBy(() -> tokens.signIn("organization", "alice", "password", session))
-        .hasMessageNotContaining("private-password")
-        .hasMessageNotContaining("secret-body");
+    tokens.useToken("organization", "private-token", 60, session);
+    assertThatThrownBy(() -> tokens.useToken("organization", "bad token", 60, session))
+        .hasMessageContaining("valid bearer");
     assertThatThrownBy(() -> tokens.authorization("organization")).hasMessageContaining("Sign in");
-    for (String body :
-        List.of(
-            "{\"access_token\":\"private-token\"}",
-            "{\"access_token\":\"private-token\",\"expires_in\":-1}",
-            "{\"access_token\":\"private-token\",\"expires_in\":60,\"token_type\":\"Basic\"}")) {
-      when(http.tokenForm(any(), any())).thenReturn(response(200, body));
-      assertThatThrownBy(() -> tokens.signIn("organization", "alice", "password", session))
-          .hasMessageContaining("Token response")
-          .hasMessageNotContaining("private-token");
-    }
+    verifyNoInteractions(http);
   }
 
   @Test
   void resolvesConfiguredNamespaceSecretAndEvictsRejectedPortalToken() {
-    successfulToken();
     var config = portalConfig();
     // Production resolver and token service use the same server-side session.
     var tokens = new SecretServerTokens(config, http);
     var request = request();
-    tokens.signIn("organization", "alice", "password", request.getSession());
+    tokens.useToken("organization", "private-token", 60, request.getSession());
     when(http.get(any(), any(), any()))
         .thenReturn(
             response(
@@ -190,9 +163,9 @@ class SecretServerAuthenticationTest {
                         "portal",
                         "https://vault.invalid/token",
                         null)))
-        .hasMessageContaining("cannot fall back");
+        .hasMessageContaining("no stored token");
     assertThatThrownBy(
-            () -> tokens.signIn("organization", "alice", "password", new MockHttpSession()))
-        .hasMessageContaining("administrator-provided");
+            () -> tokens.useToken("organization", "private-token", 60, new MockHttpSession()))
+        .hasMessageContaining("Select token");
   }
 }

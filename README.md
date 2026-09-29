@@ -70,7 +70,7 @@ Use **Connections & catalog** to edit environment monitoring, service destinatio
 
 Field-level overrides in `data/configuration.json` (or `data/real/configuration.json` in real mode) are applied over packaged or externally supplied defaults on restart. Untouched fields receive new defaults. Changes to resource files alone are not watched. Port, database, worker scheduling and application mode remain startup settings.
 
-Delinea authentication supports AD sign-in, a supplied session token, a credential resolved through another vault, an environment token or a mounted token file. Artifactory and Bitbucket support server-session AD credentials, server-session Bearer tokens, or credential references. The Secret Server settings form uses AD login; older bootstrap modes remain readable for compatibility. Secrets are fetched using configured secret IDs and field slugs; passwords and tokens do not belong in configuration files. See [connection configuration](docs/adapters/connections.md) and [connection examples](docs/integration/examples/connections.yaml).
+Secret Server, Artifactory and Bitbucket use supplied Bearer access tokens. AD login and password exchange are removed. Paste tokens into the session dialogs; never put tokens in configuration. Artifactory/Bitbucket can alternatively resolve a token credential reference. Secret Server also supports mounted/environment tokens or a token from another vault. See [connection configuration](docs/adapters/connections.md).
 
 ## Helm environment overrides
 
@@ -246,11 +246,12 @@ For pending organizational contracts, use the [integration questionnaire](docs/i
 
 Outstanding organization inputs are tracked in [open integration questions](docs/integration/open-questions.md), including load YAML keys, lifecycle signals and metrics queries.
 
-### AD sign-in prompt
+### Token sign-in prompt
 
-Opening the real-mode UI prompts for AD credentials for a configured portal-mode Secret Server. Select the vault explicitly when multiple connections exist. Configure connections / Not now allow setup before authenticating. The password is cleared after submission; the backend exchanges it for a session-scoped token and returns status/expiry only. Expiry is tracked on the server and checked again before retrieving secrets; the UI schedules a sign-in prompt at expiry and rechecks when the tab becomes visible. Restart, expiry or connection edits can require sign-in again. No automatic password replay or token refresh is implemented.
+The real-mode UI prompts for a Secret Server REST API Bearer access token and its remaining lifetime (up to eight hours). Artifactory and Bitbucket have separate token sessions under Connections & catalog. Tokens stay server-side, are not exported, and must be supplied again after expiry, sign-out, configuration changes or restart. Session duration does not extend provider validity; an upstream 401 requires a new token. Signing out clears local access but does not revoke a portal-generated token at its provider.
 
-This is vault authentication for on-demand secret retrieval, not shared-user authorization for hosting the portal publicly. Simulation does not show the initial prompt; environment/file token providers do not ask for AD credentials. Existing changed fields still override new example defaults—load startup defaults into the editor to review them before saving.
+This is integration authentication, not shared-user authorization for publicly hosting the application. Legacy AD connection modes migrate to token mode on load; no password exchange remains.
+
 
 ## One instance per environment
 
@@ -262,7 +263,7 @@ Example secret IDs/URLs are placeholders, not live organization credentials. Das
 
 ### Connection settings in the portal
 
-- **Secret Servers**: `office-vault` is the example Delinea connection. Configure its API base and OAuth token URL, then use **Sign in** for the AD dialog. Password fields are not displayed in the settings list.
+- **Secret Servers**: `office-vault` is the example Delinea connection. Configure its API base, then use **Sign in** to provide a Bearer access token.
 - **Credential references**: map a secret ID and username/password field slugs to that vault. Services select one reference per environment for both logs and LogQL metrics.
 - **Artifactory connections**: `office` is the example registry server and its credential reference.
 - **Services → Container image**: select `office`, repository stage `dev` or `stable`, team ID and image name. The tags request is `{apiBaseUrl}/docker-{repoStage}/v2/{teamId}/{imageName}/tags/list`. Existing `office-dev` image-source mappings remain supported as legacy configuration.
@@ -273,15 +274,9 @@ Real-mode environment exports omit simulator limits, allowed actions, dashboard 
 
 ### Authentication choices and credential lifetime
 
-Artifactory and Bitbucket connections accept `authMode: ad`, `token`, or `secret-server`. AD uses Basic authentication against the configured HTTPS server; the organization must enable Basic/AD support there. This is not Kerberos or browser SSO. Token mode sends `Authorization: Bearer …`. These modes follow [JFrog authentication](https://docs.jfrog.com/integrations/docs/curl-integration) and [Bitbucket Data Center HTTP access tokens](https://confluence.atlassian.com/bitbucketserver100/http-access-tokens-1680278187.html).
+Artifactory and Bitbucket accept `authMode: token` or `secret-server`. Defaults use interactive token sessions. Token references must contain `tokenFieldSlug` or `tokenEnvironmentVariable`; username/password references are rejected when used by these integrations. Loki namespace credential references remain independent.
 
-- **AD/token sessions**: use Session on an Artifactory/Bitbucket connection, or sign in from its diagnostics dialog. Credentials are encrypted with AES-GCM under a process-only key and scoped to that browser session, connection type and ID. All services on that connection reuse them. Inputs are cleared after submission/close. Nothing is written to runtime JSON, exports, browser storage or the database. Default maximum lifetime is 30 minutes, selectable up to 8 hours; idle servlet sessions expire after 30 minutes by default. Sign-out, session invalidation, connection configuration changes, upstream 401 and server shutdown discard retained credentials. A cleanup task wipes expired encrypted data within 10 seconds; expired credentials are rejected immediately on use. Closing a browser tab alone is not an immediate server logout.
-- **Secret Server reference**: configure `credentialRef`. The referenced credential can contain username/password slugs or a single `tokenFieldSlug`; values are fetched on demand. Configure only references, never the secret values themselves.
-- **Vault AD (`portal`)**: username/password are exchanged once for a server-side session token. Passwords are not retained.
-- **Vault token (`token`)**: provide a token in the sign-in dialog and its remaining lifetime (maximum 8 hours). The token stays in server memory for that browser session, is checked on use, and is not returned in responses. The supplied lifetime is a local upper bound, not verification of the issuer's expiry. A 401 clears the token.
-- **Vault via Secret Server (`secret-server`)**: choose a credential from another already-authenticated vault. Token credentials are used directly; username/password credentials use the target vault's `tokenUrl` to obtain a token for that request. Self-references and cycles are rejected. An initial AD/token session or administrator-provided token is always needed to bootstrap the chain.
-
-When changing modes in YAML/Helm, remove incompatible inherited fields with `null` (for example `credentialRef: null` for Artifactory `ad`, or `tokenUrl: null` for vault `token`). The dashboard forms do this automatically. Existing saved dashboard overrides still take precedence over changed defaults.
+Artifactory/Bitbucket session tokens are encrypted in server memory and cleared on sign-out, expiry, session invalidation or configuration changes. Browser close alone does not immediately invalidate a server session; idle timeout is 30 minutes. No automatic renewal or upstream revocation is performed. Use a Bearer-compatible access token, not a legacy API key requiring another header.
 
 ### Shared Loki connections and scenario display
 

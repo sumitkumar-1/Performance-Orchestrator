@@ -116,31 +116,26 @@ orchestrator:
     artifactory:
       office:
         apiBaseUrl: https://artifactory.domain/artifactory/api/docker
-        credentialRef: registry-reader
-        authMode: secret-server # ad: request-only username/password; token: request-only Bearer token
+        authMode: token # Paste an access token in the connection session
     bitbucket:
       office-stash:
         apiBaseUrl: https://stash.domain.net/rest/api
-        authMode: secret-server
-        credentialRef: bitbucket-reader
+        authMode: token
     secretServers:
       office-vault:
         apiBaseUrl: https://domain/SecretServer/api/v1
-        authMode: portal
-        tokenUrl: https://domain/SecretServer/oauth2/token
+        authMode: token
     credentials:
       bitbucket-reader:
         provider: delinea
         secretServerRef: office-vault
         secretId: '12346' # EXAMPLE: replace with the approved Bitbucket secret ID
-        usernameFieldSlug: username
-        passwordFieldSlug: password
+        tokenFieldSlug: token
       registry-reader:
         provider: delinea
         secretServerRef: office-vault
         secretId: '12345' # EXAMPLE ONLY: replace with the approved registry secret ID
-        usernameFieldSlug: username
-        passwordFieldSlug: password
+        tokenFieldSlug: token
       sandbox-logs:
         provider: delinea
         secretServerRef: office-vault

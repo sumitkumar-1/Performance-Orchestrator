@@ -28,13 +28,13 @@ class ConnectionSessionApiTest {
   @TestConfiguration static class Config {
     @Bean ConnectionSessions sessions() {
       var config = new ConnectionConfig(new ConnectionConfig.Data(
-          Map.of("office", new ConnectionConfig.Artifactory("https://registry.invalid/api/docker", null, "ad")),
+          Map.of("office", new ConnectionConfig.Artifactory("https://registry.invalid/api/docker", null, "token")),
           Map.of(), Map.of(), Map.of()));
       return new ConnectionSessions(config, mock(CredentialResolver.class));
     }
   }
   private final String endpoint = "/api/v1/connection-auth/artifactory/office";
-  private final String input = "{\"authentication\":{\"username\":\"alice\",\"password\":\"private\"},\"lifetimeSeconds\":1800}";
+  private final String input = "{\"authentication\":{\"token\":\"private\"},\"lifetimeSeconds\":1800}";
 
   @Test void requiresCsrfAndSameOrigin() throws Exception {
     mvc.perform(post(endpoint).header("Host", "localhost").contentType("application/json").content(input)).andExpect(status().isForbidden());

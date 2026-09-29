@@ -130,13 +130,13 @@ class RealModeIntegrationTest {
   void bitbucketReferenceQueryUsesConfiguredCredentialsAndRequiresCsrf() throws Exception {
     String endpoint = "/api/v1/service-projects/ps-spoolers-ps-load-gen/references/query";
     mvc.perform(post(endpoint).header("Host", "localhost").contentType("application/json")
-        .content("{\"kind\":\"tags\",\"start\":0}"))
+        .content("{\"kind\":\"tags\",\"start\":0,\"authentication\":{\"token\":\"bitbucket-token\"}}"))
         .andExpect(status().isForbidden());
     when(credentials.resolve("bitbucket-reader")).thenReturn(new CredentialResolver.Secret("reader", "private-password"));
     when(http.get(any(), any(), any())).thenReturn(new ReadOnlyHttp.Response(200, Map.of(),
         "{\"values\":[{\"id\":\"refs/tags/v1\",\"displayId\":\"v1\"}],\"isLastPage\":true}".getBytes(StandardCharsets.UTF_8)));
     mvc.perform(post(endpoint).header("Host", "localhost").with(csrf()).contentType("application/json")
-        .content("{\"kind\":\"tags\",\"start\":0}"))
+        .content("{\"kind\":\"tags\",\"start\":0,\"authentication\":{\"token\":\"bitbucket-token\"}}"))
         .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
         .andExpect(jsonPath("$.values[0].displayName").value("v1"))
         .andExpect(jsonPath("$.authentication").doesNotExist());
@@ -154,7 +154,7 @@ class RealModeIntegrationTest {
       configuration.update(
           new RuntimeConfiguration.Document(original.revision(), original.catalog(), mappings));
       when(credentials.resolve("read"))
-          .thenReturn(new CredentialResolver.Secret("user", "password"));
+          .thenReturn(new CredentialResolver.Secret(null, "registry-token", true));
       when(http.get(any(), any(), any()))
           .thenReturn(
               new ReadOnlyHttp.Response(
@@ -167,7 +167,7 @@ class RealModeIntegrationTest {
                   .param("username", "alice"))
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.versions[0]").value("actual-build-7"));
-      verify(http).get(any(), startsWith("Basic "), eq("application/json"));
+      verify(http).get(any(), eq("Bearer registry-token"), eq("application/json"));
       var mockCatalog =
           new Catalog("classpath:mocks/catalog.yaml", "simulation", "127.0.0.1").data();
       assertThatThrownBy(

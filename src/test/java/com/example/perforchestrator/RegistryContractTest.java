@@ -66,7 +66,7 @@ class RegistryContractTest {
   @Test
   void paginatesOnlyRegisteredSourceAndResolvesDigest() {
     ReadOnlyHttp http = mock(ReadOnlyHttp.class);
-    CredentialResolver credentials = ref -> new CredentialResolver.Secret("reader", "password");
+    CredentialResolver credentials = ref -> new CredentialResolver.Secret(null, "registry-token", true);
     var images = new ArtifactoryImages(config(), http, credentials);
     when(http.get(any(), any(), any()))
         .thenReturn(response(200, "{\"tags\":[\"build-1\",\"build-2\"]}"));
@@ -78,7 +78,7 @@ class RegistryContractTest {
             eq(
                 URI.create(
                     "https://registry.example.invalid/artifactory/api/docker/docker-dev/v2/alice/auth-service/tags/list?n=2")),
-            startsWith("Basic "),
+            eq("Bearer registry-token"),
             eq("application/json"));
     String manifest = "{\"schemaVersion\":2}";
     when(http.get(any(), any(), any()))
@@ -96,7 +96,7 @@ class RegistryContractTest {
     ReadOnlyHttp http = mock(ReadOnlyHttp.class);
     var images =
         new ArtifactoryImages(
-            config(), http, ref -> new CredentialResolver.Secret("reader", "secret-password"));
+            config(), http, ref -> new CredentialResolver.Secret(null, "secret-token", true));
     when(http.get(any(), any(), any())).thenReturn(response(403, "secret-password backend detail"));
     assertThatThrownBy(() -> images.discover("auth-service", "dev", "alice", "", 50))
         .hasMessageContaining("denied")

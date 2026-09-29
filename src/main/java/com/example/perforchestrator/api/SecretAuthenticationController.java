@@ -14,28 +14,9 @@ public class SecretAuthenticationController {
     this.tokens = tokens;
   }
 
-  public record Credentials(String username, String password) {
-    @Override
-    public String toString() {
-      return "[REDACTED]";
-    }
-  }
-
   @GetMapping
   public Object status(HttpServletRequest request) {
     return tokens.statuses(request.getSession(false));
-  }
-
-  @PostMapping("/{connection}")
-  public Object signIn(
-      @PathVariable String connection,
-      @RequestBody Credentials credentials,
-      HttpServletRequest request) {
-    var result =
-        tokens.signIn(
-            connection, credentials.username(), credentials.password(), request.getSession());
-    request.changeSessionId();
-    return result;
   }
 
   public record TokenInput(String token, long expiresInSeconds) {
