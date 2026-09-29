@@ -1,4 +1,4 @@
-# simulation: mock workflows; real: live read-only connections, no execution yet.
+# simulation: mock workflows; real: connections plus opt-in Helm execution.
 mode: simulation
 targetEnvironment: sandbox # Fixed instance environment in real mode
 image:
@@ -104,7 +104,20 @@ ingress:
 # Additional Spring startup properties, rendered as /app/config/application.yaml.
 # Mode, loopback address, port and mounted config paths are owned by the chart.
 # Do not put secret values here; use environmentSecret or tokenSecret above.
-application: {}
+application:
+  orchestrator:
+    execution:
+      enabled: false
+      kube-context: in-cluster
+      expected-api-server: https://kubernetes.default.svc
+      workspace: /app/data/real/workspaces
+      command-timeout-seconds: 300
+# Use an organization-approved account with permissions in each selected service namespace.
+# Namespace creation and RBAC grants are deliberately not performed by the orchestrator.
+serviceAccount:
+  name: ''
+  automountToken: false # Enable when execution uses in-cluster authentication
+
 
 # Same structure as orchestrator.catalog-defaults in application.yaml (real mode).
 # Supply approved environment/service/scenario mappings; no invented defaults.

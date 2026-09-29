@@ -116,6 +116,24 @@ class RealModeIntegrationTest {
     verifyNoInteractions(http);
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"/api/v1/real/plans", "/api/v1/real/runs", "/api/v1/real/profiles",
+      "/api/v1/real/services/ps-spoolers-ps-load-gen/values", "/api/v1/real/runs/example/recover"})
+  void realMutationsRequireCsrf(String endpoint) throws Exception {
+    mvc.perform(post(endpoint).header("Host", "localhost").contentType("application/json").content("{}"))
+        .andExpect(status().isForbidden());
+    verifyNoInteractions(http, credentials);
+  }
+
+  @Test
+  void realExecutionCannotRunUntilExplicitlyEnabled() throws Exception {
+    mvc.perform(post("/api/v1/real/plans").header("Host", "localhost").with(csrf())
+        .contentType("application/json").content("{\"warmupSeconds\":0,\"measurementSeconds\":60,\"maxRunDurationSeconds\":900}"))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("REAL_EXECUTION_DISABLED"));
+    verifyNoInteractions(http, credentials);
+  }
+
   @Test
   void runtimeCannotSwitchInstanceEnvironmentOrCluster() {
     var original = configuration.current();

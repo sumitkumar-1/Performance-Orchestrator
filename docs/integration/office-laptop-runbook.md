@@ -1,3 +1,5 @@
+> For opt-in real deployment and timed load execution, use [Real execution](real-execution.md) after the connection checks below. Historical statements below about missing execution adapters describe the earlier read-only pilot.
+
 # Office laptop: real integration and E2E preparation
 
 Use this guide with the exact application build you transfer to work. Start with one service, one Docker repository and one Secret Server credential. Complete each checkpoint before adding another integration. No Codex installation is needed on the office laptop.

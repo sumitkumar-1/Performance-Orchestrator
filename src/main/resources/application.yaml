@@ -29,6 +29,12 @@ spring:
       enabled: false
 orchestrator:
   mode: simulation
+  execution:
+    enabled: false # Opt in after reviewing the target cluster and service Helm settings
+    kube-context: '' # Explicit local context, or in-cluster on CKP
+    expected-api-server: '' # Exact HTTPS server URL; prevents use of an unintended context
+    workspace: data/real/workspaces
+    command-timeout-seconds: 300
   target-environment: sandbox # Real-mode instance binding; fixed until restart
   catalog: classpath:mocks/catalog.yaml
   connections: '' # External bootstrap file overrides connection-defaults below

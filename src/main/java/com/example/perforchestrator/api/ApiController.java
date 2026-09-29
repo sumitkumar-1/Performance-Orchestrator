@@ -21,6 +21,7 @@ public class ApiController {
   public record PlanInput(String profileId, Integer revision, Profile profile) {}
 
   private final Catalog catalog;
+  private final com.example.perforchestrator.infrastructure.execution.ExecutionSettings execution;
   private final Optional<Ports.ImageDiscovery> images;
   private final Store store;
   private final PlanningService planning;
@@ -35,7 +36,8 @@ public class ApiController {
       PlanningService planning,
       RunService runs,
       Reports reports,
-      WorkflowWorker worker) {
+      WorkflowWorker worker, com.example.perforchestrator.infrastructure.execution.ExecutionSettings execution) {
+    this.execution=execution;
     this.catalog = catalog;
     this.images = images;
     this.store = store;
@@ -56,13 +58,13 @@ public class ApiController {
         "capabilities",
         Map.of(
             "execution",
-            catalog.mode().equals("simulation"),
+            catalog.mode().equals("simulation") || execution.enabled,
             "realRegistryDiscovery",
             true,
             "realSecretRetrieval",
             true,
             "liveMetrics",
-            false),
+            execution.enabled),
         "csrfToken",
         token.getToken(),
         "csrfHeader",
@@ -134,7 +136,7 @@ public class ApiController {
         "discoveredAt",
         Instant.now().toString(),
         "simulated",
-        catalog.mode().equals("simulation"),
+        catalog.mode().equals("simulation") || execution.enabled,
         "ordering",
         "tag descending lexicographic; not publication order");
   }

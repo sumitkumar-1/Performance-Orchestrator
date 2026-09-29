@@ -16,7 +16,7 @@ Confirmed: the tool has a configured runtime; operators can scale pods to zero o
 
 - Which controller owns the pods (Deployment, StatefulSet, Job, other), and what exact resource name/selector should be scaled? Pods themselves are not scalable controllers.
 - Can an HPA/operator restore replicas? How do we verify generation actually stopped?
-- Should portal Stop scale the owned workload to zero or uninstall the owned Helm release? Specify policy per profile/environment; do not assume both are equivalent.
+Confirmed: Stop uninstalls only the load-generator release created by the run; service releases remain.
 - How does the application report natural completion? Does the process exit, expose a status/metric or continue running idle?
 - How long should downstream processing drain after generation stops? What evidence/results must be collected before uninstalling?
 - Can another person/run already own the same release? What authorization and exclusivity rules apply?
@@ -36,7 +36,7 @@ Confirmed: the Java load generator exposes actual generation-rate metrics; confi
 
 Confirmed browser repository pattern: `https://stash.domain/projects/SP/repos/{projectName}`. This is a web URL, not yet a confirmed Git clone URL.
 
-- Supply the approved HTTPS clone/archive route and credential field slugs, one repository slug and one tag. Do service names always equal repository slugs? If not, provide explicit mappings.
+Implemented: discover the HTTPS clone link from Bitbucket repository metadata and use the configured token. Confirm repository mappings and one working selected revision in sandbox.
 - Should selectable refs be tags only, or also branches/commits? We will refresh the selected ref for each new deployment preparation, record its resolved commit, and execute that pinned snapshot. A moved tag requires a new preparation rather than changing an already reviewed run.
 - Provide explicit dev/perf kube-context, execution identity, service chart paths, namespace/release mappings and readiness criteria.
 - How are private chart dependencies/submodules fetched? Supply approved credentials/references if needed.

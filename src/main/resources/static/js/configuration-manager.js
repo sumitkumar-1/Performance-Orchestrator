@@ -147,6 +147,7 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, onC
         const repository = bind("Bitbucket repository slug", "repository", {}, value.sourceProject);
         const revision = bind("Git tag, branch or commit", "revision", {}, value.sourceProject);
         const chart = bind("Helm chart path within repository", "chartPath", {}, value.sourceProject);
+        bind("HTTPS clone URL override (optional; discovered from Bitbucket by default)", "cloneUrl", {}, value.sourceProject);
         const toggle = () => {
           for (const [connection, fields] of [[imageConnection, [stage, team, image]], [gitConnection, [project, repository, revision, chart]]])
             fields.forEach(node => { node.parentElement.hidden = !connection.value; node.required = !!connection.value; });

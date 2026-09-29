@@ -22,7 +22,7 @@ public class Reports {
     return Json.write(
         Map.of(
             "simulated",
-            true,
+            plan.simulated(),
             "run",
             run,
             "plan",
@@ -32,7 +32,7 @@ public class Reports {
             "metricUnits",
             Map.of(
                 "latency_p95_ms",
-                "milliseconds (synthetic aggregate p95)",
+                plan.simulated() ? "milliseconds (synthetic aggregate p95)" : "milliseconds (configured query must return these units)",
                 "error_rate",
                 "failed requests / measured requests",
                 "throughput_rps",
@@ -40,14 +40,15 @@ public class Reports {
                 "request_count",
                 "requests"),
             "provenance",
-            "Deterministic simulation fixtures; no actual requests or resource telemetry",
+            plan.simulated() ? "Deterministic simulation fixtures; no actual requests or resource telemetry" : "Real Helm execution and configured LogQL queries; missing measurements remain unavailable",
             "cleanupPolicy",
-            "KEEP services; stop owned simulated load"));
+            plan.simulated() ? "KEEP services; stop owned simulated load" : "KEEP services; uninstall owned load-generator release"));
   }
 
   public String html(String id) {
     var run = store.run(id);
     var plan = store.plan(run.planId());
+    if (!plan.simulated()) return "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Real performance report</title><body><h1>Real performance report</h1><p>Missing measurements are unavailable, never synthetic.</p><pre>" + escape(summary(id)) + "</pre></body></html>";
     StringBuilder html =
         new StringBuilder(
             "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\""

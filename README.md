@@ -2,7 +2,7 @@
 
 A Java application for preparing service deployments, configuring performance tests, and reviewing run history and reports. The browser UI provides deployment selection, plan previews, run controls, connection management, and runtime configuration editing.
 
-**Current operation:** deployment and load execution are simulated. Configured Artifactory discovery, Bitbucket branch/tag discovery and Delinea secret retrieval make real read-only requests. Live CKP service deployment, load-generator control, metrics querying and shared-user authentication are not implemented yet.
+**Current operation:** simulation is available by default. Real mode supports connection diagnostics and opt-in Helm deployment, timed load execution, owned-load cleanup and configured LogQL measurements. Organization chart compatibility and sandbox verification are required; shared-user authentication is not implemented.
 
 ## Requirements
 
@@ -48,12 +48,12 @@ java -jar target/perf-orchestrator-0.1.0.jar --orchestrator.mode=real
 | Capability | Simulation (default) | Real |
 | --- | --- | --- |
 | Demo services, builds and starter profile | Loaded from mocks | Not loaded |
-| Deployment and performance test workflow | Simulated | Unavailable until real adapters are integrated |
+| Deployment and performance test workflow | Simulated | Opt-in real Helm execution; organization chart/query configuration required |
 | Delinea sign-in and secret retrieval | Available for testing connections | Live configured connections |
 | Artifactory discovery and digest resolution | Available separately in Settings | Live configured connections |
 | Synthetic measurements | Yes, labeled simulated | Never generated |
 
-Real mode is currently a **read-only integration workspace**, not a completed real deployment engine. It contains no simulation adapter beans, does not run the mock worker, and rejects planning/run submission with `REAL_EXECUTION_UNAVAILABLE`. Open Connections & catalog to configure real sources, sign in and browse images. Mock workflow screens are hidden. Neither mode enables shared network access.
+Real mode supports read-only diagnostics and opt-in Helm execution through its own preparation/run APIs. Configure `orchestrator.execution` before running. It uses sparse CKP checkouts, pinned commits/images, service Helm readiness, a separately owned load release, optional LogQL results and explicit cleanup. The simulation planning API remains unavailable in real mode. Follow the [real execution pilot guide](docs/integration/real-execution.md) for prerequisites, cluster binding, chart contracts and limitations.
 
 Simulation keeps its existing state in `data/`. Real mode defaults to its own database, runtime settings and artifacts under `data/real/` and loads the example real catalog and connections from application.yaml. Replace example settings in that file, Helm values, or Connections & catalog before contacting real services. Avoid overriding the datasource/configuration paths to share them between modes. Stored catalogs must match the startup mode. A restart is required to change mode; the runtime editor cannot switch it underneath active requests or runs.
 
@@ -66,7 +66,7 @@ For CKP, set `mode: simulation` or `mode: real` in your Helm values. Changing it
 - `docs/integration/examples/`: optional bootstrap examples, not packaged runtime configuration.
 - `src/main/resources/mocks/`: demonstration catalog, chart/values inputs and starter profile.
 
-Use **Connections & catalog** to edit environment monitoring, service destinations, Secret Servers, credential references, Artifactory/Bitbucket connections and service image/source mappings using forms. Connection and service entries can be added or deleted; referenced entries cannot be deleted until their references are updated. The real instance environment/cluster is fixed at startup. Simulator project additions and simulation-only fields remain in Advanced JSON. Scenario templates are read-only in the normal settings view; real profile creation from the overview is not implemented. Saves are validated and applied without restart. Conflicting edits are rejected; active runs retain their prepared inputs. Connection changes invalidate portal tokens and require a fresh sign-in.
+Use **Connections & catalog** to edit environment monitoring, service destinations, Secret Servers, credential references, Artifactory/Bitbucket connections and service image/source mappings using forms. Connection and service entries can be added or deleted; referenced entries cannot be deleted until their references are updated. The real instance environment/cluster is fixed at startup. Simulator project additions and simulation-only fields remain in Advanced JSON. Scenario templates are read-only in the normal settings view; real execution profiles are saved from Configure a run. Saves are validated and applied without restart. Conflicting edits are rejected; active runs retain their prepared inputs. Connection changes invalidate portal tokens and require a fresh sign-in.
 
 Field-level overrides in `data/configuration.json` (or `data/real/configuration.json` in real mode) are applied over packaged or externally supplied defaults on restart. Untouched fields receive new defaults. Changes to resource files alone are not watched. Port, database, worker scheduling and application mode remain startup settings.
 
@@ -125,7 +125,7 @@ All editable sections have a startup configuration location:
 | Artifactory, Bitbucket, Secret Server, credentials, legacy image sources | `orchestrator.connection-defaults` | `connections` |
 | Environments, services, mock image sources, scenarios | `orchestrator.catalog-defaults` | `catalog` |
 
-Real defaults cover sandbox, dev, qa, stable, perf and perf3. Each instance exposes only its startup-selected environment. Service namespace/release/values defaults are shared, with optional per-environment exceptions. Monitoring URLs and secret IDs are illustrative and must be replaced with organization-approved values. Real mode no longer requires simulation limits or allowedActions. Simulation still loads its packaged mock catalog. An explicit `orchestrator.catalog` or `orchestrator.connections` file takes precedence over the corresponding inline defaults. Real service entries validate metadata, namespace references, dependencies and relative paths without requiring a local checkout. Simulation still validates project files and installation bindings. Remote Git retrieval and real execution remain unavailable.
+Real defaults cover sandbox, dev, qa, stable, perf and perf3. Each instance exposes only its startup-selected environment. Service namespace/release/values defaults are shared, with optional per-environment exceptions. Monitoring URLs and secret IDs are illustrative and must be replaced with organization-approved values. Real mode no longer requires simulation limits or allowedActions. Simulation still loads its packaged mock catalog. An explicit `orchestrator.catalog` or `orchestrator.connections` file takes precedence over the corresponding inline defaults. Real service entries validate metadata, namespace references, dependencies and relative paths without requiring a local checkout. Simulation still validates project files and installation bindings. Remote Git retrieval and real execution require the opt-in execution settings described below.
 
 For local overrides without rebuilding, create an ignored `.local/application.yaml` with only the properties you want to change:
 
@@ -240,7 +240,7 @@ The [OpenAPI document](src/main/resources/static/openapi.json) is served at `/op
 
 `./scripts/run-local.sh build` runs the test suite. Tests cover configuration persistence/validation, secret authentication, registry contracts, planning, orchestration, concurrency and restart recovery. Remote systems are mocked in tests.
 
-For an office laptop without Codex, start with the [step-by-step real integration runbook](docs/integration/office-laptop-runbook.md), [minimal pilot configuration](docs/integration/examples/office-pilot-connections.yaml), and [sanitized support report template](docs/integration/support-report-template.md). The runbook separates the available read-only pilot from the adapters still needed for real E2E execution.
+For an office laptop without Codex, start with the [step-by-step real integration runbook](docs/integration/office-laptop-runbook.md), [minimal pilot configuration](docs/integration/examples/office-pilot-connections.yaml), and [sanitized support report template](docs/integration/support-report-template.md). Use that runbook for connection setup, then follow the real execution guide below for the Helm pilot.
 
 For pending organizational contracts, use the [integration questionnaire](docs/integration/organization-questionnaire.md) and [monitoring contract](docs/integration/monitoring-contract.md). Local implementation notes are in ignored `TASK.md`.
 
@@ -257,7 +257,7 @@ This is integration authentication, not shared-user authorization for publicly h
 
 Deploy with `values-sandbox.yaml`, `values-dev.yaml`, `values-qa.yaml`, `values-stable.yaml`, `values-perf.yaml` or `values-perf3.yaml`. Their `targetEnvironment` setting is passed as `--orchestrator.target-environment` and cannot be changed by dashboard edits/imports. Locally, real mode defaults to sandbox; pass `--orchestrator.target-environment=perf3` to test another startup binding. Only the chosen environment appears in the effective catalog and export. Imports must match its environment ID and cluster identity.
 
-All environment defaults remain in source control. `deploymentDefaults` holds each service's shared namespace, release and values files. `deploymentByEnvironment` is only for exceptions. Load-profile YAML remains authoritative; the sample scenario is metadata until load-generator integration is implemented. Environment monitoring references a shared `connections.loki` entry. Each service owns its namespace and `monitoringCredentials` map (environment → credential reference), used for both logs and LogQL metrics. Live querying is still pending. Repository checkout, Helm execution and service-account RBAC are also pending and have not been enabled by these configuration changes.
+All environment defaults remain in source control. `deploymentDefaults` holds each service's shared namespace, release and values files. `deploymentByEnvironment` is only for exceptions. Load-profile YAML remains authoritative; the sample scenario is metadata, while real run profiles select repository YAML and optional overrides. Environment monitoring references a shared `connections.loki` entry. Each service owns its namespace and `monitoringCredentials` map (environment → credential reference), used for both logs and LogQL metrics. Real runs can collect configured LogQL measurements at the end of the measurement window. Repository checkout and Helm execution are opt-in; service-account RBAC must be supplied by your CKP administrators.
 
 Example secret IDs/URLs are placeholders, not live organization credentials. Dashboard changes remain instance-local. Existing snapshots created for another environment/cluster must be reviewed and adapted before importing; the application refuses to switch its target to accommodate an import.
 
@@ -267,7 +267,7 @@ Example secret IDs/URLs are placeholders, not live organization credentials. Das
 - **Credential references**: map a secret ID and username/password field slugs to that vault. Services select one reference per environment for both logs and LogQL metrics.
 - **Artifactory connections**: `office` is the example registry server and its credential reference.
 - **Services → Container image**: select `office`, repository stage `dev` or `stable`, team ID and image name. The tags request is `{apiBaseUrl}/docker-{repoStage}/v2/{teamId}/{imageName}/tags/list`. Existing `office-dev` image-source mappings remain supported as legacy configuration.
-- **Bitbucket connections**: `office-stash` is the example Stash REST API connection. Services specify project key, repository slug, Git revision and Helm chart path. In **Connection diagnostics**, select the service and choose **Git branches** or **Git tags**. Checkout and Helm execution are not implemented.
+- **Bitbucket connections**: `office-stash` is the example Stash REST API connection. Services specify project key, repository slug, Git revision and Helm chart path. In **Connection diagnostics**, select the service and choose **Git branches** or **Git tags**. Real preparation discovers the HTTPS clone URL through Bitbucket and checks out CKP files at the selected revision.
 - **Connection diagnostics** has one service selector and operation selector for container image versions, Git branches and Git tags. Image discovery also supports pagination and digest resolution. Overview links directly to this panel. Sign in from the Secret Servers section first when required.
 
 Real-mode environment exports omit simulator limits, allowed actions, dashboard URLs and legacy namespace lists. Service deployment destinations own namespaces; their monitoring credential references are keyed by environment. Old real-mode imports containing those simulator fields remain readable; the unused fields are discarded. Simulation keeps its existing controls.
@@ -287,3 +287,7 @@ Scenario templates are read-only cards with labeled properties and lists. Advanc
 ### Test configuration
 
 Spring tests explicitly load `src/test/resources/application-test.yaml` instead of runtime `application.yaml`. It contains fixed example fixtures, in-memory databases and temporary paths under `target/`; it is not packaged in the application JAR. Change office URLs, credentials references and authentication modes in the runtime YAML or Helm values without editing this test fixture. Run `mvn verify` (also run by `scripts/run-local.sh build-run`). Authentication integration tests cover supplied tokens and Secret Server token references independently of deployment defaults.
+
+## Real performance execution
+
+Use [the real execution guide](docs/integration/real-execution.md) to configure an explicit kube-context/API server, service repositories and load values. Overview provides profile preparation and a reviewed start action when execution is enabled. Each checkout contains only CKP working-tree files. No office deployment was performed during development; sandbox verification is still required.

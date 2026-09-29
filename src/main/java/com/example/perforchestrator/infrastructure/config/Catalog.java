@@ -57,7 +57,12 @@ public class Catalog {
   }
 
   public record ContainerImage(String connectionRef, String repoStage, String teamId, String imageName) {}
-  public record SourceProject(String connectionRef, String projectKey, String repository, String revision, String chartPath) {}
+  public record SourceProject(String connectionRef, String projectKey, String repository, String revision, String chartPath, String cloneUrl) {
+    public SourceProject(String connectionRef, String projectKey, String repository, String revision, String chartPath) {
+      this(connectionRef, projectKey, repository, revision, chartPath, null);
+    }
+    @org.springframework.boot.context.properties.bind.ConstructorBinding public SourceProject {}
+  }
 
   public record Service(
       String projectPath,

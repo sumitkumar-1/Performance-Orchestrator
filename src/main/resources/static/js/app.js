@@ -1,3 +1,4 @@
+import { realFlow } from "./real-flow.js";
 import { el, labeled, input, select } from "./dom.js";
 import { secretSignInPrompt } from "./secret-sign-in.js";
 import { operationAuthentication } from "./operation-auth.js";
@@ -612,9 +613,7 @@ async function runDetails(id, generation) {
               namespace: s.namespace,
             })),
           ),
-          button("Rerun original pinned plan", () =>
-            launch({ planId: plan.id }),
-          ),
+          plan.simulated ? button("Rerun original pinned plan", () => launch({ planId: plan.id })) : link("Prepare a new real run", "#configure", "button"),
           plan.profileId
             ? button("Run current saved profile", () =>
                 launch({ profileId: plan.profileId }),
@@ -668,7 +667,7 @@ async function runDetails(id, generation) {
         ),
       ),
     );
-    monitoring.textContent = `Synthetic data · updated ${time(run.updatedAt)}. CPU, memory and logs unavailable.`;
+    monitoring.textContent = plan.simulated ? `Synthetic data · updated ${time(run.updatedAt)}. CPU, memory and logs unavailable.` : `Real LogQL measurements · updated ${time(run.updatedAt)}. Missing measurements are unavailable, not zero.`;
     actions.replaceChildren();
     if (!terminal.has(run.state))
       actions.append(
@@ -690,7 +689,7 @@ async function runDetails(id, generation) {
       if (run.state === "NEEDS_ATTENTION")
         actions.append(
           button("Verify cleanup & release", async () => {
-            await api("/runs/" + id + "/recover", { method: "POST" });
+            await api((plan.simulated ? "/runs/" : "/real/runs/") + id + "/recover", { method: "POST" });
             await update();
           }),
         );
@@ -829,7 +828,7 @@ async function settings(section) {
   const authStates = await api("/secret-auth");
   app.append(heading("WORKSPACE SETTINGS", "Connections & catalog", "Manage connections and service settings. Changes apply when saved."),
     el("p", { class: "banner" }, session.mode === "real"
-      ? "Real mode · Vault authentication, image discovery and Bitbucket references are available. Helm execution and live monitoring are not connected yet."
+      ? "Real mode · Vault authentication, image discovery and Bitbucket references are available. Real execution requires startup cluster configuration; LogQL measurements require approved queries."
       : "Simulation mode · Deployments and results are synthetic. Registry diagnostics use configured real connections."),
     el("p", { class: "muted" }, startup.runtimeOverride
       ? "Startup defaults + saved dashboard changes. Export your configuration below to keep a backup."
@@ -857,15 +856,19 @@ async function settings(section) {
 
 }
 function realOverview() {
-  app.append(heading("REAL INTEGRATIONS", "Connect your services", "Real connections only. No demo services or synthetic test results are loaded."),
-    el("section", { class: "card" }, el("h2", {}, "Available now"),
-      el("p", {}, "Configure Artifactory, Bitbucket and Delinea authentication. Discover image versions, resolve digests, and browse service Git branches and tags."),
+  const enabled = session.capabilities.execution;
+  app.append(heading("REAL INTEGRATIONS", "Performance workspace", "Repository-backed Helm deployments and read-only service diagnostics."),
+    el("section", { class: "card" }, el("h2", {}, enabled ? "Run a real performance test" : "Real execution needs cluster configuration"),
+      el("p", {}, enabled
+        ? "Prepare service charts and a load profile from CKP directories, review pinned inputs, then deploy and run. Owned load is uninstalled at completion; services remain."
+        : "Configure orchestrator.execution.enabled, kube-context and expected-api-server, then restart. Git, Helm and kubectl must be installed on the application host."),
       el("div", { class: "card-actions" },
-        link("Browse service diagnostics", "#settings/diagnostics", "button primary"),
+        enabled ? link("Configure a real run", "#configure", "button primary") : null,
+        link("Browse service diagnostics", "#settings/diagnostics", "button"),
         link("Configure connections", "#settings", "button"))),
-    el("section", { class: "card spacer" }, el("h2", {}, "Execution is not connected yet"),
-      el("p", {}, "Repository checkout, Helm deployment, load-generator control and live monitoring are not implemented yet. Successful connection checks enable read-only discovery; they do not enable planning or running a real performance test."),
-      el("p", { class: "muted" }, "Restart with --mode simulation to try the complete mock workflow. Mode changes require a restart; runtime settings cannot switch execution mode.")));
+    el("section", { class: "card spacer" }, el("h2", {}, "Measurement requirements"),
+      el("p", {}, "Load rates and destinations come from selected chart values. Supply organization-approved LogQL queries to measure actual traffic. Without measurements and thresholds, the performance verdict is inconclusive."),
+      link("View run history", "#history", "button")));
 }
 
 async function route() {
@@ -884,7 +887,18 @@ async function route() {
     await loadCatalog();
     if (generation !== routeGeneration) return;
     app.replaceChildren();
-    if (session.mode === "real" && !["settings", "history"].includes(page)) realOverview();
+    if (session.mode === "real" && page === "configure") {
+      app.append(heading("REAL EXECUTION", "Configure a performance run", "Prepare and review the deployment before starting."));
+      app.append(await realFlow(api, { services: catalog.services, environment: session.targetEnvironment }, hash => { location.hash = hash; }));
+    }
+    else if (session.mode === "real" && page === "plan") {
+      const prepared = await api("/plans/" + id);
+      app.append(heading("PREPARED REAL PLAN", prepared.profile.name, prepared.clusterIdentity),
+        el("ul", {}, prepared.warnings.map(warning => el("li", {}, warning))),
+        el("pre", {}, pretty(prepared.services.map(s => ({ service: s.serviceId, namespace: s.namespace, release: s.releaseName, commit: s.sourceRevision, image: s.image, effectiveValues: s.effectiveValues })))),
+        link("Prepare another run", "#configure", "button"));
+    }
+    else if (session.mode === "real" && !["settings", "history", "run"].includes(page)) realOverview();
     else if (page === "configure") await configure(id);
     else if (page === "plan") await planScreen(id);
     else if (page === "history") await history();
@@ -901,8 +915,8 @@ vaultPrompt = secretSignInPrompt(api, async state => {
   toast(`Vault token stored until ${time(state.expiresAt)}; access is verified when a secret is requested.`);
   await route();
 }, session.mode === "real");
-$("#mode-badge").textContent = session.mode === "real" ? "REAL · READ-ONLY" : "SIMULATION";
+$("#mode-badge").textContent = session.mode === "real" ? (session.capabilities.execution ? "REAL · EXECUTION" : "REAL · READ-ONLY") : "SIMULATION";
 $("#workspace-mode").textContent = session.mode === "real" ? `Environment: ${session.targetEnvironment || "unbound"} · Real integrations` : "Simulation mode · synthetic deployments and results";
-if (session.mode === "real") document.querySelector('nav a[href="#configure"]').hidden = true;
+if (session.mode === "real") document.querySelector('nav a[href="#configure"]').hidden = !session.capabilities.execution;
 window.addEventListener("hashchange", route);
 await route();
