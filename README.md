@@ -283,3 +283,7 @@ Artifactory/Bitbucket session tokens are encrypted in server memory and cleared 
 Settings now separates **Loki connections** from **Environment** and **Services**. Configure a URL once, select it from each environment, and assign monitoring credentials under the service. The namespace comes from that service's deployment destination. Defaults group sandbox/dev/qa under `lower`, and perf/perf3/stable under `higher`; update these example groups/URLs as needed. Both logs and log-derived metrics use LogQL. See the [monitoring configuration and query examples](docs/integration/monitoring-contract.md).
 
 Scenario templates are read-only cards with labeled properties and lists. Advanced JSON import/export is still available for full configuration backups and bulk edits.
+
+### Test configuration
+
+Spring tests explicitly load `src/test/resources/application-test.yaml` instead of runtime `application.yaml`. It contains fixed example fixtures, in-memory databases and temporary paths under `target/`; it is not packaged in the application JAR. Change office URLs, credentials references and authentication modes in the runtime YAML or Helm values without editing this test fixture. Run `mvn verify` (also run by `scripts/run-local.sh build-run`). Authentication integration tests cover supplied tokens and Secret Server token references independently of deployment defaults.

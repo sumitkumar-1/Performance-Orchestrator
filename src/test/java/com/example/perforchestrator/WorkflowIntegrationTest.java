@@ -25,6 +25,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 @SpringBootTest(
     properties = {
+      "spring.config.location=classpath:application-test.yaml",
       "spring.datasource.url=jdbc:h2:mem:workflow;DB_CLOSE_DELAY=-1",
       "orchestrator.worker-enabled=false",
       "orchestrator.configuration-file=target/test-runtime/workflow-${random.uuid}.json",

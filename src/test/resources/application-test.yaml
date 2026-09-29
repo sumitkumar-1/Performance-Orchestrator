@@ -1,0 +1,189 @@
+# Test-only configuration, loaded instead of application.yaml.
+# Fixed non-production fixtures; no credentials or office settings belong here.
+# This file is not packaged in the application JAR.
+server:
+  address: 127.0.0.1
+  port: 8080
+  servlet:
+    session:
+      persistent: false # Integration credentials and vault tokens stay in memory
+      timeout: 30m # Idle browser sessions destroy retained credentials
+  error:
+    include-message: never
+spring:
+  profiles:
+    active: ${orchestrator.mode:simulation}
+  datasource:
+    url: jdbc:h2:mem:test-simulation;DB_CLOSE_DELAY=-1
+    username: sa
+    password: '' # Embedded H2 pilot default; no database secret provisioning yet
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+      fail-on-null-for-primitives: true
+  servlet:
+    multipart:
+      enabled: false
+orchestrator:
+  mode: simulation
+  target-environment: sandbox # Real-mode instance binding; fixed until restart
+  catalog: classpath:mocks/catalog.yaml
+  connections: '' # External bootstrap file overrides connection-defaults below
+  # Real catalog sections; supply organization mappings here or via external Spring YAML.
+  # Simulation uses the separate mock catalog selected above.
+  catalog-defaults:
+    # EXAMPLES: replace cluster identities, namespaces and paths before use.
+    environments:
+      sandbox:
+        displayName: sandbox (example - configure before use)
+        clusterIdentity: ckp-sandbox-region.domain
+        monitoring:
+          connectionRef: lower
+      dev:
+        displayName: dev (example - configure before use)
+        clusterIdentity: ckp-dev-region.domain
+        monitoring:
+          connectionRef: lower
+      qa:
+        displayName: qa (example - configure before use)
+        clusterIdentity: ckp-qa-region.domain
+        monitoring:
+          connectionRef: lower
+      stable:
+        displayName: stable (example - configure before use)
+        clusterIdentity: ckp-stable-region.domain
+        monitoring:
+          connectionRef: higher
+      perf:
+        displayName: perf (example - configure before use)
+        clusterIdentity: ckp-perf-region.domain
+        monitoring:
+          connectionRef: higher
+      perf3:
+        displayName: perf3 (example - configure before use)
+        clusterIdentity: ckp-perf3-region.domain
+        monitoring:
+          connectionRef: higher
+    services:
+      ps-spoolers-ps-load-gen:
+        projectPath: projects/ps-spoolers-ps-load-gen
+        monitoringCredentials:
+          sandbox: sandbox-logs
+          dev: dev-logs
+          qa: qa-logs
+          stable: stable-logs
+          perf: perf-logs
+          perf3: perf3-logs
+        containerImage:
+          connectionRef: office
+          repoStage: dev # Produces docker-dev; independent of deployment environment
+          teamId: ps-spoolers
+          imageName: ps-spoolers-ps-load-gen
+        sourceProject:
+          connectionRef: office-stash
+          projectKey: SP
+          repository: ps-spoolers-ps-load-gen
+          revision: REPLACE_WITH_APPROVED_GIT_TAG
+          chartPath: ckp/helm/ps-spoolers-ps-load-gen
+        dependencies: []
+        deploymentDefaults:
+          namespace: ps-spoolers-smtp-data-producer
+          releaseName: ps-spoolers-load-gen
+          valuesFiles: [ckp/helm/ps-spoolers-ps-load-gen/values.yaml]
+        # Optional per-environment exceptions; otherwise deploymentDefaults apply.
+        deploymentByEnvironment: {}
+        # installationBindings omitted: real chart retrieval is not implemented yet
+        allowedOverridePaths: [] # Confirm editable chart fields before allowing overrides
+    imageSources: {} # Simulation-only versions; mocks supply these in simulation mode
+    scenarios:
+      baseline-example:
+        displayName: Baseline (example - configure before use)
+        revision: example-1
+        allowedOverridePaths: []
+        defaults:
+          profilePath: ckp/helm/ps-spoolers-ps-load-gen/values.yaml
+          note: Replace with approved load-profile fields; this is not an executable profile
+  # Sanitized organization patterns, not verified destinations. No automatic requests.
+  connection-defaults:
+    loki:
+      lower:
+        apiBaseUrl: https://logs.dev.example.invalid/loki/api/v1 # EXAMPLE shared lower environments
+      higher:
+        apiBaseUrl: https://logs.perf.example.invalid/loki/api/v1 # EXAMPLE shared higher environments
+    artifactory:
+      office:
+        apiBaseUrl: https://artifactory.example.invalid/artifactory/api/docker
+        authMode: token # Paste an access token in the connection session
+    bitbucket:
+      office-stash:
+        apiBaseUrl: https://stash.example.invalid/rest/api
+        authMode: token
+    secretServers:
+      office-vault:
+        apiBaseUrl: https://vault.example.invalid/SecretServer/api/v1
+        authMode: token
+    credentials:
+      bitbucket-reader:
+        provider: delinea
+        secretServerRef: office-vault
+        secretId: '12346' # EXAMPLE: replace with the approved Bitbucket secret ID
+        tokenFieldSlug: token
+      registry-reader:
+        provider: delinea
+        secretServerRef: office-vault
+        secretId: '12345' # EXAMPLE ONLY: replace with the approved registry secret ID
+        tokenFieldSlug: token
+      sandbox-logs:
+        provider: delinea
+        secretServerRef: office-vault
+        secretId: '20000' # EXAMPLE ONLY: replace for sandbox logs
+        usernameFieldSlug: username
+        passwordFieldSlug: password
+      dev-logs:
+        provider: delinea
+        secretServerRef: office-vault
+        secretId: '20002' # EXAMPLE ONLY: replace for dev logs
+        usernameFieldSlug: username
+        passwordFieldSlug: password
+      qa-logs:
+        provider: delinea
+        secretServerRef: office-vault
+        secretId: '20004' # EXAMPLE ONLY: replace for qa logs
+        usernameFieldSlug: username
+        passwordFieldSlug: password
+      stable-logs:
+        provider: delinea
+        secretServerRef: office-vault
+        secretId: '20006' # EXAMPLE ONLY: replace for stable logs
+        usernameFieldSlug: username
+        passwordFieldSlug: password
+      perf-logs:
+        provider: delinea
+        secretServerRef: office-vault
+        secretId: '20008' # EXAMPLE ONLY: replace for perf logs
+        usernameFieldSlug: username
+        passwordFieldSlug: password
+      perf3-logs:
+        provider: delinea
+        secretServerRef: office-vault
+        secretId: '20010' # EXAMPLE ONLY: replace for perf3 logs
+        usernameFieldSlug: username
+        passwordFieldSlug: password
+    imageSources: {} # Legacy mappings remain importable; new mappings belong to services
+  configuration-file: target/test-config/simulation-${random.uuid}.json
+  artifact-root: target/test-artifacts/simulation
+  tick-ms: 1200
+  worker-enabled: false
+
+---
+spring:
+  config:
+    activate:
+      on-profile: real
+  datasource:
+    url: jdbc:h2:mem:test-real;DB_CLOSE_DELAY=-1
+orchestrator:
+  catalog: '' # Use inline real catalog examples; no simulation fixtures
+  configuration-file: target/test-config/real-${random.uuid}.json
+  artifact-root: target/test-artifacts/real
+  worker-enabled: false

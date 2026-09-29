@@ -20,7 +20,7 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(ConnectionSessionController.class)
+@WebMvcTest(controllers = ConnectionSessionController.class, properties = "spring.config.location=classpath:application-test.yaml")
 @Import({LocalSecurity.class, com.example.perforchestrator.infrastructure.config.ConfigurationAccess.class, ConnectionSessionApiTest.Config.class})
 class ConnectionSessionApiTest {
   @Autowired MockMvc mvc;

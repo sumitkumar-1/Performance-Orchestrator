@@ -18,7 +18,7 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(SecretAuthenticationController.class)
+@WebMvcTest(controllers = SecretAuthenticationController.class, properties = "spring.config.location=classpath:application-test.yaml")
 @Import({
   LocalSecurity.class,
   com.example.perforchestrator.infrastructure.config.ConfigurationAccess.class

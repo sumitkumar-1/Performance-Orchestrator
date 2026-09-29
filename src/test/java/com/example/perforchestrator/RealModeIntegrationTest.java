@@ -14,6 +14,8 @@ import com.example.perforchestrator.infrastructure.secrets.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -23,6 +25,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(
     properties = {
+      "spring.config.location=classpath:application-test.yaml",
       "orchestrator.mode=real",
       "spring.datasource.url=jdbc:h2:mem:real-mode;DB_CLOSE_DELAY=-1",
       "orchestrator.configuration-file=target/test-real-mode/${random.uuid}.json",
@@ -126,20 +129,57 @@ class RealModeIntegrationTest {
     assertThat(configuration.current()).isEqualTo(original);
   }
 
-  @Test
-  void bitbucketReferenceQueryUsesConfiguredCredentialsAndRequiresCsrf() throws Exception {
-    String endpoint = "/api/v1/service-projects/ps-spoolers-ps-load-gen/references/query";
-    mvc.perform(post(endpoint).header("Host", "localhost").contentType("application/json")
-        .content("{\"kind\":\"tags\",\"start\":0,\"authentication\":{\"token\":\"bitbucket-token\"}}"))
-        .andExpect(status().isForbidden());
-    when(credentials.resolve("bitbucket-reader")).thenReturn(new CredentialResolver.Secret("reader", "private-password"));
-    when(http.get(any(), any(), any())).thenReturn(new ReadOnlyHttp.Response(200, Map.of(),
-        "{\"values\":[{\"id\":\"refs/tags/v1\",\"displayId\":\"v1\"}],\"isLastPage\":true}".getBytes(StandardCharsets.UTF_8)));
-    mvc.perform(post(endpoint).header("Host", "localhost").with(csrf()).contentType("application/json")
-        .content("{\"kind\":\"tags\",\"start\":0,\"authentication\":{\"token\":\"bitbucket-token\"}}"))
-        .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
-        .andExpect(jsonPath("$.values[0].displayName").value("v1"))
-        .andExpect(jsonPath("$.authentication").doesNotExist());
+  @ParameterizedTest
+  @ValueSource(strings = {"token", "secret-server"})
+  void bitbucketReferenceQueryUsesConfiguredCredentialsAndRequiresCsrf(String mode) throws Exception {
+    var original = configuration.current();
+    // Set the authentication contract explicitly: editable application defaults are not test fixtures.
+    com.fasterxml.jackson.databind.node.ObjectNode connections = Json.MAPPER.valueToTree(original.connections());
+    ((com.fasterxml.jackson.databind.node.ObjectNode) connections.get("bitbucket"))
+        .set("test-stash", Json.MAPPER.valueToTree(new ConnectionConfig.Bitbucket(
+            "https://stash.test.invalid/rest/api", mode.equals("secret-server") ? "test-stash-token" : null, mode)));
+    ((com.fasterxml.jackson.databind.node.ObjectNode) connections.get("credentials"))
+        .set("test-stash-token", Json.MAPPER.valueToTree(new ConnectionConfig.Credential(
+            "environment", null, null, null, null, null, null, null, "TEST_STASH_TOKEN")));
+    com.fasterxml.jackson.databind.node.ObjectNode catalogData = Json.MAPPER.valueToTree(original.catalog());
+    ((com.fasterxml.jackson.databind.node.ObjectNode) catalogData.path("services").path("ps-spoolers-ps-load-gen"))
+        .set("sourceProject", Json.MAPPER.valueToTree(new Catalog.SourceProject(
+            "test-stash", "TEST", "load-generator", "v1", "ckp/helm/load-generator")));
+    try {
+      configuration.update(new RuntimeConfiguration.Document(original.revision(),
+          Json.read(Json.write(catalogData), Catalog.Data.class),
+          Json.read(Json.write(connections), ConnectionConfig.Data.class)));
+      String endpoint = "/api/v1/service-projects/ps-spoolers-ps-load-gen/references/query";
+      String body = mode.equals("token")
+          ? "{\"kind\":\"tags\",\"start\":0,\"authentication\":{\"token\":\"bitbucket-token\"}}"
+          : "{\"kind\":\"tags\",\"start\":0}";
+      mvc.perform(post(endpoint).header("Host", "localhost").contentType("application/json").content(body))
+          .andExpect(status().isForbidden());
+      verifyNoInteractions(http, credentials);
+      when(credentials.resolve("test-stash-token"))
+          .thenReturn(new CredentialResolver.Secret(null, "bitbucket-token", true));
+      when(http.get(any(), any(), any())).thenReturn(new ReadOnlyHttp.Response(200, Map.of(),
+          "{\"values\":[{\"id\":\"refs/tags/v1\",\"displayId\":\"v1\"}],\"isLastPage\":true}".getBytes(StandardCharsets.UTF_8)));
+      mvc.perform(post(endpoint).header("Host", "localhost").with(csrf()).contentType("application/json").content(body))
+          .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
+          .andExpect(jsonPath("$.values[0].displayName").value("v1"))
+          .andExpect(jsonPath("$.authentication").doesNotExist());
+      verify(http).get(java.net.URI.create(
+          "https://stash.test.invalid/rest/api/1.0/projects/TEST/repos/load-generator/tags?limit=50&start=0"),
+          "Bearer bitbucket-token", "application/json");
+      if (mode.equals("secret-server")) {
+        verify(credentials).resolve("test-stash-token");
+        mvc.perform(post(endpoint).header("Host", "localhost").with(csrf()).contentType("application/json")
+            .content("{\"kind\":\"tags\",\"start\":0,\"authentication\":{\"token\":\"unexpected-token\"}}"))
+            .andExpect(status().isUnprocessableEntity());
+        verifyNoMoreInteractions(http, credentials);
+      } else {
+        verifyNoInteractions(credentials);
+      }
+    } finally {
+      configuration.update(new RuntimeConfiguration.Document(
+          configuration.current().revision(), original.catalog(), original.connections()));
+    }
   }
 
   @Test

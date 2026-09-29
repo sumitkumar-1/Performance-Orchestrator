@@ -12,7 +12,7 @@ class DeploymentConfigurationTest {
     for (String target : new String[] {"sandbox", "dev", "qa", "stable", "perf", "perf3"}) {
       new ApplicationContextRunner()
           .withInitializer(new ConfigDataApplicationContextInitializer())
-          .withPropertyValues("orchestrator.mode=real", "orchestrator.target-environment=" + target)
+          .withPropertyValues("spring.config.location=classpath:application-test.yaml", "orchestrator.mode=real", "orchestrator.target-environment=" + target)
           .run(context -> {
             var environment = context.getEnvironment();
             var catalog = new com.example.perforchestrator.infrastructure.config.Catalog(
@@ -37,11 +37,11 @@ class DeploymentConfigurationTest {
   }
 
   @Test
-  void sharedConfigurationKeepsModeSpecificStateWithoutRequiringDatabaseSecrets() {
+  void testConfigurationUsesIsolatedInMemoryDatabasesWithoutRequiringSecrets() {
     for (String mode : new String[] {"simulation", "real"}) {
       new ApplicationContextRunner()
           .withInitializer(new ConfigDataApplicationContextInitializer())
-          .withPropertyValues("orchestrator.mode=" + mode)
+          .withPropertyValues("spring.config.location=classpath:application-test.yaml", "orchestrator.mode=" + mode)
           .run(context -> {
             assertThat(context).hasNotFailed();
             var environment = context.getEnvironment();
@@ -49,9 +49,7 @@ class DeploymentConfigurationTest {
             assertThat(environment.getProperty("spring.datasource.password")).isEmpty();
             assertThat(environment.getProperty("spring.config.import")).isNull();
             assertThat(environment.getProperty("spring.datasource.url"))
-                .isEqualTo("jdbc:h2:file:./data/"
-                    + (mode.equals("real") ? "real/" : "")
-                    + "orchestrator;DB_CLOSE_ON_EXIT=FALSE");
+                .isEqualTo("jdbc:h2:mem:test-" + mode + ";DB_CLOSE_DELAY=-1");
           });
     }
   }
