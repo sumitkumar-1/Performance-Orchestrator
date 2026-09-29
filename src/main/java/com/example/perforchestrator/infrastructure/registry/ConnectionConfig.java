@@ -23,6 +23,9 @@ public class ConnectionConfig {
       String authMode,
       String tokenUrl,
       String bearerTokenFile) {
+    @org.springframework.boot.context.properties.bind.ConstructorBinding
+    public SecretServer {}
+
     public SecretServer(String apiBaseUrl, String bearerTokenEnvironmentVariable) {
       this(apiBaseUrl, bearerTokenEnvironmentVariable, "environment", null, null);
     }
@@ -71,12 +74,34 @@ public class ConnectionConfig {
   private volatile Snapshot snapshot;
 
   @org.springframework.beans.factory.annotation.Autowired
-  public ConnectionConfig(@Value("${orchestrator.connections:}") String file) throws IOException {
+  public ConnectionConfig(
+      @Value("${orchestrator.connections:}") String file,
+      org.springframework.core.env.Environment environment) throws IOException {
+    this(file.isBlank()
+        ? defaults(environment)
+        : readFile(file));
+  }
+
+  public ConnectionConfig(String file) throws IOException {
     this(
         file.isBlank()
             ? new Data(Map.of(), Map.of(), Map.of(), Map.of())
-            : Json.read(
-                Json.write(YamlValues.parse(ConfigurationResources.read(file))), Data.class));
+            : readFile(file));
+  }
+
+  private static Data defaults(org.springframework.core.env.Environment environment) {
+    var data = org.springframework.boot.context.properties.bind.Binder.get(environment)
+        .bind("orchestrator.connection-defaults", Data.class)
+        .orElseGet(() -> new Data(Map.of(), Map.of(), Map.of(), Map.of()));
+    // Spring omits empty YAML maps; external JSON/YAML still requires all four maps.
+    return new Data(data.artifactory() == null ? Map.of() : data.artifactory(),
+        data.secretServers() == null ? Map.of() : data.secretServers(),
+        data.credentials() == null ? Map.of() : data.credentials(),
+        data.imageSources() == null ? Map.of() : data.imageSources());
+  }
+
+  private static Data readFile(String file) throws IOException {
+    return Json.read(Json.write(YamlValues.parse(ConfigurationResources.read(file))), Data.class);
   }
 
   public ConnectionConfig(Data data) {

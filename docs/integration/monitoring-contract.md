@@ -1,6 +1,18 @@
 # Monitoring and secret provisioning contract
 
-Updated 2026-09-17 from user-supplied examples. This document records the intended monitoring configuration, not an executable telemetry adapter. No organization endpoints have been contacted.
+Updated 2026-09-28 from user-supplied examples. This document records the intended monitoring configuration, not an executable telemetry adapter. No organization endpoints have been contacted.
+
+## Standard query APIs and organization mapping
+
+The confirmed dev Loki base is `https://logs.dev-domain/loki/api/v1`; other environments select different configured URLs. Each namespace selects its own secret reference. Use a consistent internal template variable `clusterEnv`; the newly supplied `clustEnv` spelling must map to the same explicit environment value when importing templates.
+
+For Prometheus-compatible metrics, the standard routes are `GET /api/v1/query` for an instant evaluation and `GET /api/v1/query_range` with `query`, `start`, `end` and `step` for a time series. The base URL must come from the organization's datasource; it cannot be inferred by replacing `logs` with `metrics`. See the [Prometheus HTTP API](https://prometheus.io/docs/prometheus/latest/querying/api/).
+
+If access is through Grafana, its documented datasource proxy route is `/api/datasources/proxy/uid/:uid/*`. Confirm the installed Grafana version, datasource UID, proxy permissions and authentication before selecting that route. See the [Grafana datasource HTTP API](https://grafana.com/docs/grafana/latest/developer-resources/api-reference/http-api/api-legacy/data_source/).
+
+Loki range queries use `/loki/api/v1/query_range`. Loki also supports metric queries derived from logs using LogQL, but these are not arbitrary Prometheus metric queries. Counting matching log lines measures messages only if the logging contract guarantees the appropriate event/line relationship and completeness. See the [Loki HTTP API](https://grafana.com/docs/loki/latest/reference/loki-http-api/).
+
+Prefer actual generator and downstream counters for throughput where available; retain bounded logs for diagnosis. See the [deployment and load contract](deployment-load-contract.md) for generated-versus-processed signal semantics and the remaining Helm lifecycle details.
 
 ## Secret provisioning
 

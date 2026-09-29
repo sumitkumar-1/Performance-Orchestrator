@@ -79,7 +79,7 @@ class SecretAuthenticationApiTest {
 
   @Test
   void exampleConfigurationLoadsWithExplicitAuthenticationModes() throws Exception {
-    var config = new ConnectionConfig("src/main/resources/config/examples/connections.yaml");
+    var config = new ConnectionConfig("docs/integration/examples/connections.yaml");
     assertThat(config.data().secretServers().get("organization").mode()).isEqualTo("portal");
     assertThat(config.data().secretServers().get("provisioned").mode()).isEqualTo("file");
     assertThat(config.data().credentials().get("logs-service-b").secretId()).isEqualTo("12346");

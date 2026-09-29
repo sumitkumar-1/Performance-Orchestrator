@@ -67,11 +67,11 @@ Your `helm-dev/qa/stable/release-virtual` names need confirmation: chart reposit
 {apiBaseUrl}/{repositoryKey}/v2/{imagePath}/manifests/{tag}
 ```
 
-Compare those routes with your supplied `.../api/docker/${artifactoryImagePath}/tags/list`. Check exactly what the variable expands to, especially the repository and `/v2/` segment. If your server needs a different route or bearer-challenge authentication, report that contract; changing arbitrary configuration fields will not implement it.
+On 2026-09-28 you confirmed this repository + `/v2/` + image-path route and Basic authentication. Both match the current adapter. Supply the actual repository/image mappings and credential references for the pilot.
 
 ## 4. Create a minimal office configuration
 
-Copy [office-pilot-connections.yaml](../../src/main/resources/config/examples/office-pilot-connections.yaml) to `.local/connections.yaml`. Create `.local/` first. Replace every placeholder using the previous checklist, including `secretId`, field slugs and the pull hostname. Keep all four top-level maps.
+Copy [office-pilot-connections.yaml](examples/office-pilot-connections.yaml) to `.local/connections.yaml`. Create `.local/` first. Replace every placeholder using the previous checklist, including `secretId`, field slugs and the pull hostname. Keep all four top-level maps.
 
 The relationship is:
 
@@ -151,6 +151,8 @@ After an application update, stop the old process, back up office state, replace
 Current outbound limits are 5 seconds to connect, 15 seconds for the total response and 2 MiB per response; no automatic retries. Avoid retrying a rejected login repeatedly: consult the vault owner about account policy. Never enable broad HTTP wire logging to collect credentials. Use the browser UI for authenticated requests; manual API mutations additionally need the session cookie and CSRF header.
 
 ## 9. Prepare the next implementation batch
+
+The [deployment and load contract](deployment-load-contract.md) now records your Helm command and repository-backed YAML profile workflow. Use it alongside the remaining details below.
 
 After the read-only checkpoint, collect one representative service's complete contract. Keep sanitized examples in one report so the next code update can include contract tests before you transfer it.
 

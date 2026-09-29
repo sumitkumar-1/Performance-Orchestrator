@@ -32,7 +32,7 @@ Resolve/fetch those files while creating the immutable plan, then deploy that ex
 
 ## Artifactory and Delinea: separate connections
 
-`src/main/resources/config/examples/connections.yaml` defines distinct URLs and independent authentication:
+`docs/integration/examples/connections.yaml` defines distinct URLs and independent authentication:
 
 1. The app accesses the configured **Delinea URL** using its own externally supplied bearer token (for example the environment reference `DELINEA_ACCESS_TOKEN`). This bootstrap credential must come from an approved source outside the secret it unlocks.
 2. A named credential reference identifies a Delinea secret ID and username/password field slugs.
@@ -50,7 +50,7 @@ The intended panel will query from the backend with bounded polling and the run'
 
 ## Resource layout and live updates
 
-The bundled mock catalog, starter profile, and project files live in `src/main/resources/mocks/`. Default real connection maps are empty in `src/main/resources/config/connections.yaml`; examples and schemas live alongside them. The resource reader supports classpath resources in packaged JARs and administrator-selected external files.
+The bundled mock catalog, starter profile, and project files live in `src/main/resources/mocks/`. The single `src/main/resources/application.yaml` contains startup defaults and its real-profile section. Real catalogs start empty. Connection defaults use sanitized organization URL patterns and an explicitly illustrative secret ID in application.yaml; no image sources are enabled by default. Optional bootstrap examples live under `docs/integration/examples/`; validation schemas remain under resources. The resource reader supports classpath resources in packaged JARs and administrator-selected external files.
 
 The Settings editor edits individual catalog or connection sections and submits one complete document with a revision to `/api/v1/configuration`. The backend validates cross-references, supported modes, required fields, dependency cycles, project paths, environment allowlists, limits and connection authentication before persisting or publishing. Invalid updates, write failures and stale revisions leave the prior configuration active. A request-wide read/write lock prevents an API operation from combining configuration revisions. File replacement is atomic; persisted overrides load before seeding a starter profile.
 

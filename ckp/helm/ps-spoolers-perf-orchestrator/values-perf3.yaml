@@ -1,0 +1,5 @@
+# Orchestrator installation in perf3; layer over values.yaml.
+# Supply image, connection mappings, Secret references and storage overrides here
+# or in an ignored values.local-perf3.yaml. No passwords or tokens.
+# This does not select a target environment for a performance run.
+mode: real

@@ -1,6 +1,6 @@
 # Organization connection details received
 
-Updated: 2026-09-17. These details were supplied by the user; they are not evidence of a successful live connection. Hostnames are sanitized patterns, not configured or tested destinations. The entries below are integration notes, not an executable configuration schema.
+Updated: 2026-09-28. These details were supplied by the user; they are not evidence of a successful live connection. Hostnames are sanitized patterns, not configured or tested destinations. The entries below are integration notes, not an executable configuration schema.
 
 ## Bitbucket / Stash
 
@@ -44,7 +44,7 @@ Preserve this notation until the exact repository keys and types are confirmed. 
 Supplied tag-list URL template:
 
 ```text
-https://artifactory.domain.net/artifactory/api/docker/${artifactoryImagePath}/tags/list
+https://artifactory.domain/artifactory/api/docker/${artifactoryRepo}/v2/{imagePath}/tags/list
 ```
 
 The current adapter constructs:
@@ -53,14 +53,14 @@ The current adapter constructs:
 {apiBaseUrl}/{repositoryKey}/v2/{imagePath}/tags/list
 ```
 
-These may describe the same route if `artifactoryImagePath` already contains the repository key, `v2`, and image path. Do not insert or remove `v2` until an expanded working URL is supplied. If the deployed route differs, the adapter will need a configured route mapping rather than a guessed change.
+The user confirmed this route on 2026-09-28, including the repository key and `/v2/` segment. It matches the current adapter. Repository and image path are selected through configured mappings. Artifactory uses HTTP Basic authentication with the retrieved username/password; Base64 encoding is not encryption.
 
 Still needed:
 
 - One fully expanded sanitized tag-list URL for one actual service/source.
 - Exact repository keys and whether each stores Helm charts, Docker/OCI images, or exposes a virtual repository.
 - The image pull reference for that same service and tag, plus the approved manifest/digest endpoint and response headers.
-- Artifactory authentication method and credential reference. Stash Basic authentication does not establish Artifactory's authentication contract.
+- Artifactory credential reference and exact secret field slugs; Basic authentication is now confirmed.
 - Tag-list response and pagination behavior; source-to-installation-selector mapping for the pilot service.
 
 ## Delinea Secret Server
@@ -138,4 +138,4 @@ The initial `message_total` PromQL query has been supplied. Still needed for met
 2. One expanded Artifactory tag-list URL, its repository type, authentication reference and corresponding image pull reference.
 3. One Stash project/repository with the approved clone/archive/raw-file URL and the credential-name mapping.
 
-After these are confirmed, work can proceed on the specific token, discovery and project-source adapters. Exact Helm, readiness, load-generator and execution-authorization contracts are still needed before enabling real deployment or load execution.
+After these are confirmed, work can proceed on the specific token, discovery and project-source adapters. A concrete Helm load-generator command and repository-backed YAML profile workflow have now been supplied; see [deployment and load contract](deployment-load-contract.md). Readiness, stop, result and execution-authorization details are still needed before enabling real execution.

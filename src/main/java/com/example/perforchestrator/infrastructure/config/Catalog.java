@@ -109,6 +109,12 @@ public class Catalog {
       throw new IllegalStateException(
           "Only loopback access is enabled; shared access requires authentication");
     this.mode = mode;
+    if (file.isBlank() && mode.equals("real")) {
+      root = Path.of(".").toAbsolutePath().normalize();
+      resourceRoot = null;
+      replace(new Data(mode, Map.of(), Map.of(), Map.of(), Map.of()));
+      return;
+    }
     if (file.startsWith("classpath:")) {
       resourceRoot = file.substring(0, file.lastIndexOf('/') + 1);
       root = null;

@@ -35,6 +35,7 @@ spec:
           image: "{{ required "Set image.repository" .Values.image.repository }}:{{ required "Set image.tag" .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
+            - --spring.config.additional-location=file:/app/config/application.yaml
             - --server.address=127.0.0.1
             - --server.port=8080
             - --orchestrator.mode={{ .Values.mode }}

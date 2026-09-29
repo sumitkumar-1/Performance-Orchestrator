@@ -1,6 +1,0 @@
-# No demo services, versions or scenarios are loaded in real mode.
-mode: real
-environments: {}
-services: {}
-imageSources: {}
-scenarios: {}

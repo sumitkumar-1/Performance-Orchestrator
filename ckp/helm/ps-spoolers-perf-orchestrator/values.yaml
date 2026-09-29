@@ -20,10 +20,23 @@ resources:
     memory: 1Gi
 # Bootstrap config only. Runtime editor changes persist under /app/data.
 connections:
-  artifactory: {}
-  secretServers: {}
-  credentials: {}
-  imageSources: {}
+  artifactory:
+    office:
+      apiBaseUrl: https://artifactory.domain/artifactory/api/docker
+      credentialRef: registry-reader
+  secretServers:
+    office-vault:
+      apiBaseUrl: https://domain/SecretServer/api/v1
+      authMode: portal
+      tokenUrl: https://domain/SecretServer/oauth2/token
+  credentials:
+    registry-reader:
+      provider: delinea
+      secretServerRef: office-vault
+      secretId: '12345' # EXAMPLE ONLY: replace with the approved registry secret ID
+      usernameFieldSlug: username
+      passwordFieldSlug: password
+  imageSources: {} # Add exact repositoryKey/imagePaths mappings before discovery
 # Existing Kubernetes Secret with environment-variable keys; no values in this chart.
 environmentSecret: ""
 # Optional existing Secret containing a plain bearer token under key `token`.
@@ -38,3 +51,8 @@ ingress:
   className: ""
   host: ""
   tlsSecret: ""
+
+# Additional Spring startup properties, rendered as /app/config/application.yaml.
+# Mode, loopback address, port and mounted config paths are owned by the chart.
+# Do not put secret values here; use environmentSecret or tokenSecret above.
+application: {}

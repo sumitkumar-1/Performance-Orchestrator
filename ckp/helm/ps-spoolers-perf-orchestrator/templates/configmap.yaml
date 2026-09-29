@@ -5,3 +5,5 @@ metadata:
 data:
   connections.yaml: |
     {{- toYaml .Values.connections | nindent 4 }}
+  application.yaml: |
+    {{- toYaml .Values.application | nindent 4 }}

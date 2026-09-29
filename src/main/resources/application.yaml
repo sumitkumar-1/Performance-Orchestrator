@@ -1,0 +1,59 @@
+server:
+  address: 127.0.0.1
+  port: 8080
+  error:
+    include-message: never
+spring:
+  profiles:
+    active: ${orchestrator.mode:simulation}
+  datasource:
+    url: jdbc:h2:file:./data/orchestrator;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: '' # Embedded H2 pilot default; no database secret provisioning yet
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+      fail-on-null-for-primitives: true
+  servlet:
+    multipart:
+      enabled: false
+orchestrator:
+  mode: simulation
+  catalog: classpath:mocks/catalog.yaml
+  connections: '' # External bootstrap file overrides connection-defaults below
+  # Sanitized organization patterns, not verified destinations. No automatic requests.
+  connection-defaults:
+    artifactory:
+      office:
+        apiBaseUrl: https://artifactory.domain/artifactory/api/docker
+        credentialRef: registry-reader
+    secretServers:
+      office-vault:
+        apiBaseUrl: https://domain/SecretServer/api/v1
+        authMode: portal
+        tokenUrl: https://domain/SecretServer/oauth2/token
+    credentials:
+      registry-reader:
+        provider: delinea
+        secretServerRef: office-vault
+        secretId: '12345' # EXAMPLE ONLY: replace with the approved registry secret ID
+        usernameFieldSlug: username
+        passwordFieldSlug: password
+    imageSources: {} # Add exact repositoryKey/imagePaths mappings before discovery
+  configuration-file: data/configuration.json
+  artifact-root: data/artifacts
+  tick-ms: 1200
+  worker-enabled: true
+
+---
+spring:
+  config:
+    activate:
+      on-profile: real
+  datasource:
+    url: jdbc:h2:file:./data/real/orchestrator;DB_CLOSE_ON_EXIT=FALSE
+orchestrator:
+  catalog: '' # Empty real catalog; no mock data
+  configuration-file: data/real/configuration.json
+  artifact-root: data/real/artifacts
+  worker-enabled: false

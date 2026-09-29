@@ -1,9 +1,0 @@
-spring:
-  datasource:
-    url: jdbc:h2:file:./data/real/orchestrator;DB_CLOSE_ON_EXIT=FALSE
-orchestrator:
-  mode: real
-  catalog: classpath:config/catalog-real.yaml
-  configuration-file: data/real/configuration.json
-  artifact-root: data/real/artifacts
-  worker-enabled: false

@@ -17,7 +17,7 @@ class RuntimeConfigurationTest {
   }
 
   ConnectionConfig connections() throws Exception {
-    return new ConnectionConfig("classpath:config/connections.yaml");
+    return new ConnectionConfig("");
   }
 
   RuntimeConfiguration.Document edited(RuntimeConfiguration.Document original, String name) {

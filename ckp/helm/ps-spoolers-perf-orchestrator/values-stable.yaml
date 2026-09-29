@@ -1,0 +1,5 @@
+# Orchestrator installation in stable; layer over values.yaml.
+# Supply image, connection mappings, Secret references and storage overrides here
+# or in an ignored values.local-stable.yaml. No passwords or tokens.
+# This does not select a target environment for a performance run.
+mode: real

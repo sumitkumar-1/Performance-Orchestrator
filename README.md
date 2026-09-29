@@ -61,15 +61,60 @@ For CKP, set `mode: simulation` or `mode: real` in your Helm values. Changing it
 
 ## Configuration
 
-- `src/main/resources/application.yml`: startup settings such as port, database and resource paths.
-- `src/main/resources/config/`: default connections, schemas and configuration examples.
+- `src/main/resources/application.yaml`: common/CKP settings such as port, database and resource paths.
+- `src/main/resources/config/schemas/`: validation schemas (not editable environment settings).
+- `docs/integration/examples/`: optional bootstrap examples, not packaged runtime configuration.
 - `src/main/resources/mocks/`: demonstration catalog, chart/values inputs and starter profile.
 
 Use **Connections & catalog → Edit runtime configuration** to update environments, limits, services, namespace/release mappings, image sources, scenarios, connections and credential references. Saves are validated and applied without restart. Conflicting edits are rejected; active runs retain their prepared inputs. Connection changes invalidate portal tokens and require a fresh sign-in.
 
 Saved overrides in `data/configuration.json` (or `data/real/configuration.json` in real mode) take precedence over packaged or externally supplied defaults on restart. Changes to resource files alone are not watched. Port, database, worker scheduling and application mode remain startup settings.
 
-Delinea authentication supports portal sign-in, an environment token or a mounted token file. Secrets are fetched using configured secret IDs and field slugs; passwords and tokens do not belong in configuration files. See [connection configuration](docs/adapters/connections.md) and [connection examples](src/main/resources/config/examples/connections.yaml).
+Delinea authentication supports portal sign-in, an environment token or a mounted token file. Secrets are fetched using configured secret IDs and field slugs; passwords and tokens do not belong in configuration files. See [connection configuration](docs/adapters/connections.md) and [connection examples](docs/integration/examples/connections.yaml).
+
+## Helm environment overrides
+
+One `application.yaml` supplies defaults for both local and CKP runs. Select simulation or real mode with `orchestrator.mode`; override CKP settings through Helm values. No separate hosting profile is required.
+
+The pilot uses embedded H2 in the application process, backed by the PVC on CKP. Both local and CKP retain the existing empty database password. There is no required database Kubernetes Secret or vault fetch at startup. Persistence and existing database paths remain unchanged. If you previously changed an existing database's password, supply that password through an approved runtime override; this change does not reset database credentials.
+
+Organization secret provisioning is deferred until the `secretDockerImage`/`pistol` contract is available. An init container can write files on a shared volume; it cannot directly set another container's environment. A future integration can read those files through Spring configuration or an application entrypoint. Existing Delinea, environment Secret and token-file support for external integrations remains available.
+
+`values.yaml` and `application.yaml` include the supplied sanitized Delinea and Artifactory URL patterns. Secret ID `12345` is an example only: replace it and verify field slugs. No image sources are enabled until repository/image mappings are supplied. These defaults do not make outbound requests at startup.
+
+Override `connections` in the chosen `values-env.yaml`. Helm mounts it as a connections file; it overrides the application's `orchestrator.connection-defaults`. For example:
+
+```yaml
+connections:
+  secretServers:
+    office-vault:
+      apiBaseUrl: https://YOUR_VAULT/SecretServer/api/v1
+      tokenUrl: https://YOUR_VAULT/SecretServer/oauth2/token
+  artifactory:
+    office:
+      apiBaseUrl: https://YOUR_REGISTRY/artifactory/api/docker
+  credentials:
+    registry-reader:
+      secretId: 'YOUR_NUMERIC_SECRET_ID'
+  imageSources:
+    dev:
+      displayName: Dev images
+      connectionRef: office
+      repositoryKey: YOUR_DOCKER_REPOSITORY
+      imagePaths:
+        smtp-receiver: YOUR_IMAGE_PATH
+      usernameRequired: false
+      pullRepositoryTemplate: YOUR_REGISTRY/{repositoryKey}/{image}
+application:
+  orchestrator:
+    tick-ms: 2000
+```
+
+Helm merges these entries over base values. For a global-token authentication mode, remove the inherited portal token URL explicitly with `tokenUrl: null`, set `authMode: file` and `bearerTokenFile: /var/run/secrets/delinea/token`, and set the top-level `tokenSecret` to an existing Kubernetes Secret name. Alternatively, use `authMode: environment`, `bearerTokenEnvironmentVariable` and top-level `environmentSecret`. Never put passwords or tokens in values or `application`.
+
+The chart mounts `application` as additional Spring configuration. Chart-owned command-line arguments for mode, loopback address, port and connection/configuration file paths take precedence. ConfigMap changes trigger a rollout. **Saved portal settings still override bootstrap connection mappings**; update those through the portal if a persisted configuration exists. Other startup changes require restart/rollout. Local runs can override `orchestrator.connection-defaults` using normal Spring configuration or continue supplying `--orchestrator.connections=PATH`.
+
+Grafana/Loki URLs and per-namespace monitoring credentials remain documented integration contracts, not executable monitoring settings yet.
 
 ## Runtime data
 
@@ -97,6 +142,8 @@ docker build -f ckp/Dockerfile -t registry.example.net/team/ps-spoolers-perf-orc
 docker push registry.example.net/team/ps-spoolers-perf-orchestrator:0.1.0
 ```
 
+The chart includes `values-sandbox.yaml`, `values-dev.yaml`, `values-qa.yaml`, `values-stable.yaml`, `values-perf.yaml` and `values-perf3.yaml`. These select real mode without inventing organization URLs or credentials. Layer one over base `values.yaml`, then apply local organization settings. The installation environment is independent of the target performance-test environment.
+
 Create an ignored `.local/ckp-values.yaml` with your image and storage settings:
 
 ```yaml
@@ -111,8 +158,8 @@ persistence:
 Render locally before deploying:
 
 ```sh
-./scripts/deploy-ckp.sh render --namespace YOUR_NAMESPACE --values .local/ckp-values.yaml
-./scripts/deploy-ckp.sh deploy --context YOUR_CKP_CONTEXT --namespace YOUR_NAMESPACE --values .local/ckp-values.yaml
+./scripts/deploy-ckp.sh render --namespace YOUR_NAMESPACE --values ckp/helm/ps-spoolers-perf-orchestrator/values-dev.yaml --values .local/ckp-values.yaml
+./scripts/deploy-ckp.sh deploy --context YOUR_CKP_CONTEXT --namespace YOUR_NAMESPACE --values ckp/helm/ps-spoolers-perf-orchestrator/values-dev.yaml --values .local/ckp-values.yaml
 ```
 
 The script requires an explicit context for deployment, uses the existing namespace, and runs `helm upgrade --install --wait`. It does not create namespaces, build/push images, switch your current context or retrieve credentials. `--release` and repeatable `--values` options are supported; see `--help`.
@@ -133,6 +180,8 @@ The [OpenAPI document](src/main/resources/static/openapi.json) is served at `/op
 
 `./scripts/run-local.sh build` runs the test suite. Tests cover configuration persistence/validation, secret authentication, registry contracts, planning, orchestration, concurrency and restart recovery. Remote systems are mocked in tests.
 
-For an office laptop without Codex, start with the [step-by-step real integration runbook](docs/integration/office-laptop-runbook.md), [minimal pilot configuration](src/main/resources/config/examples/office-pilot-connections.yaml), and [sanitized support report template](docs/integration/support-report-template.md). The runbook separates the available read-only pilot from the adapters still needed for real E2E execution.
+For an office laptop without Codex, start with the [step-by-step real integration runbook](docs/integration/office-laptop-runbook.md), [minimal pilot configuration](docs/integration/examples/office-pilot-connections.yaml), and [sanitized support report template](docs/integration/support-report-template.md). The runbook separates the available read-only pilot from the adapters still needed for real E2E execution.
 
 For pending organizational contracts, use the [integration questionnaire](docs/integration/organization-questionnaire.md) and [monitoring contract](docs/integration/monitoring-contract.md). Local implementation notes are in ignored `TASK.md`.
+
+Outstanding organization inputs are tracked in [open integration questions](docs/integration/open-questions.md), including load YAML keys, lifecycle signals and metrics queries.
