@@ -98,7 +98,7 @@ public class SecretServerTokens {
         HttpSession session = currentSession();
         status(id, session); // Evict expired token before use.
         Token token = session == null ? null : (Token) session.getAttribute(PREFIX + id);
-        if (token == null) throw signInRequired();
+        if (token == null) throw signInRequired(id);
         value = token.value;
       }
       case "file" -> {
@@ -119,7 +119,10 @@ public class SecretServerTokens {
   public void rejected(String id) {
     if (server(id).mode().equals("token")) {
       signOut(id, currentSession());
-      throw signInRequired();
+      throw new Problem(401, "SECRET_TOKEN_REJECTED", "secretServer",
+          "Secret Server connection '" + id + "' rejected the supplied Bearer token (HTTP 401) while reading a secret. "
+              + "The local token was cleared. Sign in with a valid REST API access token for this vault; "
+              + "check token expiry and the configured vault URL. Bitbucket/Artifactory has not been contacted.");
     }
   }
 
@@ -134,12 +137,14 @@ public class SecretServerTokens {
     return value != null && value.length() <= 65536 && value.matches("[A-Za-z0-9._~+/=-]+");
   }
 
-  private static Problem signInRequired() {
+  private static Problem signInRequired(String id) {
     return new Problem(
         401,
         "SECRET_SIGN_IN_REQUIRED",
         "secretServer",
-        "Sign in to Secret Server in Connections & catalog, then retry");
+        "No active token for Secret Server connection '" + id + "' in this browser session. "
+            + "Sign in to this connection in Connections & catalog, then retry. "
+            + "Tokens expire and are cleared on restart, sign-out or connection configuration changes; use the same browser and host.");
   }
 
   private static Problem unavailable() {
