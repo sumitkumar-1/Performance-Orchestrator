@@ -21,4 +21,9 @@ public class ConfigurationController {
   public Object update(@RequestBody RuntimeConfiguration.Document document) {
     return configuration.update(document);
   }
+
+  @GetMapping("/startup")
+  public Object startup() {
+    return configuration.startup();
+  }
 }

@@ -1360,6 +1360,16 @@
           }
         }
       }
+    },
+    "/configuration/startup": {
+      "get": {
+        "summary": "Read startup configuration and whether a saved runtime override is active",
+        "responses": {
+          "200": {
+            "description": "configuration: startup catalog/connections with current revision; runtimeOverride: boolean. Does not include resolved credential values."
+          }
+        }
+      }
     }
   },
   "components": {

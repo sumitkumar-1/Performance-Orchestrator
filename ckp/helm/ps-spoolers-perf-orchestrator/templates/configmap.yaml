@@ -6,4 +6,5 @@ data:
   connections.yaml: |
     {{- toYaml .Values.connections | nindent 4 }}
   application.yaml: |
-    {{- toYaml .Values.application | nindent 4 }}
+    {{- $base := dict "orchestrator" (dict "catalog-defaults" .Values.catalog) }}
+    {{- toYaml (mergeOverwrite $base (deepCopy .Values.application)) | nindent 4 }}

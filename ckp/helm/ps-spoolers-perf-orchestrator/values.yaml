@@ -56,3 +56,11 @@ ingress:
 # Mode, loopback address, port and mounted config paths are owned by the chart.
 # Do not put secret values here; use environmentSecret or tokenSecret above.
 application: {}
+
+# Same structure as orchestrator.catalog-defaults in application.yaml (real mode).
+# Supply approved environment/service/scenario mappings; no invented defaults.
+catalog:
+  environments: {}
+  services: {}
+  imageSources: {}
+  scenarios: {}

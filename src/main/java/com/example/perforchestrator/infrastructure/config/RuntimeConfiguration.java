@@ -18,6 +18,8 @@ public class RuntimeConfiguration {
   private final Path file;
   private final ConfigurationAccess access;
   private String revision;
+  private final Document startup;
+  private boolean runtimeOverride;
 
   @org.springframework.beans.factory.annotation.Autowired
   public RuntimeConfiguration(
@@ -30,11 +32,13 @@ public class RuntimeConfiguration {
     this.catalog = catalog;
     this.connections = connections;
     this.file = Path.of(file).toAbsolutePath();
+    this.startup = new Document(null, catalog.data(), connections.data());
     if (Files.exists(this.file)) {
       Document saved = Json.read(ConfigurationResources.read(this.file.toString()), Document.class);
       validate(saved);
       catalog.installValidated(saved.catalog());
       connections.installValidated(saved.connections());
+      runtimeOverride = true;
     }
     revision = java.util.UUID.randomUUID().toString();
   }
@@ -60,6 +64,15 @@ public class RuntimeConfiguration {
   public Document current() {
     try (var scope = access.read()) {
       return new Document(revision, catalog.data(), connections.data());
+    }
+  }
+
+  public record StartupView(Document configuration, boolean runtimeOverride) {}
+
+  public StartupView startup() {
+    try (var scope = access.read()) {
+      return new StartupView(new Document(revision, startup.catalog(), startup.connections()),
+          runtimeOverride);
     }
   }
 
@@ -89,6 +102,7 @@ public class RuntimeConfiguration {
       if (!Json.write(connections.data()).equals(Json.write(next.connections())))
         connections.installValidated(next.connections());
       revision = newRevision;
+      runtimeOverride = true;
       return document;
     } catch (IOException error) {
       throw new Problem(

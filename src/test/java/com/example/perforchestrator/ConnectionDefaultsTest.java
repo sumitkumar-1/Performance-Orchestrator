@@ -8,6 +8,24 @@ import org.springframework.mock.env.MockEnvironment;
 
 class ConnectionDefaultsTest {
   @Test
+  void realCatalogBindsStartupMapsWithoutMockData() throws Exception {
+    var environment = new MockEnvironment()
+        .withProperty("orchestrator.catalog-defaults.environments.dev.display-name", "Dev")
+        .withProperty("orchestrator.catalog-defaults.environments.dev.cluster-identity", "dev")
+        .withProperty("orchestrator.catalog-defaults.environments.dev.service-namespaces[0]", "smtp")
+        .withProperty("orchestrator.catalog-defaults.environments.dev.load-generator-namespace", "load")
+        .withProperty("orchestrator.catalog-defaults.environments.dev.allowed-actions[0]", "PLAN")
+        .withProperty("orchestrator.catalog-defaults.environments.dev.limits.max-run-duration-seconds", "300")
+        .withProperty("orchestrator.catalog-defaults.environments.dev.limits.max-virtual-users", "1")
+        .withProperty("orchestrator.catalog-defaults.environments.dev.limits.max-requests-per-second", "10");
+    var catalog = new com.example.perforchestrator.infrastructure.config.Catalog(
+        "", "real", "127.0.0.1", environment);
+    assertThat(catalog.environment("dev").displayName()).isEqualTo("Dev");
+    assertThat(catalog.data().services()).isEmpty();
+    assertThat(catalog.data().mode()).isEqualTo("real");
+  }
+
+  @Test
   void springPropertiesBindConnectionsAndExplicitFileTakesPrecedence() throws Exception {
     var environment = new MockEnvironment()
         .withProperty("orchestrator.connection-defaults.secret-servers.office.api-base-url",

@@ -709,6 +709,7 @@ async function runDetails(id, generation) {
 }
 async function configurationEditor() {
   let document = await api("/configuration");
+  const startup = await api("/configuration/startup");
   const sections = [
     ["catalog.environments", "Environments & limits"],
     ["catalog.services", "Services, namespaces & releases"],
@@ -747,10 +748,53 @@ async function configurationEditor() {
     editor.value = pretty(value());
     status.textContent = "Loaded the current saved configuration.";
   });
+  const file = el("input", { type: "file", accept: ".json,application/json", "aria-label": "Import configuration JSON" });
+  file.addEventListener("change", async () => {
+    const chosen = file.files[0];
+    if (!chosen) return;
+    try {
+      if (chosen.size > 262144) throw new Error("Configuration must be at most 256 KiB.");
+      const imported = JSON.parse(await chosen.text());
+      if (!imported || typeof imported !== "object" || Array.isArray(imported)
+          || Object.keys(imported).some(key => !["revision", "catalog", "connections"].includes(key))
+          || !imported.catalog || !imported.connections)
+        throw new Error("Import a configuration export containing catalog and connections.");
+      for (const [key] of sections) {
+        const [group, section] = key.split(".");
+        const value = imported[group][section];
+        if (!value || typeof value !== "object" || Array.isArray(value))
+          throw new Error(`Missing configuration map: ${key}`);
+      }
+      if (imported.catalog.mode !== session.mode)
+        throw new Error("Imported configuration must match the running mode.");
+      document = { ...imported, revision: document.revision };
+      editor.value = pretty(value());
+      status.textContent = "Imported into the editor only. Review all sections, then Save configuration to validate and apply. This replaces the complete runtime configuration.";
+    } catch (error) { showError(error.message); }
+    finally { file.value = ""; }
+  });
+  const exportSaved = button("Export active configuration", async () => {
+    const active = await api("/configuration");
+    const url = URL.createObjectURL(new Blob([pretty(active)], { type: "application/json" }));
+    const link = el("a", { href: url, download: `orchestrator-${session.mode}-configuration.json` });
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    status.textContent = "Exported active configuration. Unsaved editor changes are not included. Review internal URLs and any values you entered before sharing.";
+  });
+  const restore = button("Load startup defaults into editor", async () => {
+    const baseline = await api("/configuration/startup");
+    document = { ...baseline.configuration, revision: document.revision };
+    editor.value = pretty(value());
+    status.textContent = "Loaded startup configuration into the editor. Review and save to replace runtime settings. Saving still creates an override; it does not remove the runtime JSON file.";
+  });
   return el("details", { class: "card spacer" }, el("summary", {}, "Edit runtime configuration"),
+    el("p", { class: "muted" }, startup.runtimeOverride
+      ? "Active source: saved runtime JSON. It takes precedence over startup YAML / Helm settings."
+      : "Active source: startup YAML / Helm settings. No saved runtime override is loaded."),
     el("p", { class: "muted" }, "Saved settings survive restarts. Active runs retain their prepared inputs; older unsubmitted plans must be prepared again after catalog changes. Connection changes require a fresh Secret Server sign-in."),
     labeled("Configuration section", selector), labeled("JSON", editor), status,
-    el("div", { class: "card-actions" }, save, reload));
+    el("div", { class: "card-actions" }, save, reload, exportSaved, restore),
+    labeled("Import configuration JSON (review before saving)", file));
 }
 
 async function settings() {

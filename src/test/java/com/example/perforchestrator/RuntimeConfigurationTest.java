@@ -34,8 +34,11 @@ class RuntimeConfigurationTest {
         new RuntimeConfiguration(
             catalog, connections(), directory.resolve("config.json").toString());
     var initial = config.current();
+    assertThat(config.startup().runtimeOverride()).isFalse();
     var saved = config.update(edited(initial, "Updated sandbox"));
     assertThat(catalog.environment("sandbox").displayName()).isEqualTo("Updated sandbox");
+    assertThat(config.startup().runtimeOverride()).isTrue();
+    assertThat(config.startup().configuration().catalog()).isEqualTo(initial.catalog());
     assertThat(catalog.hash()).isEqualTo(Json.hash(Json.write(saved.catalog())));
     assertThatThrownBy(() -> config.update(edited(initial, "Stale edit")))
         .hasMessageContaining("reload");
@@ -45,6 +48,12 @@ class RuntimeConfigurationTest {
             restoredCatalog, connections(), directory.resolve("config.json").toString());
     assertThat(restoredCatalog.environment("sandbox").displayName()).isEqualTo("Updated sandbox");
     assertThat(restored.current().revision()).isNotEqualTo(initial.revision());
+    assertThat(restored.startup().configuration().catalog()).isEqualTo(initial.catalog());
+    // A portable export uses the destination revision, never the source's stale revision.
+    var exported = Json.read(Json.write(saved), RuntimeConfiguration.Document.class);
+    var imported = restored.update(new RuntimeConfiguration.Document(
+        restored.current().revision(), exported.catalog(), exported.connections()));
+    assertThat(imported.catalog()).isEqualTo(saved.catalog());
   }
 
   @Test

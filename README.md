@@ -116,6 +116,64 @@ The chart mounts `application` as additional Spring configuration. Chart-owned c
 
 Grafana/Loki URLs and per-namespace monitoring credentials remain documented integration contracts, not executable monitoring settings yet.
 
+## Configuration defaults, live edits and import/export
+
+All editable sections have a startup configuration location:
+
+| Section | Application YAML | Helm values |
+| --- | --- | --- |
+| Artifactory, Secret Server, credentials, real image sources | `orchestrator.connection-defaults` | `connections` |
+| Environments, services, mock image sources, scenarios | `orchestrator.catalog-defaults` | `catalog` |
+
+Real catalog maps start empty until organization mappings are provided; server URLs alone cannot define deployments. Simulation still loads its packaged mock catalog. An explicit `orchestrator.catalog` or `orchestrator.connections` file takes precedence over the corresponding inline defaults. Real service entries currently retain the existing project-file/installation-binding validation; this change does not implement remote Git retrieval or enable real execution.
+
+For local overrides without rebuilding, create an ignored `.local/application.yaml` with only the properties you want to change:
+
+```yaml
+orchestrator:
+  connection-defaults:
+    secretServers:
+      office-vault:
+        apiBaseUrl: https://YOUR_VAULT/SecretServer/api/v1
+        tokenUrl: https://YOUR_VAULT/SecretServer/oauth2/token
+  catalog-defaults:
+    environments:
+      dev:
+        displayName: Dev
+        clusterIdentity: YOUR_DEV_CLUSTER
+        serviceNamespaces: [YOUR_SERVICE_NAMESPACE]
+        loadGeneratorNamespace: YOUR_LOAD_NAMESPACE
+        allowedActions: [PLAN]
+        limits:
+          maxRunDurationSeconds: 300
+          maxVirtualUsers: 1
+          maxRequestsPerSecond: 10
+```
+
+```sh
+./scripts/run-local.sh run --mode real -- --spring.config.additional-location=file:.local/application.yaml
+```
+
+Spring merges these startup properties over packaged defaults. On CKP, put the same environment map under `catalog.environments` in your environment values file. Helm merges base/environment values and renders the application ConfigMap. `application` in Helm values can additionally override Spring startup properties, including catalog defaults. Restart/rollout is required for startup-file changes.
+
+In **Connections & catalog → Edit runtime configuration**:
+
+- The source label identifies startup settings versus saved runtime JSON.
+- **Save configuration** validates and applies all maps together immediately, then persists the complete configuration. Connection changes require a fresh vault sign-in.
+- **Export active configuration** downloads JSON containing the active catalog and connection references. It excludes unsaved editor drafts and does not resolve passwords or tokens. Arbitrary values entered in the catalog are included: do not put plaintext secrets there, and review exports before sharing.
+- **Import configuration JSON** loads an exported file into an editor draft. Review sections and click Save to validate/apply. Import replaces the complete configuration, must match simulation/real mode and is limited to 256 KiB. The destination's current edit revision is used; stale saves remain rejected.
+- **Load startup defaults into editor** loads the startup snapshot for review. Saving it replaces runtime settings with that snapshot but still persists an override.
+
+Saved runtime JSON has highest precedence over YAML/Helm, for the entire configuration rather than individual fields. It is created on the first save and survives restart. To return permanently to file-managed defaults, stop the app and move the saved configuration JSON to a backup location (keep the database), then restart. A new runtime configuration path is also an option for a local trial.
+
+To import an export at startup, copy it to an ignored writable path and select it as the runtime configuration file:
+
+```sh
+./scripts/run-local.sh run --mode real -- --orchestrator.configuration-file=.local/imported-runtime.json
+```
+
+The file must already contain the complete exported JSON; if absent, startup defaults are used. Subsequent portal saves update this selected file. For CKP, an imported runtime JSON must be placed at the configured writable PVC path before startup; the chart does not provision exports onto the PVC. Keep exports separate from Spring YAML and Helm values—they use different document wrappers. Invalid imports are rejected rather than silently falling back to defaults.
+
 ## Runtime data
 
 `data/` is generated local state, not source code:

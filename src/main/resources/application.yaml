@@ -21,6 +21,13 @@ orchestrator:
   mode: simulation
   catalog: classpath:mocks/catalog.yaml
   connections: '' # External bootstrap file overrides connection-defaults below
+  # Real catalog sections; supply organization mappings here or via external Spring YAML.
+  # Simulation uses the separate mock catalog selected above.
+  catalog-defaults:
+    environments: {}
+    services: {}
+    imageSources: {}
+    scenarios: {}
   # Sanitized organization patterns, not verified destinations. No automatic requests.
   connection-defaults:
     artifactory:

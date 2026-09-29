@@ -98,6 +98,25 @@ public class Catalog {
   private final String resourceRoot;
   private final String mode;
 
+  @org.springframework.beans.factory.annotation.Autowired
+  public Catalog(
+      @Value("${orchestrator.catalog:}") String file,
+      @Value("${orchestrator.mode}") String mode,
+      @Value("${server.address:127.0.0.1}") String address,
+      org.springframework.core.env.Environment environment) throws IOException {
+    this(file, mode, address);
+    if (file.isBlank()) {
+      var defaults = org.springframework.boot.context.properties.bind.Binder.get(environment)
+          .bind("orchestrator.catalog-defaults", Data.class)
+          .orElseGet(() -> new Data(mode, Map.of(), Map.of(), Map.of(), Map.of()));
+      replace(new Data(mode,
+          defaults.environments() == null ? Map.of() : defaults.environments(),
+          defaults.services() == null ? Map.of() : defaults.services(),
+          defaults.imageSources() == null ? Map.of() : defaults.imageSources(),
+          defaults.scenarios() == null ? Map.of() : defaults.scenarios()));
+    }
+  }
+
   public Catalog(
       @Value("${orchestrator.catalog}") String file,
       @Value("${orchestrator.mode}") String mode,
