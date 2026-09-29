@@ -1,0 +1,815 @@
+{
+  "mode": "simulation",
+  "environments": {
+    "sandbox": {
+      "displayName": "sandbox \u00b7 simulation",
+      "clusterIdentity": "simulation-cluster",
+      "serviceNamespaces": [
+        "sim-key-service-sandbox",
+        "sim-auth-service-sandbox",
+        "sim-smtp-receiver-sandbox",
+        "sim-router-delivery-agent-sandbox",
+        "sim-route-delivery-agent-clap-sandbox",
+        "sim-cloud-attachment-processor-sandbox",
+        "sim-sal-da-sandbox"
+      ],
+      "loadGeneratorNamespace": "sim-loadgen-sandbox",
+      "allowedActions": [
+        "PLAN",
+        "DEPLOY",
+        "RUN_LOAD"
+      ],
+      "limits": {
+        "maxRunDurationSeconds": 300,
+        "maxVirtualUsers": 1000,
+        "maxRequestsPerSecond": 5000
+      },
+      "dashboardUrl": ""
+    },
+    "dev": {
+      "displayName": "dev \u00b7 simulation",
+      "clusterIdentity": "simulation-cluster",
+      "serviceNamespaces": [
+        "sim-key-service-dev",
+        "sim-auth-service-dev",
+        "sim-smtp-receiver-dev",
+        "sim-router-delivery-agent-dev",
+        "sim-route-delivery-agent-clap-dev",
+        "sim-cloud-attachment-processor-dev",
+        "sim-sal-da-dev"
+      ],
+      "loadGeneratorNamespace": "sim-loadgen-dev",
+      "allowedActions": [
+        "PLAN",
+        "DEPLOY",
+        "RUN_LOAD"
+      ],
+      "limits": {
+        "maxRunDurationSeconds": 300,
+        "maxVirtualUsers": 1000,
+        "maxRequestsPerSecond": 5000
+      },
+      "dashboardUrl": ""
+    },
+    "QA": {
+      "displayName": "QA \u00b7 simulation",
+      "clusterIdentity": "simulation-cluster",
+      "serviceNamespaces": [
+        "sim-key-service-qa",
+        "sim-auth-service-qa",
+        "sim-smtp-receiver-qa",
+        "sim-router-delivery-agent-qa",
+        "sim-route-delivery-agent-clap-qa",
+        "sim-cloud-attachment-processor-qa",
+        "sim-sal-da-qa"
+      ],
+      "loadGeneratorNamespace": "sim-loadgen-qa",
+      "allowedActions": [
+        "PLAN",
+        "DEPLOY",
+        "RUN_LOAD"
+      ],
+      "limits": {
+        "maxRunDurationSeconds": 300,
+        "maxVirtualUsers": 1000,
+        "maxRequestsPerSecond": 5000
+      },
+      "dashboardUrl": ""
+    },
+    "stable": {
+      "displayName": "stable \u00b7 simulation",
+      "clusterIdentity": "simulation-cluster",
+      "serviceNamespaces": [
+        "sim-key-service-stable",
+        "sim-auth-service-stable",
+        "sim-smtp-receiver-stable",
+        "sim-router-delivery-agent-stable",
+        "sim-route-delivery-agent-clap-stable",
+        "sim-cloud-attachment-processor-stable",
+        "sim-sal-da-stable"
+      ],
+      "loadGeneratorNamespace": "sim-loadgen-stable",
+      "allowedActions": [
+        "PLAN",
+        "DEPLOY",
+        "RUN_LOAD"
+      ],
+      "limits": {
+        "maxRunDurationSeconds": 300,
+        "maxVirtualUsers": 1000,
+        "maxRequestsPerSecond": 5000
+      },
+      "dashboardUrl": ""
+    },
+    "stging": {
+      "displayName": "stging \u00b7 simulation",
+      "clusterIdentity": "simulation-cluster",
+      "serviceNamespaces": [
+        "sim-key-service-stging",
+        "sim-auth-service-stging",
+        "sim-smtp-receiver-stging",
+        "sim-router-delivery-agent-stging",
+        "sim-route-delivery-agent-clap-stging",
+        "sim-cloud-attachment-processor-stging",
+        "sim-sal-da-stging"
+      ],
+      "loadGeneratorNamespace": "sim-loadgen-stging",
+      "allowedActions": [
+        "PLAN",
+        "DEPLOY",
+        "RUN_LOAD"
+      ],
+      "limits": {
+        "maxRunDurationSeconds": 300,
+        "maxVirtualUsers": 1000,
+        "maxRequestsPerSecond": 5000
+      },
+      "dashboardUrl": ""
+    },
+    "stg1": {
+      "displayName": "stg1 \u00b7 simulation",
+      "clusterIdentity": "simulation-cluster",
+      "serviceNamespaces": [
+        "sim-key-service-stg1",
+        "sim-auth-service-stg1",
+        "sim-smtp-receiver-stg1",
+        "sim-router-delivery-agent-stg1",
+        "sim-route-delivery-agent-clap-stg1",
+        "sim-cloud-attachment-processor-stg1",
+        "sim-sal-da-stg1"
+      ],
+      "loadGeneratorNamespace": "sim-loadgen-stg1",
+      "allowedActions": [
+        "PLAN",
+        "DEPLOY",
+        "RUN_LOAD"
+      ],
+      "limits": {
+        "maxRunDurationSeconds": 300,
+        "maxVirtualUsers": 1000,
+        "maxRequestsPerSecond": 5000
+      },
+      "dashboardUrl": ""
+    },
+    "perf3": {
+      "displayName": "perf3 \u00b7 simulation",
+      "clusterIdentity": "simulation-cluster",
+      "serviceNamespaces": [
+        "sim-key-service-perf3",
+        "sim-auth-service-perf3",
+        "sim-smtp-receiver-perf3",
+        "sim-router-delivery-agent-perf3",
+        "sim-route-delivery-agent-clap-perf3",
+        "sim-cloud-attachment-processor-perf3",
+        "sim-sal-da-perf3"
+      ],
+      "loadGeneratorNamespace": "sim-loadgen-perf3",
+      "allowedActions": [
+        "PLAN",
+        "DEPLOY",
+        "RUN_LOAD"
+      ],
+      "limits": {
+        "maxRunDurationSeconds": 300,
+        "maxVirtualUsers": 1000,
+        "maxRequestsPerSecond": 5000
+      },
+      "dashboardUrl": ""
+    }
+  },
+  "services": {
+    "key-service": {
+      "projectPath": "projects/key-service",
+      "dependencies": [],
+      "deploymentByEnvironment": {
+        "sandbox": {
+          "namespace": "sim-key-service-sandbox",
+          "releaseName": "key-service",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-sandbox.yaml"
+          ]
+        },
+        "dev": {
+          "namespace": "sim-key-service-dev",
+          "releaseName": "key-service",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-dev.yaml"
+          ]
+        },
+        "QA": {
+          "namespace": "sim-key-service-qa",
+          "releaseName": "key-service",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-QA.yaml"
+          ]
+        },
+        "stable": {
+          "namespace": "sim-key-service-stable",
+          "releaseName": "key-service",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stable.yaml"
+          ]
+        },
+        "stging": {
+          "namespace": "sim-key-service-stging",
+          "releaseName": "key-service",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stging.yaml"
+          ]
+        },
+        "stg1": {
+          "namespace": "sim-key-service-stg1",
+          "releaseName": "key-service",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stg1.yaml"
+          ]
+        },
+        "perf3": {
+          "namespace": "sim-key-service-perf3",
+          "releaseName": "key-service",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-perf3.yaml"
+          ]
+        }
+      },
+      "installationBindings": {
+        "file": "ckp/Chart.yaml",
+        "exactLine": "appVersion: REPLACE_VERSION",
+        "expectedOccurrences": 1,
+        "helmValuesKey": "image.tag",
+        "selectorKey": "buildSource",
+        "sourceSelectors": {
+          "dev": "development",
+          "qa": "development",
+          "stable": "release",
+          "release": "release",
+          "user": "development"
+        }
+      },
+      "allowedOverridePaths": [
+        "replicaCount",
+        "resources.requests.cpu",
+        "resources.requests.memory"
+      ]
+    },
+    "auth-service": {
+      "projectPath": "projects/auth-service",
+      "dependencies": [],
+      "deploymentByEnvironment": {
+        "sandbox": {
+          "namespace": "sim-auth-service-sandbox",
+          "releaseName": "auth-service",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-sandbox.yaml"
+          ]
+        },
+        "dev": {
+          "namespace": "sim-auth-service-dev",
+          "releaseName": "auth-service",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-dev.yaml"
+          ]
+        },
+        "QA": {
+          "namespace": "sim-auth-service-qa",
+          "releaseName": "auth-service",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-QA.yaml"
+          ]
+        },
+        "stable": {
+          "namespace": "sim-auth-service-stable",
+          "releaseName": "auth-service",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stable.yaml"
+          ]
+        },
+        "stging": {
+          "namespace": "sim-auth-service-stging",
+          "releaseName": "auth-service",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stging.yaml"
+          ]
+        },
+        "stg1": {
+          "namespace": "sim-auth-service-stg1",
+          "releaseName": "auth-service",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stg1.yaml"
+          ]
+        },
+        "perf3": {
+          "namespace": "sim-auth-service-perf3",
+          "releaseName": "auth-service",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-perf3.yaml"
+          ]
+        }
+      },
+      "installationBindings": {
+        "file": "ckp/Chart.yaml",
+        "exactLine": "appVersion: REPLACE_VERSION",
+        "expectedOccurrences": 1,
+        "helmValuesKey": "image.tag",
+        "selectorKey": "buildSource",
+        "sourceSelectors": {
+          "dev": "development",
+          "qa": "development",
+          "stable": "release",
+          "release": "release",
+          "user": "development"
+        }
+      },
+      "allowedOverridePaths": [
+        "replicaCount",
+        "resources.requests.cpu",
+        "resources.requests.memory"
+      ]
+    },
+    "smtp-receiver": {
+      "projectPath": "projects/smtp-receiver",
+      "dependencies": [],
+      "deploymentByEnvironment": {
+        "sandbox": {
+          "namespace": "sim-smtp-receiver-sandbox",
+          "releaseName": "smtp-receiver",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-sandbox.yaml"
+          ]
+        },
+        "dev": {
+          "namespace": "sim-smtp-receiver-dev",
+          "releaseName": "smtp-receiver",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-dev.yaml"
+          ]
+        },
+        "QA": {
+          "namespace": "sim-smtp-receiver-qa",
+          "releaseName": "smtp-receiver",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-QA.yaml"
+          ]
+        },
+        "stable": {
+          "namespace": "sim-smtp-receiver-stable",
+          "releaseName": "smtp-receiver",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stable.yaml"
+          ]
+        },
+        "stging": {
+          "namespace": "sim-smtp-receiver-stging",
+          "releaseName": "smtp-receiver",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stging.yaml"
+          ]
+        },
+        "stg1": {
+          "namespace": "sim-smtp-receiver-stg1",
+          "releaseName": "smtp-receiver",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stg1.yaml"
+          ]
+        },
+        "perf3": {
+          "namespace": "sim-smtp-receiver-perf3",
+          "releaseName": "smtp-receiver",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-perf3.yaml"
+          ]
+        }
+      },
+      "installationBindings": {
+        "file": "ckp/Chart.yaml",
+        "exactLine": "appVersion: REPLACE_VERSION",
+        "expectedOccurrences": 1,
+        "helmValuesKey": "image.tag",
+        "selectorKey": "buildSource",
+        "sourceSelectors": {
+          "dev": "development",
+          "qa": "development",
+          "stable": "release",
+          "release": "release",
+          "user": "development"
+        }
+      },
+      "allowedOverridePaths": [
+        "replicaCount",
+        "resources.requests.cpu",
+        "resources.requests.memory"
+      ]
+    },
+    "router-delivery-agent": {
+      "projectPath": "projects/router-delivery-agent",
+      "dependencies": [],
+      "deploymentByEnvironment": {
+        "sandbox": {
+          "namespace": "sim-router-delivery-agent-sandbox",
+          "releaseName": "router-delivery-agent",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-sandbox.yaml"
+          ]
+        },
+        "dev": {
+          "namespace": "sim-router-delivery-agent-dev",
+          "releaseName": "router-delivery-agent",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-dev.yaml"
+          ]
+        },
+        "QA": {
+          "namespace": "sim-router-delivery-agent-qa",
+          "releaseName": "router-delivery-agent",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-QA.yaml"
+          ]
+        },
+        "stable": {
+          "namespace": "sim-router-delivery-agent-stable",
+          "releaseName": "router-delivery-agent",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stable.yaml"
+          ]
+        },
+        "stging": {
+          "namespace": "sim-router-delivery-agent-stging",
+          "releaseName": "router-delivery-agent",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stging.yaml"
+          ]
+        },
+        "stg1": {
+          "namespace": "sim-router-delivery-agent-stg1",
+          "releaseName": "router-delivery-agent",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stg1.yaml"
+          ]
+        },
+        "perf3": {
+          "namespace": "sim-router-delivery-agent-perf3",
+          "releaseName": "router-delivery-agent",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-perf3.yaml"
+          ]
+        }
+      },
+      "installationBindings": {
+        "file": "ckp/Chart.yaml",
+        "exactLine": "appVersion: REPLACE_VERSION",
+        "expectedOccurrences": 1,
+        "helmValuesKey": "image.tag",
+        "selectorKey": "buildSource",
+        "sourceSelectors": {
+          "dev": "development",
+          "qa": "development",
+          "stable": "release",
+          "release": "release",
+          "user": "development"
+        }
+      },
+      "allowedOverridePaths": [
+        "replicaCount",
+        "resources.requests.cpu",
+        "resources.requests.memory"
+      ]
+    },
+    "route-delivery-agent-clap": {
+      "projectPath": "projects/route-delivery-agent-clap",
+      "dependencies": [],
+      "deploymentByEnvironment": {
+        "sandbox": {
+          "namespace": "sim-route-delivery-agent-clap-sandbox",
+          "releaseName": "route-delivery-agent-clap",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-sandbox.yaml"
+          ]
+        },
+        "dev": {
+          "namespace": "sim-route-delivery-agent-clap-dev",
+          "releaseName": "route-delivery-agent-clap",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-dev.yaml"
+          ]
+        },
+        "QA": {
+          "namespace": "sim-route-delivery-agent-clap-qa",
+          "releaseName": "route-delivery-agent-clap",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-QA.yaml"
+          ]
+        },
+        "stable": {
+          "namespace": "sim-route-delivery-agent-clap-stable",
+          "releaseName": "route-delivery-agent-clap",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stable.yaml"
+          ]
+        },
+        "stging": {
+          "namespace": "sim-route-delivery-agent-clap-stging",
+          "releaseName": "route-delivery-agent-clap",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stging.yaml"
+          ]
+        },
+        "stg1": {
+          "namespace": "sim-route-delivery-agent-clap-stg1",
+          "releaseName": "route-delivery-agent-clap",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stg1.yaml"
+          ]
+        },
+        "perf3": {
+          "namespace": "sim-route-delivery-agent-clap-perf3",
+          "releaseName": "route-delivery-agent-clap",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-perf3.yaml"
+          ]
+        }
+      },
+      "installationBindings": {
+        "file": "ckp/Chart.yaml",
+        "exactLine": "appVersion: REPLACE_VERSION",
+        "expectedOccurrences": 1,
+        "helmValuesKey": "image.tag",
+        "selectorKey": "buildSource",
+        "sourceSelectors": {
+          "dev": "development",
+          "qa": "development",
+          "stable": "release",
+          "release": "release",
+          "user": "development"
+        }
+      },
+      "allowedOverridePaths": [
+        "replicaCount",
+        "resources.requests.cpu",
+        "resources.requests.memory"
+      ]
+    },
+    "cloud-attachment-processor": {
+      "projectPath": "projects/cloud-attachment-processor",
+      "dependencies": [],
+      "deploymentByEnvironment": {
+        "sandbox": {
+          "namespace": "sim-cloud-attachment-processor-sandbox",
+          "releaseName": "cloud-attachment-processor",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-sandbox.yaml"
+          ]
+        },
+        "dev": {
+          "namespace": "sim-cloud-attachment-processor-dev",
+          "releaseName": "cloud-attachment-processor",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-dev.yaml"
+          ]
+        },
+        "QA": {
+          "namespace": "sim-cloud-attachment-processor-qa",
+          "releaseName": "cloud-attachment-processor",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-QA.yaml"
+          ]
+        },
+        "stable": {
+          "namespace": "sim-cloud-attachment-processor-stable",
+          "releaseName": "cloud-attachment-processor",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stable.yaml"
+          ]
+        },
+        "stging": {
+          "namespace": "sim-cloud-attachment-processor-stging",
+          "releaseName": "cloud-attachment-processor",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stging.yaml"
+          ]
+        },
+        "stg1": {
+          "namespace": "sim-cloud-attachment-processor-stg1",
+          "releaseName": "cloud-attachment-processor",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stg1.yaml"
+          ]
+        },
+        "perf3": {
+          "namespace": "sim-cloud-attachment-processor-perf3",
+          "releaseName": "cloud-attachment-processor",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-perf3.yaml"
+          ]
+        }
+      },
+      "installationBindings": {
+        "file": "ckp/Chart.yaml",
+        "exactLine": "appVersion: REPLACE_VERSION",
+        "expectedOccurrences": 1,
+        "helmValuesKey": "image.tag",
+        "selectorKey": "buildSource",
+        "sourceSelectors": {
+          "dev": "development",
+          "qa": "development",
+          "stable": "release",
+          "release": "release",
+          "user": "development"
+        }
+      },
+      "allowedOverridePaths": [
+        "replicaCount",
+        "resources.requests.cpu",
+        "resources.requests.memory"
+      ]
+    },
+    "sal-da": {
+      "projectPath": "projects/sal-da",
+      "dependencies": [],
+      "deploymentByEnvironment": {
+        "sandbox": {
+          "namespace": "sim-sal-da-sandbox",
+          "releaseName": "sal-da",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-sandbox.yaml"
+          ]
+        },
+        "dev": {
+          "namespace": "sim-sal-da-dev",
+          "releaseName": "sal-da",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-dev.yaml"
+          ]
+        },
+        "QA": {
+          "namespace": "sim-sal-da-qa",
+          "releaseName": "sal-da",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-QA.yaml"
+          ]
+        },
+        "stable": {
+          "namespace": "sim-sal-da-stable",
+          "releaseName": "sal-da",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stable.yaml"
+          ]
+        },
+        "stging": {
+          "namespace": "sim-sal-da-stging",
+          "releaseName": "sal-da",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stging.yaml"
+          ]
+        },
+        "stg1": {
+          "namespace": "sim-sal-da-stg1",
+          "releaseName": "sal-da",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-stg1.yaml"
+          ]
+        },
+        "perf3": {
+          "namespace": "sim-sal-da-perf3",
+          "releaseName": "sal-da",
+          "valuesFiles": [
+            "ckp/values.yaml",
+            "ckp/values-perf3.yaml"
+          ]
+        }
+      },
+      "installationBindings": {
+        "file": "ckp/Chart.yaml",
+        "exactLine": "appVersion: REPLACE_VERSION",
+        "expectedOccurrences": 1,
+        "helmValuesKey": "image.tag",
+        "selectorKey": "buildSource",
+        "sourceSelectors": {
+          "dev": "development",
+          "qa": "development",
+          "stable": "release",
+          "release": "release",
+          "user": "development"
+        }
+      },
+      "allowedOverridePaths": [
+        "replicaCount",
+        "resources.requests.cpu",
+        "resources.requests.memory"
+      ]
+    }
+  },
+  "imageSources": {
+    "dev": {
+      "displayName": "Dev",
+      "usernameRequired": false,
+      "repositoryTemplate": "simulation.invalid/dev/{service}",
+      "versions": [
+        "build-103",
+        "build-102",
+        "build-101"
+      ]
+    },
+    "qa": {
+      "displayName": "Qa",
+      "usernameRequired": false,
+      "repositoryTemplate": "simulation.invalid/qa/{service}",
+      "versions": [
+        "build-103",
+        "build-102",
+        "build-101"
+      ]
+    },
+    "stable": {
+      "displayName": "Stable",
+      "usernameRequired": false,
+      "repositoryTemplate": "simulation.invalid/stable/{service}",
+      "versions": [
+        "build-103",
+        "build-102",
+        "build-101"
+      ]
+    },
+    "release": {
+      "displayName": "Release",
+      "usernameRequired": false,
+      "repositoryTemplate": "simulation.invalid/release/{service}",
+      "versions": [
+        "build-103",
+        "build-102",
+        "build-101"
+      ]
+    },
+    "user": {
+      "displayName": "Custom username",
+      "usernameRequired": true,
+      "repositoryTemplate": "simulation.invalid/user/{username}/{service}",
+      "versions": [
+        "build-103",
+        "build-102",
+        "build-101"
+      ]
+    }
+  },
+  "scenarios": {
+    "smoke": {
+      "displayName": "HTTP smoke \u00b7 synthetic results",
+      "revision": "simulation-v1",
+      "allowedOverridePaths": [
+        "scenario.name"
+      ],
+      "defaults": {
+        "scenario": {
+          "name": "smoke"
+        }
+      }
+    }
+  }
+}

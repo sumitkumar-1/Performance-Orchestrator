@@ -1,0 +1,1590 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Performance Orchestrator local API",
+    "version": "0.1.0",
+    "description": "Loopback simulation plus separately configured read-only registry discovery. CSRF token and session cookie from /session are required for every mutation."
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "paths": {
+    "/session": {
+      "get": {
+        "summary": "Session and CSRF token",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/environments": {
+      "get": {
+        "summary": "Environment availability",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/services": {
+      "get": {
+        "summary": "Service catalog",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/image-sources": {
+      "get": {
+        "summary": "Simulation sources",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/scenarios": {
+      "get": {
+        "summary": "Scenario templates",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/profiles": {
+      "get": {
+        "summary": "List profiles",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": []
+      },
+      "post": {
+        "summary": "Create profile",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-CSRF-TOKEN",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Use the exact csrfHeader name and csrfToken from /session with its session cookie."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/profiles/{id}": {
+      "get": {
+        "summary": "Read profile",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "summary": "Update profile with expected revision",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-TOKEN",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Use the exact csrfHeader name and csrfToken from /session with its session cookie."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/plans/{id}": {
+      "get": {
+        "summary": "Read immutable plan",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/runs/{id}": {
+      "get": {
+        "summary": "Run state",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/connections": {
+      "get": {
+        "summary": "Safe connection metadata",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/runs/{id}/artifacts": {
+      "get": {
+        "summary": "List completed-run artifact metadata",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/plans": {
+      "post": {
+        "summary": "Plan exactly one saved profileId or inline profile",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-CSRF-TOKEN",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Use the exact csrfHeader name and csrfToken from /session with its session cookie."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs": {
+      "post": {
+        "summary": "Enqueue exactly one planId or profileId",
+        "responses": {
+          "202": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-CSRF-TOKEN",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Use the exact csrfHeader name and csrfToken from /session with its session cookie."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{8,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Submission"
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Filtered run history",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "environment",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "profileId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "outcome",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/services/{id}/images": {
+      "get": {
+        "summary": "Discover fixture versions",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "username",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/runs/{id}/events": {
+      "get": {
+        "summary": "Persisted JSON event cursor or reconnecting SSE",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/runs/{id}/cancel": {
+      "post": {
+        "summary": "Request idempotent cancellation",
+        "responses": {
+          "202": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-TOKEN",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Use the exact csrfHeader name and csrfToken from /session with its session cookie."
+          }
+        ]
+      }
+    },
+    "/runs/{id}/recover": {
+      "post": {
+        "summary": "Verify stopped simulated load and release reservation",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-TOKEN",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Use the exact csrfHeader name and csrfToken from /session with its session cookie."
+          }
+        ]
+      }
+    },
+    "/runs/{id}/report": {
+      "get": {
+        "summary": "Human-readable simulation report",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/runs/{id}/artifacts/{name}": {
+      "get": {
+        "summary": "Download summary.json or report.html",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/registry-sources/{source}/services/{service}/images": {
+      "get": {
+        "summary": "Discover configured real Artifactory tags",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "service",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "username",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/registry-sources/{source}/services/{service}/images/{tag}": {
+      "get": {
+        "summary": "Resolve and verify real immutable digest",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed input"
+          },
+          "403": {
+            "description": "Origin/CSRF check or upstream permission denied"
+          },
+          "404": {
+            "description": "Record or source not found"
+          },
+          "409": {
+            "description": "Revision, plan, idempotency or environment conflict"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "service",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "username",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/configuration": {
+      "get": {
+        "summary": "Read current catalog and connections with an edit revision",
+        "responses": {
+          "200": {
+            "description": "Complete runtime configuration; credential references only"
+          }
+        }
+      },
+      "put": {
+        "summary": "Validate, persist and apply a complete configuration revision without restart",
+        "description": "Local administrator operation. Requires session CSRF header and matching revision. Catalog and connection maps are supplied together. Active runs keep saved plans; connection edits invalidate portal tokens.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "revision",
+                  "catalog",
+                  "connections"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "type": "string"
+                  },
+                  "catalog": {
+                    "type": "object"
+                  },
+                  "connections": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved document with new revision"
+          },
+          "409": {
+            "description": "Stale edit; reload required"
+          },
+          "422": {
+            "description": "Invalid configuration; previous version retained"
+          },
+          "503": {
+            "description": "Persistence failed; previous version retained"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Profile": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "targetEnvironment": {
+            "type": "string"
+          },
+          "services": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "serviceId": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "DEPLOY",
+                    "VERIFY_EXISTING"
+                  ]
+                },
+                "build": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "sourceRef": {
+                      "type": "string"
+                    },
+                    "username": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "sourceRef",
+                    "version"
+                  ]
+                },
+                "valuesOverlay": {
+                  "type": "string",
+                  "maxLength": 65536
+                }
+              },
+              "required": [
+                "serviceId",
+                "action",
+                "build"
+              ]
+            }
+          },
+          "loadGenerator": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "templateRef": {
+                "type": "string"
+              },
+              "virtualUsers": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "requestsPerSecond": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "warmupSeconds": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "measurementSeconds": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "configurationOverlay": {
+                "type": "string",
+                "maxLength": 65536
+              }
+            },
+            "required": [
+              "templateRef",
+              "virtualUsers",
+              "requestsPerSecond",
+              "warmupSeconds",
+              "measurementSeconds"
+            ]
+          },
+          "maxRunDurationSeconds": {
+            "type": "integer",
+            "minimum": 15
+          },
+          "thresholds": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "metric": {
+                  "type": "string",
+                  "enum": [
+                    "latency_p95_ms",
+                    "error_rate",
+                    "throughput_rps",
+                    "request_count"
+                  ]
+                },
+                "maximum": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "required": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "metric",
+                "maximum",
+                "required"
+              ]
+            }
+          },
+          "simulationCase": {
+            "type": "string",
+            "enum": [
+              "SUCCESS",
+              "DEPLOYMENT_FAILURE",
+              "READINESS_TIMEOUT",
+              "MISSING_METRICS",
+              "THRESHOLD_FAILURE",
+              "CLEANUP_FAILURE"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "targetEnvironment",
+          "services",
+          "loadGenerator",
+          "maxRunDurationSeconds",
+          "thresholds",
+          "simulationCase"
+        ]
+      },
+      "ProfileInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "type": "integer"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/Profile"
+          }
+        },
+        "required": [
+          "profile"
+        ]
+      },
+      "PlanInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "profileId": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/Profile"
+          }
+        },
+        "required": []
+      },
+      "Submission": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "planId": {
+            "type": "string"
+          },
+          "profileId": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          }
+        },
+        "required": []
+      },
+      "Problem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "field",
+          "message"
+        ]
+      }
+    }
+  }
+}

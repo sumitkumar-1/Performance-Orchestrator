@@ -1,0 +1,23 @@
+# Implementation decisions
+
+- Java 21 bytecode; Spring Boot 3.5.16 modular monolith, JDBC and Flyway. No frontend build required. JDK 24 was available for verification; Java 17 is insufficient.
+- Domain records and ports contain no Spring/HTTP/persistence types. Application services own planning, enqueueing, cancellation and transitions; adapters own persistence and external protocols.
+- This slice supports one loopback process backed by H2. A transactional coordination row serializes queue/worker changes; environment leases include a scope, run owner, renewal, expiry and monotonically incremented fencing value. Expiry never automatically authorizes takeover. A cleanup failure retains the reservation.
+- Simulated deployments and load identities share the workflow transaction. Resuming a committed stage after a restart cannot duplicate a load operation. This guarantee does not claim to solve real remote side-effect reconciliation; that requires adapter-specific observation and fencing.
+- Fixture plans contain complete prepared file content and hashes. Deployment reads the frozen plan rather than changing source files. Fixture revision hashes are clearly not claimed as Git commits. Helm argument previews describe fixture version bindings only; there is no guessed Helm invocation or rendered Kubernetes diff.
+- JSON persistence snapshots freeze plans and profile revisions. Plans expire after 15 minutes. Catalog changes block submission of stale plans; accepted runs keep their persisted inputs, while preflight still checks baseline drift. Rerun-original means exactly those pinned inputs and still requires baseline/validity checks; the UI separately offers current-profile runs.
+- Overlay semantics: recursively merge maps, replace lists/scalars, delete only with the exact map `{$delete: true}`. Null is rejected. Leaf-path allowlists block image, namespace, connection and credential override injection. Duplicate keys, aliases, custom tags, excessive depth and oversized inputs are rejected.
+- Simulation windows use actual elapsed seconds. Reported requests and latency are synthetic. An empty threshold set, no traffic, or missing required data yields INCONCLUSIVE. A threshold failure does not automatically roll back services. Simulated operations do not prove real readiness, quota or image pull access.
+- Real discovery uses fixed administrator-owned destinations and fresh credentials per request. Delinea tokens come from portal authentication or explicit environment/file providers. Portal passwords are submitted only for token exchange, and tokens stay in the server-side session. No arbitrary URL proxy or plaintext credential persistence is provided.
+- CKP packaging supports a single-user port-forward pilot. Shared hosting still requires authentication/authorization, durable shared state and actual execution contracts. Simulation and real read-only modes use separate defaults; real execution is explicitly unavailable. Loopback and execution guards enforce these boundaries.
+
+
+## Code boundaries
+
+- Image resolution and complete-catalog discovery have separate domain ports. Simulation supplies both; the real registry resolver supplies only resolution. Paginated Artifactory discovery has its own HTTP contract instead of pretending to return a complete catalog.
+- Controllers and application services call named repository operations. SQL and JdbcTemplate stay in infrastructure; the repository no longer exposes its JDBC handle. Transaction boundaries remain in the workflow services.
+- Runtime configuration validates and persists documents. The API filter owns request-path handling, while a separate coordination component owns read/write scopes. Context paths are accounted for when identifying a configuration mutation.
+- Catalog and connection records defensively copy their collections, including nested scenario defaults. Each catalog snapshot pairs data with its hash; each connection snapshot pairs data with its token-invalidation generation.
+- Keep external adapters behind narrow contracts and constructor injection. Prefer explicit state transitions and cohesive services over adding a class for every state or interface for every helper.
+
+This is a pragmatic modular monolith, not a claim of strict Clean Architecture. Application services still depend on concrete Catalog/Store types, configuration persistence uses the local filesystem, token handling contains servlet-session concerns, and the frontend entry module combines multiple screens. Extract narrower boundaries when extending those areas, with behavior tests in place. The existing single-process simulation transaction model must not be reused unchanged for remote side effects.

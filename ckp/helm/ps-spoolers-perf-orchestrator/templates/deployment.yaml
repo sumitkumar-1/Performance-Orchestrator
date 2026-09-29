@@ -1,0 +1,102 @@
+{{- if not (has .Values.mode (list "simulation" "real")) }}
+{{- fail "mode must be simulation or real" }}
+{{- end }}
+{{- $state := ternary "/app/data/real" "/app/data" (eq .Values.mode "real") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "orchestrator.name" . }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "orchestrator.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "orchestrator.selector" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: orchestrator
+          image: "{{ required "Set image.repository" .Values.image.repository }}:{{ required "Set image.tag" .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --server.address=127.0.0.1
+            - --server.port=8080
+            - --orchestrator.mode={{ .Values.mode }}
+            - --orchestrator.connections=/app/config/connections.yaml
+            - --orchestrator.configuration-file={{ $state }}/configuration.json
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: http
+              containerPort: 8080
+          {{- if .Values.environmentSecret }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.environmentSecret | quote }}
+          {{- end }}
+          # Exec probes connect inside the pod because the app binds loopback only.
+          startupProbe:
+            exec:
+              command: [bash, -c, "exec 3<>/dev/tcp/127.0.0.1/8080"]
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command: [bash, -c, "exec 3<>/dev/tcp/127.0.0.1/8080"]
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.tokenSecret }}
+            - name: delinea-token
+              mountPath: /var/run/secrets/delinea
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (include "orchestrator.name" .) .Values.persistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: config
+          configMap:
+            name: {{ include "orchestrator.name" . }}-config
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.tokenSecret }}
+        - name: delinea-token
+          secret:
+            secretName: {{ .Values.tokenSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: token
+                path: token
+        {{- end }}

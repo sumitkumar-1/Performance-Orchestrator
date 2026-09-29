@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "mode": {
+      "const": "simulation"
+    },
+    "environments": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "clusterIdentity": {
+            "type": "string"
+          },
+          "serviceNamespaces": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "loadGeneratorNamespace": {
+            "type": "string"
+          },
+          "allowedActions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "limits": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "maxRunDurationSeconds": {
+                "type": "integer"
+              },
+              "maxVirtualUsers": {
+                "type": "integer"
+              },
+              "maxRequestsPerSecond": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "maxRunDurationSeconds",
+              "maxVirtualUsers",
+              "maxRequestsPerSecond"
+            ]
+          },
+          "dashboardUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "displayName",
+          "clusterIdentity",
+          "serviceNamespaces",
+          "loadGeneratorNamespace",
+          "allowedActions",
+          "limits",
+          "dashboardUrl"
+        ]
+      }
+    },
+    "services": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "projectPath": {
+            "type": "string"
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "deploymentByEnvironment": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "namespace": {
+                  "type": "string"
+                },
+                "releaseName": {
+                  "type": "string"
+                },
+                "valuesFiles": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "namespace",
+                "releaseName",
+                "valuesFiles"
+              ]
+            }
+          },
+          "installationBindings": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "exactLine": {
+                "type": "string"
+              },
+              "expectedOccurrences": {
+                "type": "integer"
+              },
+              "helmValuesKey": {
+                "type": "string"
+              },
+              "selectorKey": {
+                "type": "string"
+              },
+              "sourceSelectors": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "file",
+              "exactLine",
+              "expectedOccurrences",
+              "helmValuesKey",
+              "selectorKey",
+              "sourceSelectors"
+            ]
+          },
+          "allowedOverridePaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "projectPath",
+          "dependencies",
+          "deploymentByEnvironment",
+          "installationBindings",
+          "allowedOverridePaths"
+        ]
+      }
+    },
+    "imageSources": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "usernameRequired": {
+            "type": "boolean"
+          },
+          "repositoryTemplate": {
+            "type": "string"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "displayName",
+          "usernameRequired",
+          "repositoryTemplate",
+          "versions"
+        ]
+      }
+    },
+    "scenarios": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "allowedOverridePaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "displayName",
+          "revision",
+          "allowedOverridePaths",
+          "defaults"
+        ]
+      }
+    }
+  },
+  "required": [
+    "mode",
+    "environments",
+    "services",
+    "imageSources",
+    "scenarios"
+  ]
+}

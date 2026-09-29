@@ -1,0 +1,40 @@
+# simulation: mock workflows; real: live read-only connections, no execution yet.
+mode: simulation
+image:
+  repository: "" # Required: approved registry/repository
+  tag: "" # Required: version published by your build
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+# This application version supports one process with file-based H2 persistence.
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: "" # Empty uses the cluster default
+  size: 2Gi
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+# Bootstrap config only. Runtime editor changes persist under /app/data.
+connections:
+  artifactory: {}
+  secretServers: {}
+  credentials: {}
+  imageSources: {}
+# Existing Kubernetes Secret with environment-variable keys; no values in this chart.
+environmentSecret: ""
+# Optional existing Secret containing a plain bearer token under key `token`.
+# Refer to /var/run/secrets/delinea/token in a file-mode Secret Server connection.
+tokenSecret: ""
+# Shared network access is intentionally unavailable in this app version.
+service:
+  enabled: false
+  port: 8080
+ingress:
+  enabled: false
+  className: ""
+  host: ""
+  tlsSecret: ""

@@ -1,0 +1,27 @@
+# Initial read-only pilot: replace placeholders, then copy to .local/connections.yaml.
+# This file contains references only. Enter your vault login in the browser.
+artifactory:
+  office:
+    apiBaseUrl: https://artifactory.example.invalid/artifactory/api/docker
+    credentialRef: registry-reader
+secretServers:
+  office-vault:
+    apiBaseUrl: https://passwordvault.example.invalid/SecretServer/api/v1
+    authMode: portal
+    tokenUrl: https://passwordvault.example.invalid/SecretServer/oauth2/token
+credentials:
+  registry-reader:
+    provider: delinea
+    secretServerRef: office-vault
+    secretId: '12345'
+    usernameFieldSlug: username
+    passwordFieldSlug: password
+imageSources:
+  office-dev:
+    displayName: Office dev pilot
+    connectionRef: office
+    repositoryKey: REPLACE_WITH_DOCKER_REPOSITORY_KEY
+    imagePaths:
+      ps-spoolers-smtp-data-producer: REPLACE_WITH_IMAGE_PATH
+    usernameRequired: false
+    pullRepositoryTemplate: artifactory.example.invalid/{repositoryKey}/{image}

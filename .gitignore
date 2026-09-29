@@ -1,0 +1,23 @@
+# Generated build output and runtime state
+/target/
+/data/
+/.local/
+*.log
+*.pid
+# Local implementation notes
+/TASK.md
+# Local credentials and deployment overrides
+.env
+.env.*
+!.env.example
+**/values.local*.yaml
+**/values.local*.yml
+*.kubeconfig
+# Generated Helm packages/dependencies (no dependencies currently)
+/ckp/helm/*/charts/*.tgz
+/ckp/helm/*.tgz
+# Editor and operating system files
+.DS_Store
+.idea/
+*.iml
+.vscode/

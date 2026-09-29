@@ -1,0 +1,7 @@
+Access this single-user pilot through Kubernetes port-forwarding:
+  kubectl --context <your-context> --namespace {{ .Release.Namespace }} port-forward deployment/{{ include "orchestrator.name" . }} 8080:8080
+Then open http://127.0.0.1:8080.
+The local port must be free. Cluster Service/Ingress access is unavailable in this app version.
+Persistence: {{ if .Values.persistence.enabled }}enabled; back up the data volume before replacing it.{{ else }}disabled; pod replacement loses history and runtime settings.{{ end }}
+
+Mode: {{ .Values.mode }}. Real mode currently supports live read-only integrations; deployment/load execution is unavailable.

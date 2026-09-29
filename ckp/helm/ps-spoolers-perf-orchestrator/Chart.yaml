@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ps-spoolers-perf-orchestrator
+description: Performance orchestrator for a single-user CKP pilot accessed through port-forwarding
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

@@ -1,0 +1,15 @@
+{{- if .Values.service.enabled }}
+{{- fail "Service access is not supported by this loopback-only app version. Use kubectl port-forward deployment/<release>. Shared authentication must be implemented first." }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "orchestrator.name" . }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "orchestrator.selector" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+{{- end }}

@@ -1,0 +1,4 @@
+artifactory: {}
+secretServers: {}
+credentials: {}
+imageSources: {}

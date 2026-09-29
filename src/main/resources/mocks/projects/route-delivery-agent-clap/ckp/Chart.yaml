@@ -1,0 +1,4 @@
+apiVersion: v2
+name: route-delivery-agent-clap
+version: 0.1.0
+appVersion: REPLACE_VERSION

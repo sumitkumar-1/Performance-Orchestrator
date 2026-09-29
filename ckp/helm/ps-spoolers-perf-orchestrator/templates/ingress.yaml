@@ -1,0 +1,23 @@
+{{- if .Values.ingress.enabled }}
+{{- fail "Ingress is not supported by this loopback-only app version. Use pod port-forwarding until shared authentication is implemented." }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "orchestrator.name" . }}
+spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  tls:
+    - secretName: {{ .Values.ingress.tlsSecret | quote }}
+      hosts: [{{ .Values.ingress.host | quote }}]
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "orchestrator.name" . }}
+                port:
+                  name: http
+{{- end }}

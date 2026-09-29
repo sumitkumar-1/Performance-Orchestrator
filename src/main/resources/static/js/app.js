@@ -1,0 +1,995 @@
+import { el, labeled, input, select } from "./dom.js";
+import { deploymentEditor } from "./deployments.js";
+const app = document.querySelector("#app");
+const terminal = new Set([
+  "SUCCEEDED",
+  "FAILED",
+  "CANCELLED",
+  "NEEDS_ATTENTION",
+]);
+let session,
+  catalog,
+  profiles = [],
+  poll,
+  routeGeneration = 0;
+let pageCleanup = () => {};
+const $ = (selector, root = document) => root.querySelector(selector);
+const button = (text, fn, style = "") =>
+  el("button", { type: "button", class: style, onclick: () => busy(fn) }, text);
+const link = (text, href, style = "") => el("a", { href, class: style }, text);
+const pill = (text) =>
+  el(
+    "span",
+    {
+      class: `pill ${["FAILED", "NEEDS_ATTENTION", "FAIL"].includes(text) ? "bad" : ""}`,
+    },
+    text.replaceAll("_", " "),
+  );
+const pretty = (value) => JSON.stringify(value, null, 2);
+const time = (value) =>
+  value ? new Date(value).toLocaleString() : "Unavailable";
+function toast(message) {
+  $("#notice").textContent = message;
+  setTimeout(() => {
+    $("#notice").textContent = "";
+  }, 5000);
+}
+async function api(path, options = {}) {
+  const response = await fetch("/api/v1" + path, {
+    ...options,
+    headers: {
+      Accept: "application/json",
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(session ? { [session.csrfHeader]: session.csrfToken } : {}),
+      ...options.headers,
+    },
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  if (!response.ok) {
+    let error;
+    try {
+      error = await response.json();
+    } catch {
+      error = { message: `Request failed (${response.status})` };
+    }
+    throw new Error(
+      (error.field ? error.field + ": " : "") +
+        (error.message || `Request failed (${response.status})`),
+    );
+  }
+  return response.json();
+}
+async function busy(fn) {
+  try {
+    await fn();
+  } catch (error) {
+    showError(error.message);
+  }
+}
+function showError(message) {
+  let node = $("#error", app);
+  if (!node) {
+    node = el("div", { id: "error", class: "error", role: "alert" });
+    app.prepend(node);
+  }
+  node.textContent = message;
+  node.scrollIntoView({ block: "nearest" });
+}
+function heading(eyebrow, title, subtitle, action) {
+  return el(
+    "div",
+    { class: "heading" },
+    el(
+      "div",
+      {},
+      el("p", { class: "eyebrow" }, eyebrow),
+      el("h1", {}, title),
+      el("p", { class: "muted" }, subtitle),
+    ),
+    action,
+  );
+}
+function detail(title, value) {
+  return el(
+    "details",
+    {},
+    el("summary", {}, title),
+    el("pre", {}, typeof value === "string" ? value : pretty(value)),
+  );
+}
+function stat(title, value, foot) {
+  return el(
+    "div",
+    { class: "stat" },
+    el("span", {}, title),
+    el("strong", {}, value),
+    el("small", {}, foot),
+  );
+}
+async function loadCatalog() {
+  const [env, services, sources, scenarios] = await Promise.all(
+    ["/environments", "/services", "/image-sources", "/scenarios"].map((p) =>
+      api(p),
+    ),
+  );
+  catalog = { env, services, sources, scenarios };
+  profiles = await api("/profiles");
+}
+function runTable(runs) {
+  if (!runs.length)
+    return el(
+      "div",
+      { class: "card empty" },
+      "No runs yet. Start with a saved profile or configure a new run.",
+    );
+  return el(
+    "div",
+    { class: "table-wrap" },
+    el(
+      "table",
+      {},
+      el(
+        "thead",
+        {},
+        el(
+          "tr",
+          {},
+          ["RUN", "ENVIRONMENT", "STATUS", "PERFORMANCE", "STARTED"].map((t) =>
+            el("th", {}, t),
+          ),
+        ),
+      ),
+      el(
+        "tbody",
+        {},
+        runs.map((r) =>
+          el(
+            "tr",
+            {},
+            el("td", {}, link(r.id.slice(0, 8), "#run/" + r.id)),
+            el("td", {}, r.environment),
+            el("td", {}, pill(r.state)),
+            el("td", {}, r.verdict.replaceAll("_", " ")),
+            el("td", {}, time(r.createdAt)),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+async function launch(body) {
+  const run = await api("/runs", {
+    method: "POST",
+    body,
+    headers: { "Idempotency-Key": crypto.randomUUID() },
+  });
+  location.hash = "#run/" + run.id;
+}
+async function dashboard() {
+  const runs = await api("/runs");
+  const active = runs.filter((r) => !terminal.has(r.state)).length;
+  app.append(
+    heading(
+      "WORKSPACE OVERVIEW",
+      "Performance, with a plan.",
+      "Prepare environments. Run repeatable tests. Keep the evidence.",
+      link("+ Configure a run", "#configure", "button primary"),
+    ),
+    el(
+      "div",
+      { class: "banner" },
+      "Simulation workspace — deployments and performance measurements are synthetic. Your clusters and source projects remain untouched.",
+    ),
+    el(
+      "div",
+      { class: "stats" },
+      stat(
+        "Active runs",
+        active,
+        "Persistent execution, independent of your browser",
+      ),
+      stat(
+        "Available environments",
+        Object.values(catalog.env).filter((e) => e.available).length,
+        "One mutating run per environment",
+      ),
+      stat(
+        "Saved profiles",
+        profiles.length,
+        "Repeatable configurations, ready to run",
+      ),
+    ),
+  );
+  app.append(
+    el(
+      "div",
+      { class: "section-heading" },
+      el("h2", {}, "Saved profiles"),
+      link("Create profile", "#configure"),
+    ),
+  );
+  app.append(
+    el(
+      "div",
+      { class: "grid" },
+      profiles.map((saved) =>
+        el(
+          "article",
+          { class: "card" },
+          el(
+            "div",
+            { class: "card-head" },
+            el(
+              "div",
+              {},
+              el("h3", {}, saved.profile.name),
+              el(
+                "span",
+                { class: "subtle" },
+                `${saved.profile.targetEnvironment} · revision ${saved.revision}`,
+              ),
+            ),
+            pill("SAVED"),
+          ),
+          el(
+            "p",
+            { class: "muted" },
+            `${saved.profile.loadGenerator.virtualUsers} virtual users · ${saved.profile.loadGenerator.measurementSeconds}s measurement · ${saved.profile.simulationCase.toLowerCase().replaceAll("_", " ")}`,
+          ),
+          el(
+            "div",
+            { class: "service-chips" },
+            saved.profile.services.map((s) =>
+              el(
+                "span",
+                { class: "chip" },
+                `${s.serviceId} / ${s.build.sourceRef}`,
+              ),
+            ),
+          ),
+          el(
+            "div",
+            { class: "card-actions" },
+            button(
+              "Run now",
+              () => launch({ profileId: saved.id, revision: saved.revision }),
+              "primary",
+            ),
+            link("Edit", "#configure/" + saved.id, "button"),
+          ),
+        ),
+      ),
+    ),
+  );
+  app.append(
+    el(
+      "div",
+      { class: "section-heading" },
+      el("h2", {}, "Recent runs"),
+      link("View history", "#history"),
+    ),
+    runTable(runs.slice(0, 6)),
+    el(
+      "div",
+      { class: "section-heading" },
+      el("h2", {}, "Environment availability"),
+    ),
+    el(
+      "div",
+      { class: "environment-list" },
+      Object.entries(catalog.env).map(([id, value]) =>
+        el(
+          "div",
+          { class: "environment" },
+          el("span", { class: "dot" }),
+          id,
+          el("small", {}, value.available ? "Available" : "Reserved"),
+        ),
+      ),
+    ),
+  );
+}
+function defaultProfile() {
+  return {
+    name: "",
+    targetEnvironment: "sandbox",
+    services: [],
+    loadGenerator: {
+      templateRef: "smoke",
+      virtualUsers: 10,
+      requestsPerSecond: 100,
+      warmupSeconds: 1,
+      measurementSeconds: 5,
+      configurationOverlay: "",
+    },
+    maxRunDurationSeconds: 60,
+    thresholds: [
+      { metric: "latency_p95_ms", maximum: 500, required: true },
+      { metric: "error_rate", maximum: 0.01, required: true },
+    ],
+    simulationCase: "SUCCESS",
+  };
+}
+async function configure(id) {
+  let saved = id ? await api("/profiles/" + id) : null,
+    p = saved?.profile || defaultProfile();
+  app.append(
+    heading(
+      "CONFIGURATION",
+      saved ? "Edit performance profile" : "Configure a performance run",
+      "Choose each service’s source and version independently.",
+    ),
+  );
+  const form = el("form");
+  form.addEventListener("submit", (e) => e.preventDefault());
+  const name = input(p.name),
+    environment = select(
+      Object.keys(catalog.env).map((e) => [e, e]),
+      p.targetEnvironment,
+    );
+  const top = el(
+    "section",
+    { class: "card" },
+    el("h2", {}, "01  Profile & target"),
+    el(
+      "div",
+      { class: "form-grid spacer" },
+      labeled("Profile name", name),
+      labeled("Target environment", environment),
+    ),
+  );
+  form.append(top);
+  const targetHint = el("div", { class: "target-hint" });
+  const deployments = deploymentEditor({
+    catalog,
+    api,
+    environment: environment.value,
+    selections: p.services,
+  });
+  const describeEnvironment = () => {
+    const config = catalog.env[environment.value].configuration;
+    targetHint.replaceChildren(
+      el(
+        "p",
+        {},
+        "The target environment selects the cluster and each service’s namespace, release name and values files. It does not select an image source.",
+      ),
+      el(
+        "div",
+        { class: "service-chips" },
+        el("span", { class: "chip" }, `Cluster: ${config.clusterIdentity}`),
+        el(
+          "span",
+          { class: "chip" },
+          `Load generator: ${config.loadGeneratorNamespace}`,
+        ),
+      ),
+    );
+  };
+  environment.addEventListener("change", () => {
+    deployments.setEnvironment(environment.value);
+    describeEnvironment();
+  });
+  describeEnvironment();
+  top.append(targetHint);
+  form.append(deployments.element);
+  pageCleanup = () => deployments.dispose();
+  const load = p.loadGenerator;
+  const scenario = select(
+      Object.entries(catalog.scenarios).map(([id, s]) => [id, s.displayName]),
+      load.templateRef,
+    ),
+    users = input(load.virtualUsers, "number", { min: 1 }),
+    rps = input(load.requestsPerSecond, "number", { min: 1 }),
+    warmup = input(load.warmupSeconds, "number", { min: 0 }),
+    measurement = input(load.measurementSeconds, "number", { min: 1 }),
+    max = input(p.maxRunDurationSeconds, "number", { min: 15 }),
+    caseSelect = select(
+      [
+        "SUCCESS",
+        "DEPLOYMENT_FAILURE",
+        "READINESS_TIMEOUT",
+        "MISSING_METRICS",
+        "THRESHOLD_FAILURE",
+        "CLEANUP_FAILURE",
+      ].map((v) => [v, v.toLowerCase().replaceAll("_", " ")]),
+      p.simulationCase,
+    ),
+    loadOverlay = el("textarea", {}, load.configurationOverlay || "");
+  const thresholds = el("textarea", {}, pretty(p.thresholds));
+  form.append(
+    el(
+      "section",
+      { class: "card spacer" },
+      el("h2", {}, "03  Load & evaluation"),
+      el(
+        "div",
+        { class: "form-grid spacer" },
+        labeled("Scenario", scenario),
+        labeled("Simulation behavior", caseSelect),
+        labeled("Virtual users", users),
+        labeled("Requests per second", rps),
+        labeled("Warmup (seconds)", warmup),
+        labeled("Measurement (seconds)", measurement),
+        labeled("Maximum run duration (seconds)", max),
+        labeled("Scenario YAML overlay", loadOverlay),
+        labeled("Thresholds (JSON; maximum is inclusive)", thresholds),
+      ),
+    ),
+  );
+  const read = () => ({
+    name: name.value,
+    targetEnvironment: environment.value,
+    services: deployments.selections(),
+    loadGenerator: {
+      templateRef: scenario.value,
+      virtualUsers: Number(users.value),
+      requestsPerSecond: Number(rps.value),
+      warmupSeconds: Number(warmup.value),
+      measurementSeconds: Number(measurement.value),
+      configurationOverlay: loadOverlay.value,
+    },
+    maxRunDurationSeconds: Number(max.value),
+    simulationCase: caseSelect.value,
+    thresholds: JSON.parse(thresholds.value),
+  });
+  form.append(
+    el(
+      "div",
+      { class: "form-footer" },
+      button(
+        "Save profile",
+        async () => {
+          saved = await api(saved ? "/profiles/" + saved.id : "/profiles", {
+            method: saved ? "PUT" : "POST",
+            body: { revision: saved?.revision, profile: read() },
+          });
+          toast("Profile saved · revision " + saved.revision);
+        },
+        "primary",
+      ),
+      button("Preview execution plan", async () => {
+        const plan = await api("/plans", {
+          method: "POST",
+          body: { profile: read() },
+        });
+        location.hash = "#plan/" + plan.id;
+      }),
+    ),
+  );
+  app.append(form);
+}
+async function planScreen(id) {
+  const plan = await api("/plans/" + id);
+  app.append(
+    heading(
+      "IMMUTABLE EXECUTION PLAN",
+      plan.profile.name,
+      `${plan.profile.targetEnvironment} · ${plan.services.length} services · expires ${time(plan.expiresAt)}`,
+      button("Run this plan", () => launch({ planId: id }), "primary"),
+    ),
+    el(
+      "div",
+      { class: "banner" },
+      plan.warnings.map((w) => el("div", {}, w)),
+    ),
+    el(
+      "div",
+      { class: "grid" },
+      plan.services.map((s) =>
+        el(
+          "section",
+          { class: "card" },
+          el(
+            "div",
+            { class: "card-head" },
+            el("h2", {}, s.serviceId),
+            pill(s.action),
+          ),
+          el(
+            "p",
+            { class: "muted" },
+            `${s.image.sourceRef} / ${s.image.version} → ${s.namespace}`,
+          ),
+          detail("Before / after configuration", s.changes),
+          detail("Pinned image & prepared inputs", s),
+        ),
+      ),
+    ),
+    el(
+      "section",
+      { class: "card spacer" },
+      el("h2", {}, "Load settings & policy"),
+      el(
+        "p",
+        { class: "muted" },
+        "Service versions remain deployed. Only owned simulated load resources are stopped.",
+      ),
+      detail("Load configuration", plan.profile.loadGenerator),
+      detail("Plan checksum", plan.checksum),
+    ),
+  );
+}
+async function history() {
+  app.append(
+    heading(
+      "EXECUTION HISTORY",
+      "Every run, recorded.",
+      "Inspect outcomes, compare inputs, and download execution evidence.",
+    ),
+  );
+  const env = select(
+      [
+        ["", "All environments"],
+        ...Object.keys(catalog.env).map((x) => [x, x]),
+      ],
+      "",
+    ),
+    state = select(
+      [
+        ["", "All outcomes"],
+        ...["SUCCEEDED", "FAILED", "CANCELLED", "NEEDS_ATTENTION"].map((x) => [
+          x,
+          x,
+        ]),
+      ],
+      "",
+    ),
+    version = input("");
+  const results = el("div");
+  const refresh = async () => {
+    const params = new URLSearchParams();
+    if (env.value) params.set("environment", env.value);
+    if (state.value) params.set("outcome", state.value);
+    if (version.value) params.set("version", version.value);
+    results.replaceChildren(runTable(await api("/runs?" + params)));
+  };
+  app.append(
+    el(
+      "div",
+      { class: "toolbar" },
+      labeled("Environment", env),
+      labeled("Outcome", state),
+      labeled("Exact service version", version),
+      button("Filter", refresh),
+    ),
+    results,
+  );
+  await refresh();
+}
+async function runDetails(id, generation) {
+  const initial = await api("/runs/" + id),
+    plan = await api("/plans/" + initial.planId);
+  const status = el("div"),
+    timeline = el("ol", { class: "timeline" }),
+    metrics = el("div", { class: "metrics" }),
+    actions = el("div", { class: "card-actions" }),
+    monitoring = el("p", { class: "muted" });
+  app.append(
+    heading(
+      "RUN DETAILS",
+      plan.profile.name,
+      `${plan.profile.targetEnvironment} · ${id}`,
+    ),
+    status,
+    el(
+      "div",
+      { class: "detail-grid spacer" },
+      el(
+        "section",
+        { class: "card" },
+        el("h2", {}, "Execution timeline"),
+        timeline,
+      ),
+      el(
+        "div",
+        {},
+        el(
+          "section",
+          { class: "card" },
+          el("h2", {}, "Performance measurements"),
+          monitoring,
+          metrics,
+          actions,
+        ),
+        el(
+          "section",
+          { class: "card spacer" },
+          el("h2", {}, "Pinned inputs"),
+          el("p", { class: "muted" }, "Inputs are frozen for this execution."),
+          link("Inspect original plan", "#plan/" + plan.id),
+          detail(
+            "Selected services",
+            plan.services.map((s) => ({
+              service: s.serviceId,
+              source: s.image.sourceRef,
+              version: s.image.version,
+              namespace: s.namespace,
+            })),
+          ),
+          button("Rerun original pinned plan", () =>
+            launch({ planId: plan.id }),
+          ),
+          plan.profileId
+            ? button("Run current saved profile", () =>
+                launch({ profileId: plan.profileId }),
+              )
+            : null,
+        ),
+      ),
+    ),
+  );
+  let cursor = 0;
+  const update = async () => {
+    const [run, events] = await Promise.all([
+      api("/runs/" + id),
+      api(`/runs/${id}/events?after=${cursor}`),
+    ]);
+    if (generation !== routeGeneration) return;
+    status.replaceChildren(
+      el(
+        "div",
+        { class: "inline" },
+        pill(run.state),
+        pill(run.verdict),
+        el("span", { class: "muted" }, run.message),
+      ),
+    );
+    for (const event of events) {
+      timeline.append(
+        el(
+          "li",
+          {},
+          el("time", {}, time(event.time)),
+          el("strong", {}, event.state.replaceAll("_", " ")),
+          el("p", {}, event.message),
+        ),
+      );
+      cursor = event.id;
+    }
+    const units = {
+      request_count: "requests",
+      throughput_rps: "requests / second",
+      error_rate: "error ratio",
+      latency_p95_ms: "p95 latency / ms",
+    };
+    metrics.replaceChildren(
+      ...Object.entries(units).map(([key, label]) =>
+        el(
+          "div",
+          { class: "metric" },
+          el("strong", {}, run.metrics[key] ?? "—"),
+          el("span", {}, label),
+        ),
+      ),
+    );
+    monitoring.textContent = `Synthetic data · updated ${time(run.updatedAt)}. CPU, memory and logs unavailable.`;
+    actions.replaceChildren();
+    if (!terminal.has(run.state))
+      actions.append(
+        button(
+          "Cancel run",
+          () => api("/runs/" + id + "/cancel", { method: "POST" }),
+          "danger",
+        ),
+      );
+    else {
+      actions.append(
+        link("View report", `/api/v1/runs/${id}/report`, "button"),
+        link(
+          "JSON summary",
+          `/api/v1/runs/${id}/artifacts/summary.json`,
+          "button",
+        ),
+      );
+      if (run.state === "NEEDS_ATTENTION")
+        actions.append(
+          button("Verify cleanup & release", async () => {
+            await api("/runs/" + id + "/recover", { method: "POST" });
+            await update();
+          }),
+        );
+    }
+    const dashboard = catalog.env[run.environment]?.configuration.dashboardUrl;
+    if (dashboard && /^https:\/\//.test(dashboard))
+      actions.append(link("Open Grafana", dashboard, "button"));
+    if (!terminal.has(run.state)) poll = setTimeout(refresh, 1500);
+  };
+  const refresh = async () => {
+    try {
+      await update();
+    } catch (error) {
+      if (generation === routeGeneration) {
+        showError(error.message);
+        poll = setTimeout(refresh, 3000);
+      }
+    }
+  };
+  await refresh();
+}
+async function configurationEditor() {
+  let document = await api("/configuration");
+  const sections = [
+    ["catalog.environments", "Environments & limits"],
+    ["catalog.services", "Services, namespaces & releases"],
+    ["catalog.imageSources", "Mock image sources & versions"],
+    ["catalog.scenarios", "Load scenario templates"],
+    ["connections.artifactory", "Artifactory connections"],
+    ["connections.secretServers", "Secret Server authentication"],
+    ["connections.credentials", "Credential references & secret IDs"],
+    ["connections.imageSources", "Real image-source mappings"],
+  ].filter(([key]) => session.mode === "simulation" || key !== "catalog.imageSources");
+  const selector = select(sections, sections[0][0]);
+  const editor = el("textarea", { rows: 20, spellcheck: "false", "aria-label": "Configuration JSON" });
+  let selected = selector.value;
+  const value = () => { const [group, section] = selected.split("."); return document[group][section]; };
+  const capture = () => {
+    const [group, section] = selected.split(".");
+    document[group][section] = JSON.parse(editor.value);
+  };
+  editor.value = pretty(value());
+  selector.addEventListener("change", () => {
+    try { capture(); selected = selector.value; editor.value = pretty(value()); }
+    catch { selector.value = selected; showError("Fix the JSON in this section before switching sections."); }
+  });
+  const status = el("p", { class: "muted", role: "status" }, "Changes apply when saved. Enter secret references only, never passwords or tokens.");
+  const save = button("Save configuration", async () => {
+    save.disabled = true;
+    try {
+      capture();
+      document = await api("/configuration", { method: "PUT", body: document });
+      await route();
+      toast("Configuration saved. New requests use the updated settings.");
+    } finally { save.disabled = false; }
+  }, "primary");
+  const reload = button("Discard edits & reload", async () => {
+    document = await api("/configuration");
+    editor.value = pretty(value());
+    status.textContent = "Loaded the current saved configuration.";
+  });
+  return el("details", { class: "card spacer" }, el("summary", {}, "Edit runtime configuration"),
+    el("p", { class: "muted" }, "Saved settings survive restarts. Active runs retain their prepared inputs; older unsubmitted plans must be prepared again after catalog changes. Connection changes require a fresh Secret Server sign-in."),
+    labeled("Configuration section", selector), labeled("JSON", editor), status,
+    el("div", { class: "card-actions" }, save, reload));
+}
+
+async function settings() {
+  app.append(
+    heading(
+      "WORKSPACE SETTINGS",
+      "Connections & catalog",
+      "Edit runtime configuration and manage connections; secrets stay on the backend.",
+    ),
+    el(
+      "div",
+      { class: "banner" },
+      session.mode === "real"
+        ? "Real integration mode: configured Artifactory discovery and Delinea authentication are available. Deployment, load execution and live metrics are not yet connected. No simulation data is generated."
+        : "Simulation mode: deployments and performance results are synthetic. Configured read-only connections can also be tested here.",
+    ),
+    el(
+      "div",
+      { class: "grid" },
+      el(
+        "section",
+        { class: "card" },
+        el("h2", {}, "Environment catalog"),
+        el(
+          "p",
+          { class: "muted" },
+          session.mode === "real" ? "Register environment and namespace mappings here. These mappings do not enable deployment until the real execution adapters are connected." : "An environment is a simulated target cluster plus namespaces and limits. stging is preserved exactly.",
+        ),
+        detail("Environment mappings", catalog.env),
+      ),
+      el(
+        "section",
+        { class: "card" },
+        el("h2", {}, "Artifactory & Secret Server"),
+        el(
+          "p",
+          { class: "muted" },
+          "These are separate connections: a Delinea URL and access token retrieve a secret; each Artifactory URL has its own credential reference to that secret. Simulation builds use neither connection.",
+        ),
+        detail("Image sources", catalog.sources),
+      ),
+      el(
+        "section",
+        { class: "card" },
+        el("h2", {}, "Service projects"),
+        el(
+          "p",
+          { class: "muted" },
+          session.mode === "real" ? "Remote project retrieval and real planning are not connected yet. Artifactory service-to-image mappings can be edited independently below." : "Current projects use packaged mock resources. Namespace, release name and values paths are configured per service and target.",
+        ),
+        detail("Namespaces & installation bindings", catalog.services),
+      ),
+      el(
+        "section",
+        { class: "card" },
+        el("h2", {}, "Scenario templates"),
+        detail("Available scenarios", catalog.scenarios),
+      ),
+    ),
+  );
+  try {
+    app.append(await configurationEditor());
+    const config = await api("/connections");
+    const connectionCard = el(
+      "section",
+      { class: "card spacer" },
+      el("h2", {}, "Configured read-only connections"),
+      detail("Connection status", config),
+    );
+    app.append(connectionCard);
+    const authStates = await api("/secret-auth");
+    for (const [connection, initial] of Object.entries(authStates)) {
+      const status = el("p", { role: "status" });
+      const username = input("", "text", { autocomplete: "username", required: true, maxlength: 512 });
+      const password = input("", "password", { autocomplete: "current-password", required: true, maxlength: 4096 });
+      const form = el("form", { class: "spacer" });
+      const signIn = el("button", { type: "submit" }, "Sign in to Secret Server");
+      const signOut = button("Clear Secret Server session", async () => {
+        await api(`/secret-auth/${encodeURIComponent(connection)}`, { method: "DELETE" });
+        render((await api("/secret-auth"))[connection]);
+      });
+      const render = (state) => {
+        status.textContent = state.state === "AUTHENTICATED"
+          ? `Signed in until ${time(state.expiresAt)}`
+          : state.mode === "portal" ? "Sign in to retrieve this connection’s secrets."
+          : `Administrator-provided token (${state.mode}); availability is checked when used.`;
+        signOut.hidden = state.state !== "AUTHENTICATED";
+      };
+      render(initial);
+      form.append(el("h3", {}, `Secret Server: ${connection}`), status);
+      if (initial.mode === "portal") {
+        form.append(el("div", { class: "form-grid" }, labeled("AD username", username), labeled("AD password", password)),
+          el("div", { class: "card-actions" }, signIn, signOut));
+        form.addEventListener("submit", (event) => {
+          event.preventDefault();
+          if (signIn.disabled) return;
+          signIn.disabled = true;
+          const credentials = { username: username.value, password: password.value };
+          password.value = "";
+          busy(async () => {
+            try {
+              render(await api(`/secret-auth/${encodeURIComponent(connection)}`, { method: "POST", body: credentials }));
+            } catch (error) {
+              render({ mode: "portal", state: "SIGN_IN_REQUIRED" });
+              throw error;
+            } finally {
+              credentials.password = "";
+              signIn.disabled = false;
+            }
+          });
+        });
+      }
+      connectionCard.append(form);
+    }
+    for (const [sourceId, source] of Object.entries(config.imageSources)) {
+      const service = select(
+        Object.keys(source.imagePaths).map((id) => [id, id]),
+        Object.keys(source.imagePaths)[0],
+      );
+      const username = input("");
+      username.disabled = !source.usernameRequired;
+      const versions = select([["", "Choose a discovered version"]], "");
+      const evidence = el("pre", {}, "No request made yet.");
+      let cursor = "";
+      const browse = async (more = false) => {
+        const base = `/registry-sources/${encodeURIComponent(sourceId)}/services/${encodeURIComponent(service.value)}/images`;
+        const params = new URLSearchParams({
+          limit: "50",
+          cursor: more ? cursor : "",
+        });
+        if (source.usernameRequired) params.set("username", username.value);
+        const result = await api(base + "?" + params);
+        if (!more)
+          versions.replaceChildren(
+            el("option", { value: "" }, "Choose a discovered version"),
+          );
+        result.versions.forEach((tag) =>
+          versions.append(el("option", { value: tag }, tag)),
+        );
+        cursor = result.nextCursor;
+        evidence.textContent = pretty({
+          repository: result.repository,
+          discoveredAt: result.discoveredAt,
+          nextCursor: cursor,
+        });
+      };
+      connectionCard.append(
+        el(
+          "section",
+          { class: "spacer" },
+          el("h3", {}, source.displayName),
+          el(
+            "div",
+            { class: "form-grid" },
+            labeled("Service", service),
+            labeled("Artifact-owner username", username),
+            labeled("Available version", versions),
+          ),
+          el(
+            "div",
+            { class: "card-actions" },
+            button("Discover versions", () => browse(false)),
+            button("Next page", () =>
+              cursor ? browse(true) : toast("No further page available"),
+            ),
+            button("Resolve digest", async () => {
+              if (!versions.value)
+                throw new Error("Choose a discovered version first");
+              const params = new URLSearchParams();
+              if (source.usernameRequired)
+                params.set("username", username.value);
+              evidence.textContent = pretty(
+                await api(
+                  `/registry-sources/${encodeURIComponent(sourceId)}/services/${encodeURIComponent(service.value)}/images/${encodeURIComponent(versions.value)}?` +
+                    params,
+                ),
+              );
+            }),
+          ),
+          evidence,
+        ),
+      );
+      service.addEventListener("change", () => {
+        versions.replaceChildren(
+          el("option", { value: "" }, "Choose a discovered version"),
+        );
+        cursor = "";
+      });
+      username.addEventListener("change", () => {
+        versions.replaceChildren(
+          el("option", { value: "" }, "Choose a discovered version"),
+        );
+        cursor = "";
+      });
+    }
+  } catch (error) {
+    showError(error.message);
+  }
+}
+function realOverview() {
+  app.append(heading("REAL INTEGRATIONS", "Connect your services", "Real connections only. No demo services or synthetic test results are loaded."),
+    el("section", { class: "card" }, el("h2", {}, "Available now"),
+      el("p", {}, "Configure Artifactory URLs, repository paths and credential references. Authenticate to Delinea, discover image versions and resolve their digests."),
+      link("Configure connections", "#settings", "button primary")),
+    el("section", { class: "card spacer" }, el("h2", {}, "Execution is not connected yet"),
+      el("p", {}, "Real deployment, readiness, load-generator control and metrics need their organizational integration contracts. Planning and run submission are unavailable in this mode."),
+      el("p", { class: "muted" }, "Restart with --mode simulation to try the complete mock workflow. Mode changes require a restart; runtime settings cannot switch execution mode.")));
+}
+
+async function route() {
+  pageCleanup();
+  pageCleanup = () => {};
+  clearTimeout(poll);
+  const generation = ++routeGeneration;
+  app.replaceChildren(el("p", { class: "muted" }, "Loading workspace…"));
+  const [page = "dashboard", id] = (
+    location.hash.slice(1) || "dashboard"
+  ).split("/");
+  document
+    .querySelectorAll("nav a")
+    .forEach((a) => a.classList.toggle("active", a.hash === "#" + page));
+  try {
+    await loadCatalog();
+    if (generation !== routeGeneration) return;
+    app.replaceChildren();
+    if (session.mode === "real" && !["settings", "history"].includes(page)) realOverview();
+    else if (page === "configure") await configure(id);
+    else if (page === "plan") await planScreen(id);
+    else if (page === "history") await history();
+    else if (page === "run") await runDetails(id, generation);
+    else if (page === "settings") await settings();
+    else await dashboard();
+  } catch (error) {
+    showError(error.message);
+  }
+}
+session = await api("/session");
+$("#mode-badge").textContent = session.mode === "real" ? "REAL · READ-ONLY" : "SIMULATION";
+$("#workspace-mode").textContent = session.mode === "real" ? "Real integrations · configured credentials required" : "Simulation mode · synthetic deployments and results";
+if (session.mode === "real") document.querySelector('nav a[href="#configure"]').hidden = true;
+window.addEventListener("hashchange", route);
+await route();
