@@ -68,7 +68,7 @@ For CKP, set `mode: simulation` or `mode: real` in your Helm values. Changing it
 
 Use **Connections & catalog → Edit runtime configuration** to update environments, limits, services, namespace/release mappings, image sources, scenarios, connections and credential references. Saves are validated and applied without restart. Conflicting edits are rejected; active runs retain their prepared inputs. Connection changes invalidate portal tokens and require a fresh sign-in.
 
-Saved overrides in `data/configuration.json` (or `data/real/configuration.json` in real mode) take precedence over packaged or externally supplied defaults on restart. Changes to resource files alone are not watched. Port, database, worker scheduling and application mode remain startup settings.
+Field-level overrides in `data/configuration.json` (or `data/real/configuration.json` in real mode) are applied over packaged or externally supplied defaults on restart. Untouched fields receive new defaults. Changes to resource files alone are not watched. Port, database, worker scheduling and application mode remain startup settings.
 
 Delinea authentication supports portal sign-in, an environment token or a mounted token file. Secrets are fetched using configured secret IDs and field slugs; passwords and tokens do not belong in configuration files. See [connection configuration](docs/adapters/connections.md) and [connection examples](docs/integration/examples/connections.yaml).
 
@@ -112,7 +112,7 @@ application:
 
 Helm merges these entries over base values. For a global-token authentication mode, remove the inherited portal token URL explicitly with `tokenUrl: null`, set `authMode: file` and `bearerTokenFile: /var/run/secrets/delinea/token`, and set the top-level `tokenSecret` to an existing Kubernetes Secret name. Alternatively, use `authMode: environment`, `bearerTokenEnvironmentVariable` and top-level `environmentSecret`. Never put passwords or tokens in values or `application`.
 
-The chart mounts `application` as additional Spring configuration. Chart-owned command-line arguments for mode, loopback address, port and connection/configuration file paths take precedence. ConfigMap changes trigger a rollout. **Saved portal settings still override bootstrap connection mappings**; update those through the portal if a persisted configuration exists. Other startup changes require restart/rollout. Local runs can override `orchestrator.connection-defaults` using normal Spring configuration or continue supplying `--orchestrator.connections=PATH`.
+The chart mounts `application` as additional Spring configuration. Chart-owned command-line arguments for mode, loopback address, port and connection/configuration file paths take precedence. ConfigMap changes trigger a rollout. **Saved portal changes override only the fields changed from startup settings**; update those through the portal if a persisted configuration exists. Other startup changes require restart/rollout. Local runs can override `orchestrator.connection-defaults` using normal Spring configuration or continue supplying `--orchestrator.connections=PATH`.
 
 Grafana/Loki URLs and per-namespace monitoring credentials remain documented integration contracts, not executable monitoring settings yet.
 
@@ -125,7 +125,7 @@ All editable sections have a startup configuration location:
 | Artifactory, Secret Server, credentials, real image sources | `orchestrator.connection-defaults` | `connections` |
 | Environments, services, mock image sources, scenarios | `orchestrator.catalog-defaults` | `catalog` |
 
-Real catalog defaults include a labeled perf3 environment, load-generator service and baseline scenario example based on the supplied paths. Limits and unknown fields are illustrative, not approved execution settings. Simulation still loads its packaged mock catalog. An explicit `orchestrator.catalog` or `orchestrator.connections` file takes precedence over the corresponding inline defaults. Real service entries validate metadata, namespace references, dependencies and relative paths without requiring a local checkout. Simulation still validates project files and installation bindings. Remote Git retrieval and real execution remain unavailable.
+Real defaults cover sandbox, dev, qa, stable, perf and perf3. Each instance exposes only its startup-selected environment. Service namespace/release/values defaults are shared, with optional per-environment exceptions. Monitoring URLs and secret IDs are illustrative and must be replaced with organization-approved values. Real mode no longer requires simulation limits or allowedActions. Simulation still loads its packaged mock catalog. An explicit `orchestrator.catalog` or `orchestrator.connections` file takes precedence over the corresponding inline defaults. Real service entries validate metadata, namespace references, dependencies and relative paths without requiring a local checkout. Simulation still validates project files and installation bindings. Remote Git retrieval and real execution remain unavailable.
 
 For local overrides without rebuilding, create an ignored `.local/application.yaml` with only the properties you want to change:
 
@@ -158,13 +158,15 @@ Spring merges these startup properties over packaged defaults. On CKP, put the s
 
 In **Connections & catalog → Edit runtime configuration**:
 
-- The source label identifies startup settings versus saved runtime JSON. The editor initially shows the complete document; section views are also available.
+- The source label identifies startup settings versus saved runtime overrides. The editor initially shows the complete document; section views are also available.
 - **Save configuration** validates and applies all maps together immediately, then persists the complete configuration. Connection changes require a fresh vault sign-in.
 - **Export active configuration** downloads JSON containing the active catalog and connection references. It excludes unsaved editor drafts and does not resolve passwords or tokens. Arbitrary values entered in the catalog are included: do not put plaintext secrets there, and review exports before sharing.
-- **Import JSON…** loads an exported file into the Complete configuration editor, displaying the entire JSON document. Review the document or switch sections and click Save to validate/apply. Import replaces the complete configuration, must match simulation/real mode and is limited to 256 KiB. The destination's current edit revision is used; stale saves remain rejected.
-- **Load startup defaults into editor** loads the startup snapshot for review. Saving it replaces runtime settings with that snapshot but still persists an override.
+- **Import JSON…** loads an exported file into the Complete configuration editor, displaying the entire JSON document. Review the document or switch sections and click Save to validate/apply. Import previews a complete configuration, then saves its differences from startup defaults; it must match simulation/real mode and the instance environment/cluster and is limited to 256 KiB. The destination's current edit revision is used; stale saves remain rejected.
+- **Load startup defaults into editor** loads the startup snapshot for review. Saving it clears field overrides; an empty override file remains and future defaults apply.
 
-Saved runtime JSON has highest precedence over YAML/Helm, for the entire configuration rather than individual fields. It is created on the first save and survives restart. To return permanently to file-managed defaults, stop the app and move the saved configuration JSON to a backup location (keep the database), then restart. A new runtime configuration path is also an option for a local trial.
+Saved runtime JSON stores a versioned list of changed fields, including explicit removals. Arrays/lists are overridden as a whole. On restart these changes are applied to the latest startup defaults; unrelated default changes are retained. Configuration is validated before use, so incompatible defaults/overrides fail clearly instead of silently dropping user changes. A fresh PVC starts from defaults; a reinstall reusing a retained PVC retains overrides.
+
+Legacy full-document runtime JSON and full configuration exports remain readable. The next save converts them to field overrides relative to the current startup defaults. Since older files do not record the original baseline, all differences must be preserved; review and restore startup defaults if you want to discard stale legacy values.
 
 To import an export at startup, copy it to an ignored writable path and select it as the runtime configuration file:
 
@@ -172,7 +174,7 @@ To import an export at startup, copy it to an ignored writable path and select i
 ./scripts/run-local.sh run --mode real -- --orchestrator.configuration-file=.local/imported-runtime.json
 ```
 
-The file must already contain the complete exported JSON; if absent, startup defaults are used. Subsequent portal saves update this selected file. For CKP, an imported runtime JSON must be placed at the configured writable PVC path before startup; the chart does not provision exports onto the PVC. Keep exports separate from Spring YAML and Helm values—they use different document wrappers. Invalid imports are rejected rather than silently falling back to defaults.
+The file must already contain the complete exported JSON; if absent, startup defaults are used. Subsequent portal saves convert/update this selected file as a versioned override document. Use portal Export for a portable complete configuration, not the internal override file. For CKP, an imported runtime JSON must be placed at the configured writable PVC path before startup; the chart does not provision exports onto the PVC. Keep exports separate from Spring YAML and Helm values—they use different document wrappers. Invalid imports are rejected rather than silently falling back to defaults.
 
 ## Runtime data
 
@@ -248,4 +250,12 @@ Outstanding organization inputs are tracked in [open integration questions](docs
 
 Opening the real-mode UI prompts for AD credentials for a configured portal-mode Secret Server. Select the vault explicitly when multiple connections exist. Configure connections / Not now allow setup before authenticating. The password is cleared after submission; the backend exchanges it for a session-scoped token and returns status/expiry only. Expiry is tracked on the server and checked again before retrieving secrets; the UI schedules a sign-in prompt at expiry and rechecks when the tab becomes visible. Restart, expiry or connection edits can require sign-in again. No automatic password replay or token refresh is implemented.
 
-This is vault authentication for on-demand secret retrieval, not shared-user authorization for hosting the portal publicly. Simulation does not show the initial prompt; environment/file token providers do not ask for AD credentials. Existing saved runtime JSON still supersedes new example defaults—load startup defaults into the editor to review them before saving.
+This is vault authentication for on-demand secret retrieval, not shared-user authorization for hosting the portal publicly. Simulation does not show the initial prompt; environment/file token providers do not ask for AD credentials. Existing changed fields still override new example defaults—load startup defaults into the editor to review them before saving.
+
+## One instance per environment
+
+Deploy with `values-sandbox.yaml`, `values-dev.yaml`, `values-qa.yaml`, `values-stable.yaml`, `values-perf.yaml` or `values-perf3.yaml`. Their `targetEnvironment` setting is passed as `--orchestrator.target-environment` and cannot be changed by dashboard edits/imports. Locally, real mode defaults to sandbox; pass `--orchestrator.target-environment=perf3` to test another startup binding. Only the chosen environment appears in the effective catalog and export. Imports must match its environment ID and cluster identity.
+
+All environment defaults remain in source control. `deploymentDefaults` holds each service's shared namespace, release and values files. `deploymentByEnvironment` is only for exceptions. Load-profile YAML remains authoritative; the sample scenario is metadata until load-generator integration is implemented. Environment monitoring maps namespace-specific `logsCredentialRef` and `metricsCredentialRef` separately; querying those endpoints is still pending. Repository checkout, Helm execution and service-account RBAC are also pending and have not been enabled by these configuration changes.
+
+Example secret IDs/URLs are placeholders, not live organization credentials. Dashboard changes remain instance-local. Existing snapshots created for another environment/cluster must be reviewed and adapted before importing; the application refuses to switch its target to accommodate an import.

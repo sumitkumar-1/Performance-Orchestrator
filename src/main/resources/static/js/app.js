@@ -778,6 +778,10 @@ async function configurationEditor() {
       }
       if (imported.catalog.mode !== session.mode)
         throw new Error("Imported configuration must match the running mode.");
+      if (startup.environment && (Object.keys(imported.catalog.environments).length !== 1
+          || !imported.catalog.environments[startup.environment]
+          || imported.catalog.environments[startup.environment].clusterIdentity !== startup.configuration.catalog.environments[startup.environment].clusterIdentity))
+        throw new Error(`Import must match this instance's environment and cluster: ${startup.environment}`);
       document = { ...imported, revision: document.revision };
       selected = "all";
       selector.value = "all";
@@ -799,13 +803,14 @@ async function configurationEditor() {
     const baseline = await api("/configuration/startup");
     document = { ...baseline.configuration, revision: document.revision };
     editor.value = pretty(value());
-    status.textContent = "Loaded startup configuration into the editor. Review and save to replace runtime settings. Saving still creates an override; it does not remove the runtime JSON file.";
+    status.textContent = "Loaded startup configuration into the editor. Review and save to replace runtime settings. Saving clears dashboard overrides so future startup defaults apply. The runtime file remains as an empty override document.";
   });
   return el("details", { class: "card spacer" }, el("summary", {}, "Edit runtime configuration"),
     el("p", { class: "muted" }, startup.runtimeOverride
-      ? "Active source: saved runtime JSON. It takes precedence over startup YAML / Helm settings."
+      ? "Active source: startup settings plus saved dashboard changes. Only changed fields override startup defaults."
       : "Active source: startup YAML / Helm settings. No saved runtime override is loaded."),
     el("p", { class: "muted" }, "Saved settings survive restarts. Active runs retain their prepared inputs; older unsubmitted plans must be prepared again after catalog changes. Connection changes require a fresh Secret Server sign-in."),
+    startup.environment ? el("p", { class: "muted" }, `Instance environment: ${startup.environment}. Environment and cluster are fixed at startup; imports cannot switch them.`) : null,
     labeled("Configuration section", selector), labeled("JSON", editor), status,
     el("div", { class: "card-actions" }, save, reload, exportSaved, restore),
     el("div", { class: "card-actions config-import" }, importButton, fileName, file));
@@ -840,7 +845,7 @@ async function settings() {
         : "Simulation mode: deployments and performance results are synthetic. Configured read-only connections can also be tested here.",
     ),
     el("p", { class: "banner" }, startup.runtimeOverride
-      ? "Showing saved runtime JSON. Saved settings override application.yaml and Helm defaults. Use Load startup defaults into editor to review the current startup settings; Save applies them."
+      ? "Showing startup defaults plus saved dashboard changes. Untouched fields receive new defaults after restart. Load startup defaults into editor and Save to clear overrides."
       : "Showing startup configuration from application.yaml and any local / Helm overrides. Expand a JSON section below for full details."),
     el(
       "div",
@@ -1072,7 +1077,7 @@ if (session.mode === "real") vaultPrompt = secretSignInPrompt(api, async state =
   await route();
 });
 $("#mode-badge").textContent = session.mode === "real" ? "REAL · READ-ONLY" : "SIMULATION";
-$("#workspace-mode").textContent = session.mode === "real" ? "Real integrations · configured credentials required" : "Simulation mode · synthetic deployments and results";
+$("#workspace-mode").textContent = session.mode === "real" ? `Environment: ${session.targetEnvironment || "unbound"} · Real integrations` : "Simulation mode · synthetic deployments and results";
 if (session.mode === "real") document.querySelector('nav a[href="#configure"]').hidden = true;
 window.addEventListener("hashchange", route);
 await route();

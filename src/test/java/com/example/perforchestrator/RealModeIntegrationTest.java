@@ -40,6 +40,19 @@ class RealModeIntegrationTest {
   @MockitoBean CredentialResolver credentials;
 
   @Test
+  void configurationEndpointPopulatesEveryVisibleSectionFromPackagedDefaults() throws Exception {
+    mvc.perform(get("/api/v1/configuration/startup").header("Host", "localhost"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.configuration.catalog.environments").isNotEmpty())
+        .andExpect(jsonPath("$.configuration.catalog.services").isNotEmpty())
+        .andExpect(jsonPath("$.configuration.catalog.scenarios").isNotEmpty())
+        .andExpect(jsonPath("$.configuration.connections.artifactory").isNotEmpty())
+        .andExpect(jsonPath("$.configuration.connections.secretServers").isNotEmpty())
+        .andExpect(jsonPath("$.configuration.connections.credentials").isNotEmpty())
+        .andExpect(jsonPath("$.configuration.connections.imageSources").isNotEmpty());
+  }
+
+  @Test
   void realModeHasNoMockBeansOrSeedDataAndRefusesExecution() throws Exception {
     assertThat(catalog.mode()).isEqualTo("real");
     assertThat(catalog.data().services()).containsKey("ps-spoolers-ps-load-gen");
@@ -80,9 +93,26 @@ class RealModeIntegrationTest {
   }
 
   @Test
+  void runtimeCannotSwitchInstanceEnvironmentOrCluster() {
+    var original = configuration.current();
+    assertThat(catalog.boundEnvironment()).isEqualTo("sandbox");
+    assertThat(catalog.data().environments()).containsOnlyKeys("sandbox");
+    com.fasterxml.jackson.databind.node.ObjectNode altered = Json.MAPPER.valueToTree(original);
+    ((com.fasterxml.jackson.databind.node.ObjectNode) altered.path("catalog").path("environments").path("sandbox"))
+        .put("clusterIdentity", "different-cluster");
+    assertThatThrownBy(() -> configuration.update(Json.read(Json.write(altered), RuntimeConfiguration.Document.class)))
+        .hasMessageContaining("Invalid catalog");
+    assertThat(configuration.current()).isEqualTo(original);
+  }
+
+  @Test
   void realDiscoveryUsesConfiguredHttpAdapterAndModeCannotChangeViaSettings() throws Exception {
     var original = configuration.current();
-    var mappings = new RegistryContractTest().config().data();
+    com.fasterxml.jackson.databind.node.ObjectNode merged = Json.MAPPER.valueToTree(original.connections());
+    com.fasterxml.jackson.databind.node.ObjectNode extra = Json.MAPPER.valueToTree(new RegistryContractTest().config().data());
+    extra.fields().forEachRemaining(entry -> ((com.fasterxml.jackson.databind.node.ObjectNode) merged.get(entry.getKey()))
+        .setAll((com.fasterxml.jackson.databind.node.ObjectNode) entry.getValue()));
+    var mappings = Json.read(Json.write(merged), ConnectionConfig.Data.class);
     try {
       configuration.update(
           new RuntimeConfiguration.Document(original.revision(), original.catalog(), mappings));

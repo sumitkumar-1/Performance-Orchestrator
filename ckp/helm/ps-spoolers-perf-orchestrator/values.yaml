@@ -1,5 +1,6 @@
 # simulation: mock workflows; real: live read-only connections, no execution yet.
 mode: simulation
+targetEnvironment: sandbox # Fixed instance environment in real mode
 image:
   repository: "" # Required: approved registry/repository
   tag: "" # Required: version published by your build
@@ -36,6 +37,78 @@ connections:
       secretId: '12345' # EXAMPLE ONLY: replace with the approved registry secret ID
       usernameFieldSlug: username
       passwordFieldSlug: password
+    sandbox-logs:
+      provider: delinea
+      secretServerRef: office-vault
+      secretId: '20000' # EXAMPLE ONLY: replace for sandbox logs
+      usernameFieldSlug: username
+      passwordFieldSlug: password
+    sandbox-metrics:
+      provider: delinea
+      secretServerRef: office-vault
+      secretId: '20001' # EXAMPLE ONLY: replace for sandbox metrics
+      usernameFieldSlug: username
+      passwordFieldSlug: password
+    dev-logs:
+      provider: delinea
+      secretServerRef: office-vault
+      secretId: '20002' # EXAMPLE ONLY: replace for dev logs
+      usernameFieldSlug: username
+      passwordFieldSlug: password
+    dev-metrics:
+      provider: delinea
+      secretServerRef: office-vault
+      secretId: '20003' # EXAMPLE ONLY: replace for dev metrics
+      usernameFieldSlug: username
+      passwordFieldSlug: password
+    qa-logs:
+      provider: delinea
+      secretServerRef: office-vault
+      secretId: '20004' # EXAMPLE ONLY: replace for qa logs
+      usernameFieldSlug: username
+      passwordFieldSlug: password
+    qa-metrics:
+      provider: delinea
+      secretServerRef: office-vault
+      secretId: '20005' # EXAMPLE ONLY: replace for qa metrics
+      usernameFieldSlug: username
+      passwordFieldSlug: password
+    stable-logs:
+      provider: delinea
+      secretServerRef: office-vault
+      secretId: '20006' # EXAMPLE ONLY: replace for stable logs
+      usernameFieldSlug: username
+      passwordFieldSlug: password
+    stable-metrics:
+      provider: delinea
+      secretServerRef: office-vault
+      secretId: '20007' # EXAMPLE ONLY: replace for stable metrics
+      usernameFieldSlug: username
+      passwordFieldSlug: password
+    perf-logs:
+      provider: delinea
+      secretServerRef: office-vault
+      secretId: '20008' # EXAMPLE ONLY: replace for perf logs
+      usernameFieldSlug: username
+      passwordFieldSlug: password
+    perf-metrics:
+      provider: delinea
+      secretServerRef: office-vault
+      secretId: '20009' # EXAMPLE ONLY: replace for perf metrics
+      usernameFieldSlug: username
+      passwordFieldSlug: password
+    perf3-logs:
+      provider: delinea
+      secretServerRef: office-vault
+      secretId: '20010' # EXAMPLE ONLY: replace for perf3 logs
+      usernameFieldSlug: username
+      passwordFieldSlug: password
+    perf3-metrics:
+      provider: delinea
+      secretServerRef: office-vault
+      secretId: '20011' # EXAMPLE ONLY: replace for perf3 metrics
+      usernameFieldSlug: username
+      passwordFieldSlug: password
   imageSources:
     office-dev:
       displayName: Dev images (example - configure before use)
@@ -70,26 +143,76 @@ application: {}
 catalog:
   # EXAMPLES: replace cluster/namespace/paths and limits before use.
   environments:
+    sandbox:
+      displayName: sandbox (example - configure before use)
+      clusterIdentity: ckp-sandbox-region.domain
+      monitoring: # Metadata only; live monitoring adapters are not connected yet
+        logsApiBaseUrl: https://logs.sandbox-domain/loki/api/v1
+        metricsApiBaseUrl: https://metrics-sandbox.example.invalid/api/v1 # PLACEHOLDER: confirm endpoint, not inferred from Loki
+        namespaceCredentials:
+          ps-spoolers-smtp-data-producer:
+            logsCredentialRef: sandbox-logs
+            metricsCredentialRef: sandbox-metrics
+    dev:
+      displayName: dev (example - configure before use)
+      clusterIdentity: ckp-dev-region.domain
+      monitoring: # Metadata only; live monitoring adapters are not connected yet
+        logsApiBaseUrl: https://logs.dev-domain/loki/api/v1
+        metricsApiBaseUrl: https://metrics-dev.example.invalid/api/v1 # PLACEHOLDER: confirm endpoint, not inferred from Loki
+        namespaceCredentials:
+          ps-spoolers-smtp-data-producer:
+            logsCredentialRef: dev-logs
+            metricsCredentialRef: dev-metrics
+    qa:
+      displayName: qa (example - configure before use)
+      clusterIdentity: ckp-qa-region.domain
+      monitoring: # Metadata only; live monitoring adapters are not connected yet
+        logsApiBaseUrl: https://logs.qa-domain/loki/api/v1
+        metricsApiBaseUrl: https://metrics-qa.example.invalid/api/v1 # PLACEHOLDER: confirm endpoint, not inferred from Loki
+        namespaceCredentials:
+          ps-spoolers-smtp-data-producer:
+            logsCredentialRef: qa-logs
+            metricsCredentialRef: qa-metrics
+    stable:
+      displayName: stable (example - configure before use)
+      clusterIdentity: ckp-stable-region.domain
+      monitoring: # Metadata only; live monitoring adapters are not connected yet
+        logsApiBaseUrl: https://logs.stable-domain/loki/api/v1
+        metricsApiBaseUrl: https://metrics-stable.example.invalid/api/v1 # PLACEHOLDER: confirm endpoint, not inferred from Loki
+        namespaceCredentials:
+          ps-spoolers-smtp-data-producer:
+            logsCredentialRef: stable-logs
+            metricsCredentialRef: stable-metrics
+    perf:
+      displayName: perf (example - configure before use)
+      clusterIdentity: ckp-perf-region.domain
+      monitoring: # Metadata only; live monitoring adapters are not connected yet
+        logsApiBaseUrl: https://logs.perf-domain/loki/api/v1
+        metricsApiBaseUrl: https://metrics-perf.example.invalid/api/v1 # PLACEHOLDER: confirm endpoint, not inferred from Loki
+        namespaceCredentials:
+          ps-spoolers-smtp-data-producer:
+            logsCredentialRef: perf-logs
+            metricsCredentialRef: perf-metrics
     perf3:
-      displayName: Perf3 (example - configure before use)
+      displayName: perf3 (example - configure before use)
       clusterIdentity: ckp-perf3-region.domain
-      serviceNamespaces: [ps-spoolers-smtp-data-producer]
-      loadGeneratorNamespace: ps-spoolers-smtp-data-producer
-      allowedActions: [PLAN]
-      limits:
-        maxRunDurationSeconds: 300
-        maxVirtualUsers: 1
-        maxRequestsPerSecond: 10
-      dashboardUrl: ''
+      monitoring: # Metadata only; live monitoring adapters are not connected yet
+        logsApiBaseUrl: https://logs.perf3-domain/loki/api/v1
+        metricsApiBaseUrl: https://metrics-perf3.example.invalid/api/v1 # PLACEHOLDER: confirm endpoint, not inferred from Loki
+        namespaceCredentials:
+          ps-spoolers-smtp-data-producer:
+            logsCredentialRef: perf3-logs
+            metricsCredentialRef: perf3-metrics
   services:
     ps-spoolers-ps-load-gen:
       projectPath: projects/ps-spoolers-ps-load-gen
       dependencies: []
-      deploymentByEnvironment:
-        perf3:
-          namespace: ps-spoolers-smtp-data-producer
-          releaseName: ps-spoolers-load-gen
-          valuesFiles: [ckp/helm/ps-spoolers-ps-load-gen/values-perf3-baseline.yaml]
+      deploymentDefaults:
+        namespace: ps-spoolers-smtp-data-producer
+        releaseName: ps-spoolers-load-gen
+        valuesFiles: [ckp/helm/ps-spoolers-ps-load-gen/values.yaml]
+      # Optional per-environment exceptions; otherwise deploymentDefaults apply.
+      deploymentByEnvironment: {}
       # installationBindings omitted: real chart retrieval is not implemented yet
       allowedOverridePaths: [] # Confirm editable chart fields before allowing overrides
   imageSources: {} # Simulation-only versions; mocks supply these in simulation mode
@@ -99,5 +222,5 @@ catalog:
       revision: example-1
       allowedOverridePaths: []
       defaults:
-        profilePath: ckp/helm/ps-spoolers-ps-load-gen/values-perf3-baseline.yaml
+        profilePath: ckp/helm/ps-spoolers-ps-load-gen/values.yaml
         note: Replace with approved load-profile fields; this is not an executable profile

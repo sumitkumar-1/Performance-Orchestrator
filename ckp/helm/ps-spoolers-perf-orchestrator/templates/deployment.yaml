@@ -39,6 +39,7 @@ spec:
             - --server.address=127.0.0.1
             - --server.port=8080
             - --orchestrator.mode={{ .Values.mode }}
+            - --orchestrator.target-environment={{ required "Set targetEnvironment" .Values.targetEnvironment }}
             - --orchestrator.connections=/app/config/connections.yaml
             - --orchestrator.configuration-file={{ $state }}/configuration.json
           securityContext:

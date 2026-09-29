@@ -10,6 +10,7 @@ class ConnectionDefaultsTest {
   @Test
   void realCatalogBindsStartupMapsWithoutMockData() throws Exception {
     var environment = new MockEnvironment()
+        .withProperty("orchestrator.target-environment", "dev")
         .withProperty("orchestrator.catalog-defaults.environments.dev.display-name", "Dev")
         .withProperty("orchestrator.catalog-defaults.environments.dev.cluster-identity", "dev")
         .withProperty("orchestrator.catalog-defaults.environments.dev.service-namespaces[0]", "smtp")

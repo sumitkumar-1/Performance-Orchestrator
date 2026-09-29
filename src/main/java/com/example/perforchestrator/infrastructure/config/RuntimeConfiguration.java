@@ -20,6 +20,8 @@ public class RuntimeConfiguration {
   private String revision;
   private final Document startup;
   private boolean runtimeOverride;
+  public record SavedOverrides(int schemaVersion, String mode, String environment,
+      java.util.List<ConfigurationOverrides.Change> overrides) {}
 
   @org.springframework.beans.factory.annotation.Autowired
   public RuntimeConfiguration(
@@ -34,11 +36,25 @@ public class RuntimeConfiguration {
     this.file = Path.of(file).toAbsolutePath();
     this.startup = new Document(null, catalog.data(), connections.data());
     if (Files.exists(this.file)) {
-      Document saved = Json.read(ConfigurationResources.read(this.file.toString()), Document.class);
+      String content = ConfigurationResources.read(this.file.toString());
+      var tree = Json.MAPPER.readTree(content);
+      Document saved;
+      if (tree.has("schemaVersion")) {
+        SavedOverrides stored = Json.read(content, SavedOverrides.class);
+        if (stored.schemaVersion() != 2 || !catalog.mode().equals(stored.mode())
+            || !catalog.boundEnvironment().equals(stored.environment()) || stored.overrides() == null)
+          throw new IllegalArgumentException("Runtime overrides belong to a different mode/environment or version");
+        saved = Json.read(Json.write(ConfigurationOverrides.apply(
+            Json.MAPPER.valueToTree(startup), stored.overrides())), Document.class);
+        runtimeOverride = !stored.overrides().isEmpty();
+      } else {
+        // Preserve legacy whole-document imports. The next save converts them to field edits.
+        saved = Json.read(content, Document.class);
+        runtimeOverride = true;
+      }
       validate(saved);
       catalog.installValidated(saved.catalog());
       connections.installValidated(saved.connections());
-      runtimeOverride = true;
     }
     revision = java.util.UUID.randomUUID().toString();
   }
@@ -54,6 +70,15 @@ public class RuntimeConfiguration {
     catalog.validate(next.catalog());
     try {
       new ConnectionConfig(next.connections());
+      next.catalog().environments().values().forEach(env -> {
+        if (env.monitoring() != null) env.monitoring().namespaceCredentials().values().forEach(refs -> {
+          for (String ref : java.util.List.of(
+              java.util.Objects.toString(refs.logsCredentialRef(), ""),
+              java.util.Objects.toString(refs.metricsCredentialRef(), "")))
+            if (!ref.isBlank() && !next.connections().credentials().containsKey(ref))
+              throw new IllegalArgumentException("Unknown monitoring credential reference");
+        });
+      });
     } catch (RuntimeException e) {
       throw Problem.invalid(
           "connections",
@@ -67,12 +92,12 @@ public class RuntimeConfiguration {
     }
   }
 
-  public record StartupView(Document configuration, boolean runtimeOverride) {}
+  public record StartupView(Document configuration, boolean runtimeOverride, String environment) {}
 
   public StartupView startup() {
     try (var scope = access.read()) {
       return new StartupView(new Document(revision, startup.catalog(), startup.connections()),
-          runtimeOverride);
+          runtimeOverride, catalog.boundEnvironment());
     }
   }
 
@@ -90,7 +115,9 @@ public class RuntimeConfiguration {
       validate(next);
       String newRevision = java.util.UUID.randomUUID().toString();
       Document document = new Document(newRevision, next.catalog(), next.connections());
-      String json = Json.write(document);
+      var changes = ConfigurationOverrides.diff(Json.MAPPER.valueToTree(startup),
+          Json.MAPPER.valueToTree(new Document(null, next.catalog(), next.connections())));
+      String json = Json.write(new SavedOverrides(2, catalog.mode(), catalog.boundEnvironment(), changes));
       if (json.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 262144)
         throw Problem.invalid("configuration", "Configuration exceeds 256 KiB");
       Files.createDirectories(file.getParent());
@@ -102,7 +129,7 @@ public class RuntimeConfiguration {
       if (!Json.write(connections.data()).equals(Json.write(next.connections())))
         connections.installValidated(next.connections());
       revision = newRevision;
-      runtimeOverride = true;
+      runtimeOverride = !changes.isEmpty();
       return document;
     } catch (IOException error) {
       throw new Problem(

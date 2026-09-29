@@ -8,6 +8,33 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 class DeploymentConfigurationTest {
   @Test
+  void everyRealEnvironmentHasDefaultsForAllSevenEditableSections() {
+    for (String target : new String[] {"sandbox", "dev", "qa", "stable", "perf", "perf3"}) {
+      new ApplicationContextRunner()
+          .withInitializer(new ConfigDataApplicationContextInitializer())
+          .withPropertyValues("orchestrator.mode=real", "orchestrator.target-environment=" + target)
+          .run(context -> {
+            var environment = context.getEnvironment();
+            var catalog = new com.example.perforchestrator.infrastructure.config.Catalog(
+                environment.getProperty("orchestrator.catalog"), "real", "127.0.0.1", environment);
+            var connections = new com.example.perforchestrator.infrastructure.registry.ConnectionConfig("", environment);
+            assertThat(catalog.data().environments()).containsOnlyKeys(target);
+            assertThat(catalog.data().services()).isNotEmpty();
+            assertThat(catalog.data().scenarios()).isNotEmpty();
+            assertThat(connections.data().artifactory()).isNotEmpty();
+            assertThat(connections.data().secretServers()).isNotEmpty();
+            assertThat(connections.data().credentials()).isNotEmpty();
+            assertThat(connections.data().imageSources()).isNotEmpty();
+            var monitoring = catalog.environment(target).monitoring();
+            assertThat(monitoring.logsApiBaseUrl()).isNotBlank();
+            assertThat(monitoring.metricsApiBaseUrl()).isNotBlank();
+            monitoring.namespaceCredentials().values().forEach(ref ->
+                assertThat(connections.data().credentials()).containsKeys(ref.logsCredentialRef(), ref.metricsCredentialRef()));
+          });
+    }
+  }
+
+  @Test
   void sharedConfigurationKeepsModeSpecificStateWithoutRequiringDatabaseSecrets() {
     for (String mode : new String[] {"simulation", "real"}) {
       new ApplicationContextRunner()

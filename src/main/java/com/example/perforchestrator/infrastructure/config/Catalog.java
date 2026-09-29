@@ -18,11 +18,18 @@ public class Catalog {
       String loadGeneratorNamespace,
       List<String> allowedActions,
       Limits limits,
-      String dashboardUrl) {
+      String dashboardUrl,
+      Monitoring monitoring) {
     public Environment {
       serviceNamespaces = ImmutableConfiguration.list(serviceNamespaces);
       allowedActions = ImmutableConfiguration.list(allowedActions);
     }
+  }
+
+  public record NamespaceCredentials(String logsCredentialRef, String metricsCredentialRef) {}
+  public record Monitoring(String logsApiBaseUrl, String metricsApiBaseUrl,
+      Map<String, NamespaceCredentials> namespaceCredentials) {
+    public Monitoring { namespaceCredentials = ImmutableConfiguration.map(namespaceCredentials); }
   }
 
   public record Destination(String namespace, String releaseName, List<String> valuesFiles) {
@@ -48,10 +55,11 @@ public class Catalog {
       List<String> dependencies,
       Map<String, Destination> deploymentByEnvironment,
       Binding installationBindings,
-      List<String> allowedOverridePaths) {
+      List<String> allowedOverridePaths,
+      Destination deploymentDefaults) {
     public Service {
       dependencies = ImmutableConfiguration.list(dependencies);
-      deploymentByEnvironment = ImmutableConfiguration.map(deploymentByEnvironment);
+      deploymentByEnvironment = ImmutableConfiguration.map(deploymentByEnvironment == null ? Map.of() : deploymentByEnvironment);
       allowedOverridePaths = ImmutableConfiguration.list(allowedOverridePaths);
     }
   }
@@ -97,6 +105,10 @@ public class Catalog {
   private final Path root;
   private final String resourceRoot;
   private final String mode;
+  private String boundEnvironment = "";
+  private String boundCluster = "";
+
+  public String boundEnvironment() { return boundEnvironment; }
 
   @org.springframework.beans.factory.annotation.Autowired
   public Catalog(
@@ -114,6 +126,23 @@ public class Catalog {
           defaults.services() == null ? Map.of() : defaults.services(),
           defaults.imageSources() == null ? Map.of() : defaults.imageSources(),
           defaults.scenarios() == null ? Map.of() : defaults.scenarios()));
+    }
+    if (mode.equals("real")) {
+      String target = environment.getProperty("orchestrator.target-environment", "");
+      if (target.isBlank()) throw new IllegalArgumentException("Real mode requires target-environment");
+      if (!target.isBlank()) {
+        var selected = data().environments().get(target);
+        if (selected == null) throw new IllegalArgumentException("Unknown target environment: " + target);
+        boundEnvironment = target;
+        boundCluster = selected.clusterIdentity();
+        Map<String, Service> services = new LinkedHashMap<>();
+        data().services().forEach((id, service) -> {
+          var destination = service.deploymentByEnvironment().getOrDefault(target, service.deploymentDefaults());
+          if (destination != null) services.put(id, new Service(service.projectPath(), service.dependencies(),
+              (service.deploymentByEnvironment().containsKey(target) ? Map.of(target, destination) : Map.of()), service.installationBindings(), service.allowedOverridePaths(), service.deploymentDefaults()));
+        });
+        replace(new Data(mode, Map.of(target, selected), services, data().imageSources(), data().scenarios()));
+      }
     }
   }
 
@@ -150,6 +179,10 @@ public class Catalog {
 
   public void validate(Data candidate) {
     try {
+      if (!boundEnvironment.isBlank()
+          && (!candidate.environments().keySet().equals(Set.of(boundEnvironment))
+              || !boundCluster.equals(candidate.environments().get(boundEnvironment).clusterIdentity())))
+        throw new IllegalArgumentException("The instance environment and cluster cannot change at runtime");
       if (!mode.equals(candidate.mode()))
         throw new IllegalArgumentException("Catalog must match the startup mode");
       if (mode.equals("simulation")
@@ -165,14 +198,22 @@ public class Catalog {
                 identifier(id);
                 required(env.displayName());
                 required(env.clusterIdentity());
-                required(env.loadGeneratorNamespace());
-                if (env.serviceNamespaces().isEmpty()
+                if (mode.equals("simulation")) required(env.loadGeneratorNamespace());
+                if (mode.equals("simulation") && (env.serviceNamespaces().isEmpty()
                     || env.allowedActions() == null
                     || !Set.of("PLAN", "DEPLOY", "RUN_LOAD").containsAll(env.allowedActions())
                     || env.limits().maxRunDurationSeconds() < 15
                     || env.limits().maxVirtualUsers() < 1
-                    || env.limits().maxRequestsPerSecond() < 1)
+                    || env.limits().maxRequestsPerSecond() < 1))
                   throw new IllegalArgumentException();
+                if (env.monitoring() != null) {
+                  var monitoring = env.monitoring();
+                  for (String url : List.of(
+                      Objects.toString(monitoring.logsApiBaseUrl(), ""),
+                      Objects.toString(monitoring.metricsApiBaseUrl(), "")))
+                    if (!url.isBlank()) com.example.perforchestrator.infrastructure.registry.ConnectionConfig.base(url);
+                  if (monitoring.namespaceCredentials() == null) throw new IllegalArgumentException();
+                }
                 if (env.dashboardUrl() != null && !env.dashboardUrl().isBlank())
                   com.example.perforchestrator.infrastructure.registry.ConnectionConfig.base(
                       env.dashboardUrl());
@@ -199,14 +240,17 @@ public class Catalog {
                 if (!candidate.services().keySet().containsAll(service.dependencies())
                     || service.dependencies().contains(id)
                     || service.allowedOverridePaths() == null
-                    || service.deploymentByEnvironment().isEmpty())
+                    || (service.deploymentByEnvironment().isEmpty() && service.deploymentDefaults() == null))
                   throw new IllegalArgumentException();
                 if (mode.equals("real")) {
                   // Real service entries describe intended deployment inputs. Source retrieval
                   // and executable chart validation remain blocked by requireExecution().
-                  service.deploymentByEnvironment().forEach((environment, destination) -> {
+                  Map<String, Destination> destinations = new LinkedHashMap<>(service.deploymentByEnvironment());
+                  if (service.deploymentDefaults() != null) candidate.environments().keySet()
+                      .forEach(env -> destinations.putIfAbsent(env, service.deploymentDefaults()));
+                  destinations.forEach((environment, destination) -> {
                     var env = candidate.environments().get(environment);
-                    if (env == null || !env.serviceNamespaces().contains(destination.namespace())
+                    if (env == null || destination.namespace() == null || destination.namespace().isBlank()
                         || destination.valuesFiles() == null || destination.valuesFiles().isEmpty())
                       throw new IllegalArgumentException();
                     required(destination.releaseName());

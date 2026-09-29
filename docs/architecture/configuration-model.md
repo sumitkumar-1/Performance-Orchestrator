@@ -11,7 +11,7 @@ A target environment (for example `perf3`) selects a cluster identity, load-gene
 | Auth image source = dev | Auth's dev image repository and installation source selector |
 | SMTP image source = release | SMTP's release image repository and installation source selector |
 
-The image source does not choose environment values. Both services can target perf3 while using different build sources. `serviceNamespaces` is an allowlist; it is not a shared destination namespace. All current cluster identities and namespaces are simulation fixtures. `stging` remains unchanged pending confirmation.
+The image source does not choose environment values. Both services can target perf3 while using different build sources. `serviceNamespaces` is an allowlist; it is not a shared destination namespace. Simulation uses mock cluster identities; real mode uses the selected startup environment and configured namespaces. `stging` remains unchanged pending confirmation.
 
 The editor shows target information beneath the environment selector, each selected deployment shows its namespace/release, and the deployment dialog shows exact values-file paths. Changing environments preserves image choices and re-resolves destinations. An unavailable mapping is shown as an error and blocked by backend planning.
 
@@ -56,4 +56,10 @@ The Settings editor edits individual catalog or connection sections and submits 
 
 Runtime changes do not mutate persisted plans or active runs. New run submissions reject old catalog hashes, while accepted runs use their immutable prepared inputs. Updating connection mappings expires portal sessions locally to prevent using a token with a changed destination. This remains a local-only administrative UI; shared administration requires authentication/tenant authorization.
 
-The runtime editor supports JSON export/import as a reviewed draft using the existing revision-checked save endpoint. `/api/v1/configuration/startup` exposes the immutable startup snapshot and an override-present flag. Runtime JSON remains a complete override; startup defaults can be loaded into the editor but saving them does not delete that override. See README for precedence and startup import.
+The runtime editor supports JSON export/import as a reviewed draft using the existing revision-checked save endpoint. `/api/v1/configuration/startup` exposes the immutable startup snapshot and an override-present flag. Runtime JSON now stores field changes; loading startup defaults into the editor and saving clears those changes. See README for precedence and startup import.
+
+## Instance scope and versioned overrides (2026-09-29)
+
+Real mode binds one `target-environment` at startup and retains its cluster identity. Other environment defaults remain in application/Helm YAML but are excluded from the effective catalog. Runtime edits/imports cannot rename/remove the selected environment, change its cluster or add another environment. Services have shared `deploymentDefaults` and optional environment exceptions. Simulation limits/allowed actions remain enforced only for simulation planning; real load YAML is authoritative once its adapter is implemented.
+
+The current runtime file uses schemaVersion 2 with mode/environment and set/remove operations relative to startup defaults. Object fields merge independently; arrays are atomic; explicit null differs from removal. Export remains a complete effective catalog/connections document. Legacy complete snapshots load only if valid for the selected instance and convert on next save. Loading startup defaults and saving writes an empty operation list, allowing subsequent startup default updates through. Legacy whole-document overrides are supported only for migration.

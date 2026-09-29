@@ -1,5 +1,3 @@
-# Orchestrator installation in sandbox; layer over values.yaml.
-# Supply image, connection mappings, Secret references and storage overrides here
-# or in an ignored values.local-sandbox.yaml. No passwords or tokens.
-# This does not select a target environment for a performance run.
+# Instance defaults for sandbox; shared settings come from values.yaml.
 mode: real
+targetEnvironment: sandbox

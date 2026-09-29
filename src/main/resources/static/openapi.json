@@ -1317,7 +1317,7 @@
       },
       "put": {
         "summary": "Validate, persist and apply a complete configuration revision without restart",
-        "description": "Local administrator operation. Requires session CSRF header and matching revision. Catalog and connection maps are supplied together. Active runs keep saved plans; connection edits invalidate portal tokens.",
+        "description": "Local administrator operation. Requires session CSRF header and matching revision. Catalog and connection maps are supplied together. Active runs keep saved plans; connection edits invalidate portal tokens. Stores field-level differences from startup settings. Real-mode imports/edits must retain the selected environment and cluster identity.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1366,7 +1366,7 @@
         "summary": "Read startup configuration and whether a saved runtime override is active",
         "responses": {
           "200": {
-            "description": "configuration: startup catalog/connections with current revision; runtimeOverride: boolean. Does not include resolved credential values."
+            "description": "configuration: startup catalog/connections with current revision; runtimeOverride: whether overrides are active; environment: fixed real-mode instance environment (empty for simulation)."
           }
         }
       }

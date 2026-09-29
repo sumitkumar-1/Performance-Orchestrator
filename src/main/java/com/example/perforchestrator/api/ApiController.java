@@ -52,6 +52,7 @@ public class ApiController {
         "local-developer",
         "mode",
         catalog.mode(),
+        "targetEnvironment", catalog.boundEnvironment(),
         "capabilities",
         Map.of(
             "execution",
