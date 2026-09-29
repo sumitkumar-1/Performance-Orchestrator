@@ -81,6 +81,21 @@ class RuntimeConfigurationTest {
   }
 
   @Test
+  void startupDiagnosticIdentifiesTheActualSavedFileWithoutChangingIt() throws Exception {
+    Path savedFile = directory.resolve("imported-settings.json");
+    var initial = new RuntimeConfiguration(catalog(), connections(), directory.resolve("unused.json").toString());
+    ObjectNode document = Json.MAPPER.valueToTree(initial.current());
+    ((ObjectNode) document.path("catalog")).remove("environments");
+    String content = Json.write(document);
+    Files.writeString(savedFile, content);
+    assertThatThrownBy(() -> new RuntimeConfiguration(catalog(), connections(), savedFile.toString()))
+        .hasMessageContaining("Source file: " + savedFile.toAbsolutePath())
+        .hasMessageContaining("Startup mode: simulation")
+        .hasMessageContaining("catalog");
+    assertThat(Files.readString(savedFile)).isEqualTo(content);
+  }
+
+  @Test
   void persistenceFailureDoesNotPublishAndPackagedProjectsAreReadable() throws Exception {
     var catalog = catalog();
     assertThat(catalog.read(catalog.service("auth-service"), "ckp/Chart.yaml"))

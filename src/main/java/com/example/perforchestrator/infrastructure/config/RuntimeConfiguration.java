@@ -33,7 +33,7 @@ public class RuntimeConfiguration {
     this.access = access;
     this.catalog = catalog;
     this.connections = connections;
-    this.file = Path.of(file).toAbsolutePath();
+    this.file = Path.of(file).toAbsolutePath().normalize();
     this.startup = new Document(null, catalog.data(), connections.data());
     if (Files.exists(this.file)) {
       String content = ConfigurationResources.read(this.file.toString());
@@ -56,7 +56,10 @@ public class RuntimeConfiguration {
         validate(saved);
       } catch (Problem error) {
         throw new IllegalStateException("Saved runtime configuration failed validation at "
-            + error.field() + ". Start with a new orchestrator.configuration-file path to test startup defaults without changing the existing file. "
+            + error.field() + ". Source file: " + this.file
+            + ". Startup mode: " + catalog.mode()
+            + "; target environment: " + (catalog.boundEnvironment().isBlank() ? "unbound" : catalog.boundEnvironment())
+            + ". Check orchestrator.configuration-file and the process working directory. "
             + error.getMessage());
       }
       catalog.installValidated(saved.catalog());
