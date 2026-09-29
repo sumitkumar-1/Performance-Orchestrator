@@ -8,7 +8,7 @@ export function operationAuthentication(connection, { api, kind, id }) {
   const lifetime = select([["1800", "30 minutes"], ["3600", "1 hour"], ["28800", "8 hours"]], "1800");
   const status = el("p", { class: "muted", role: "status" });
   const error = el("p", { class: "error", role: "alert", hidden: true });
-  let expiryTimer;
+  let expiryTimer, disposed = false;
   const clear = () => { clearTimeout(expiryTimer); token.value = ""; };
   const fields = el("div", { class: "config-form", hidden: true },
     mode === "token" ? labeled("Bearer token", token) : null,
@@ -18,6 +18,7 @@ export function operationAuthentication(connection, { api, kind, id }) {
   const node = el("div", { class: "config-form" }, status, fields, el("div", { class: "card-actions" }, login, logout), error);
   let available = false;
   const render = state => {
+    if (disposed) return;
     clearTimeout(expiryTimer);
     available = state.state === "CREDENTIALS_AVAILABLE";
     if (available) expiryTimer = setTimeout(() => refresh().catch(() => {}), Math.max(1000, Date.parse(state.expiresAt) - Date.now() + 50));
@@ -45,7 +46,7 @@ export function operationAuthentication(connection, { api, kind, id }) {
   login.addEventListener("click", () => withError(login, remember));
   logout.addEventListener("click", () => withError(logout, async () => { await api(path, { method: "DELETE" }); clear(); await refresh(); }));
   refresh().catch(reason => { error.hidden = false; error.textContent = reason.message; });
-  return { node, clear, refresh, async run(operation) {
+  return { node, clear, refresh, dispose() { disposed = true; clear(); }, async run(operation) {
     await refresh();
     if (mode !== "secret-server" && !available) await remember();
     try { return await operation(null); }

@@ -1,6 +1,7 @@
 import { el, labeled, input, select } from "./dom.js";
 import { secretSignInPrompt } from "./secret-sign-in.js";
 import { operationAuthentication } from "./operation-auth.js";
+import { connectionDiagnostics } from "./connection-diagnostics.js";
 import { configurationManager } from "./configuration-manager.js";
 import { deploymentEditor } from "./deployments.js";
 const app = document.querySelector("#app");
@@ -822,7 +823,7 @@ async function configurationEditor() {
     el("div", { class: "card-actions config-import" }, importButton, fileName, file));
 }
 
-async function settings() {
+async function settings(section) {
   const active = await api("/configuration");
   const startup = await api("/configuration/startup");
   const authStates = await api("/secret-auth");
@@ -849,136 +850,21 @@ async function settings() {
     el("p", { class: "muted" }, "Test registry tags and Bitbucket references with configured connections. These requests do not deploy anything."));
   app.append(diagnostics);
   const config = await api("/connections");
-  if (!Object.keys(config.imageSources).length) diagnostics.append(el("p", {}, "Add an image repository to test discovery."));
-    for (const [sourceId, source] of Object.entries(config.imageSources)) {
-      const service = select(
-        Object.keys(source.imagePaths).map((id) => [id, id]),
-        Object.keys(source.imagePaths)[0],
-      );
-      const username = input("");
-      username.disabled = !source.usernameRequired;
-      const versions = select([["", "Choose a discovered version"]], "");
-      const evidence = el("pre", { role: "status" }, "No request made yet.");
-      const authentication = operationAuthentication(config.artifactory[source.connectionRef], { api, kind: "artifactory", id: source.connectionRef });
-      const diagnosticButton = (label, fn) => el("button", { type: "button", onclick: async event => {
-        event.currentTarget.disabled = true;
-        const control = event.currentTarget;
-        try { await fn(); } catch (error) { evidence.textContent = error.message; }
-        finally { control.disabled = false; }
-      } }, label);
-      let cursor = "";
-      const browse = async (more = false) => {
-        if (!service.value) throw new Error("Configure a service image path first.");
-        const base = `/registry-sources/${encodeURIComponent(sourceId)}/services/${encodeURIComponent(service.value)}/images`;
-        const result = await authentication.run(auth => api(base + "/query", {
-          method: "POST", body: { limit: 50, cursor: more ? cursor : "", username: source.usernameRequired ? username.value : null, authentication: auth }
-        }));
-        if (!more)
-          versions.replaceChildren(
-            el("option", { value: "" }, "Choose a discovered version"),
-          );
-        result.versions.forEach((tag) =>
-          versions.append(el("option", { value: tag }, tag)),
-        );
-        cursor = result.nextCursor;
-        evidence.textContent = pretty({
-          repository: result.repository,
-          discoveredAt: result.discoveredAt,
-          nextCursor: cursor,
-        });
-      };
-      const content = el("div", {},
-        el(
-          "section",
-          { class: "spacer" },
-          el("h3", {}, source.displayName),
-          el(
-            "div",
-            { class: "form-grid" },
-            labeled("Service", service),
-            source.usernameRequired ? labeled("Artifact-owner username", username) : null,
-            labeled("Available version", versions),
-          ),
-          authentication.node,
-          el(
-            "div",
-            { class: "card-actions" },
-            diagnosticButton("Discover versions", () => browse(false)),
-            diagnosticButton("Next page", () =>
-              cursor ? browse(true) : (evidence.textContent = "No further page available"),
-            ),
-            diagnosticButton("Resolve digest", async () => {
-              if (!versions.value)
-                throw new Error("Choose a discovered version first");
-              evidence.textContent = pretty(await authentication.run(auth => api(
-                `/registry-sources/${encodeURIComponent(sourceId)}/services/${encodeURIComponent(service.value)}/images/query`,
-                { method: "POST", body: { tag: versions.value, username: source.usernameRequired ? username.value : null, authentication: auth } })));
-            }),
-          ),
-          evidence,
-        ),
-      );
-      diagnostics.append(el("div", { class: "config-row" },
-        el("div", {}, el("strong", {}, source.displayName || sourceId), el("p", { class: "muted" }, `${source.connectionRef} → ${source.repositoryKey}`)),
-        button("Browse versions", () => {
-          const dialog = el("dialog", { class: "deployment-dialog", "aria-label": "Browse image versions" }, content,
-            el("div", { class: "dialog-actions" }, el("button", { type: "button", onclick: () => dialog.close() }, "Close")));
-          dialog.addEventListener("close", () => { authentication.clear(); dialog.remove(); });
-          document.body.append(dialog); dialog.showModal();
-        })));
-      service.addEventListener("change", () => {
-        versions.replaceChildren(
-          el("option", { value: "" }, "Choose a discovered version"),
-        );
-        cursor = "";
-      });
-      username.addEventListener("change", () => {
-        versions.replaceChildren(
-          el("option", { value: "" }, "Choose a discovered version"),
-        );
-        cursor = "";
-      });
-    }
-  for (const [serviceId, service] of Object.entries(active.catalog.services)) {
-    const project = service.sourceProject;
-    if (!project) continue;
-    diagnostics.append(el("div", { class: "config-row" },
-      el("div", {}, el("strong", {}, serviceId), el("p", { class: "muted" }, `${project.connectionRef} → ${project.projectKey}/${project.repository}`)),
-      button("Browse Git references", () => {
-        const auth = operationAuthentication(config.bitbucket[project.connectionRef], { api, kind: "bitbucket", id: project.connectionRef });
-        const kind = select([["tags", "Tags"], ["branches", "Branches"]], "tags");
-        const output = el("pre", { role: "status" }, "No request made yet.");
-        let nextStart = null;
-        const query = async start => {
-          const result = await auth.run(authentication => api(`/service-projects/${encodeURIComponent(serviceId)}/references/query`, {
-            method: "POST", body: { kind: kind.value, start, authentication }
-          }));
-          nextStart = result.nextStart;
-          output.textContent = pretty(result);
-        };
-        const request = (label, operation) => el("button", { type: "button", onclick: async event => {
-          const node = event.currentTarget; node.disabled = true;
-          try { await operation(); } catch (error) { output.textContent = error.message; }
-          finally { node.disabled = false; }
-        } }, label);
-        kind.addEventListener("change", () => { nextStart = null; output.textContent = "No request made yet."; auth.clear(); });
-        const dialog = el("dialog", { class: "deployment-dialog", "aria-label": "Browse Bitbucket references" },
-          el("h2", {}, "Browse Bitbucket references"), labeled("Reference type", kind), auth.node,
-          el("div", { class: "card-actions" }, request("Fetch references", () => query(0)), request("Next page", () => nextStart === null ? (output.textContent = "No next page available.") : query(nextStart))),
-          output, el("div", { class: "dialog-actions" }, el("button", { type: "button", onclick: () => dialog.close() }, "Close")));
-        dialog.addEventListener("close", () => { auth.clear(); dialog.remove(); });
-        document.body.append(dialog); dialog.showModal();
-      })));
-  }
+  const panel = connectionDiagnostics(active.catalog, config, api);
+  diagnostics.append(panel.node);
+  if (section === "diagnostics") { diagnostics.open = true; diagnostics.scrollIntoView({ block: "start" }); }
+  pageCleanup = () => panel.dispose();
 
 }
 function realOverview() {
   app.append(heading("REAL INTEGRATIONS", "Connect your services", "Real connections only. No demo services or synthetic test results are loaded."),
     el("section", { class: "card" }, el("h2", {}, "Available now"),
       el("p", {}, "Configure Artifactory, Bitbucket and Delinea authentication. Discover image versions, resolve digests, and browse service Git branches and tags."),
-      link("Configure connections", "#settings", "button primary")),
+      el("div", { class: "card-actions" },
+        link("Browse service diagnostics", "#settings/diagnostics", "button primary"),
+        link("Configure connections", "#settings", "button"))),
     el("section", { class: "card spacer" }, el("h2", {}, "Execution is not connected yet"),
-      el("p", {}, "Real deployment, readiness, load-generator control and metrics need their organizational integration contracts. Planning and run submission are unavailable in this mode."),
+      el("p", {}, "Repository checkout, Helm deployment, load-generator control and live monitoring are not implemented yet. Successful connection checks enable read-only discovery; they do not enable planning or running a real performance test."),
       el("p", { class: "muted" }, "Restart with --mode simulation to try the complete mock workflow. Mode changes require a restart; runtime settings cannot switch execution mode.")));
 }
 
@@ -1003,7 +889,7 @@ async function route() {
     else if (page === "plan") await planScreen(id);
     else if (page === "history") await history();
     else if (page === "run") await runDetails(id, generation);
-    else if (page === "settings") await settings();
+    else if (page === "settings") await settings(id);
     else await dashboard();
     if (session.mode === "real") await vaultPrompt?.refresh();
   } catch (error) {
@@ -1012,7 +898,7 @@ async function route() {
 }
 session = await api("/session");
 vaultPrompt = secretSignInPrompt(api, async state => {
-  toast(`Vault session available until ${time(state.expiresAt)}`);
+  toast(`Vault token stored until ${time(state.expiresAt)}; access is verified when a secret is requested.`);
   await route();
 }, session.mode === "real");
 $("#mode-badge").textContent = session.mode === "real" ? "REAL · READ-ONLY" : "SIMULATION";

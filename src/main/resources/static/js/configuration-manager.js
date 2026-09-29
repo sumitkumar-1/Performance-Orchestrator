@@ -234,7 +234,7 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, onC
       const text = el("div", {}, el("strong", {}, id), el("p", { class: "muted" }, description));
       if (key === "secretServers") {
         const state = authStates[id];
-        text.append(el("small", {}, ["AUTHENTICATED", "TOKEN_PROVIDED"].includes(state?.state) ? `Session available until ${new Date(state.expiresAt).toLocaleString()}` : `${entry.authMode || "environment"} authentication`));
+        text.append(el("small", {}, ["AUTHENTICATED", "TOKEN_PROVIDED"].includes(state?.state) ? `Token stored until ${new Date(state.expiresAt).toLocaleString()} · not verified at sign-in` : `${entry.authMode || "environment"} authentication`));
         if (state?.mode === "token") controls.prepend(action(["AUTHENTICATED", "TOKEN_PROVIDED"].includes(state.state) ? "Sign out" : "Sign in", async () => {
           if (!["AUTHENTICATED", "TOKEN_PROVIDED"].includes(state.state)) return onSignIn(id);
           const ui = modal("Sign out of Secret Server?");

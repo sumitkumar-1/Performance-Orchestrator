@@ -267,8 +267,8 @@ Example secret IDs/URLs are placeholders, not live organization credentials. Das
 - **Credential references**: map a secret ID and username/password field slugs to that vault. Services select one reference per environment for both logs and LogQL metrics.
 - **Artifactory connections**: `office` is the example registry server and its credential reference.
 - **Services → Container image**: select `office`, repository stage `dev` or `stable`, team ID and image name. The tags request is `{apiBaseUrl}/docker-{repoStage}/v2/{teamId}/{imageName}/tags/list`. Existing `office-dev` image-source mappings remain supported as legacy configuration.
-- **Bitbucket connections**: `office-stash` is the example Stash REST API connection. Services specify project key, repository slug, Git revision and Helm chart path. Use **Browse Git references** in diagnostics to query branches/tags. Checkout and Helm execution are not implemented.
-- **Connection diagnostics → Browse versions** opens a focused read-only registry test. Sign in from the Secret Servers section first when required.
+- **Bitbucket connections**: `office-stash` is the example Stash REST API connection. Services specify project key, repository slug, Git revision and Helm chart path. In **Connection diagnostics**, select the service and choose **Git branches** or **Git tags**. Checkout and Helm execution are not implemented.
+- **Connection diagnostics** has one service selector and operation selector for container image versions, Git branches and Git tags. Image discovery also supports pagination and digest resolution. Overview links directly to this panel. Sign in from the Secret Servers section first when required.
 
 Real-mode environment exports omit simulator limits, allowed actions, dashboard URLs and legacy namespace lists. Service deployment destinations own namespaces; their monitoring credential references are keyed by environment. Old real-mode imports containing those simulator fields remain readable; the unused fields are discarded. Simulation keeps its existing controls.
 
