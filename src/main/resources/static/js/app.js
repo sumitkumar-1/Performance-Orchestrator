@@ -811,7 +811,21 @@ async function configurationEditor() {
     el("div", { class: "card-actions config-import" }, importButton, fileName, file));
 }
 
+function configurationSummary(title, entries) {
+  const items = Object.entries(entries || {});
+  return el("div", { class: "configuration-summary" },
+    el("p", { class: "muted" }, `${title}: ${items.length} configured`),
+    items.length
+      ? el("ul", {}, items.map(([id, value]) => el("li", {},
+          el("strong", {}, id),
+          value.displayName ? ` — ${value.displayName}` : value.apiBaseUrl ? ` — ${value.apiBaseUrl}` : "")))
+      : el("p", {}, "No entries in the active configuration. Review startup defaults or add entries in the editor below."),
+    items.length ? detail(`${title} JSON`, entries) : null);
+}
+
 async function settings() {
+  const active = await api("/configuration");
+  const startup = await api("/configuration/startup");
   app.append(
     heading(
       "WORKSPACE SETTINGS",
@@ -825,6 +839,9 @@ async function settings() {
         ? "Real integration mode: configured Artifactory discovery and Delinea authentication are available. Deployment, load execution and live metrics are not yet connected. No simulation data is generated."
         : "Simulation mode: deployments and performance results are synthetic. Configured read-only connections can also be tested here.",
     ),
+    el("p", { class: "banner" }, startup.runtimeOverride
+      ? "Showing saved runtime JSON. Saved settings override application.yaml and Helm defaults. Use Load startup defaults into editor to review the current startup settings; Save applies them."
+      : "Showing startup configuration from application.yaml and any local / Helm overrides. Expand a JSON section below for full details."),
     el(
       "div",
       { class: "grid" },
@@ -837,7 +854,7 @@ async function settings() {
           { class: "muted" },
           session.mode === "real" ? "Register environment and namespace mappings here. These mappings do not enable deployment until the real execution adapters are connected." : "An environment is a simulated target cluster plus namespaces and limits. stging is preserved exactly.",
         ),
-        detail("Environment mappings", catalog.env),
+        configurationSummary("Environments", active.catalog.environments),
       ),
       el(
         "section",
@@ -848,7 +865,9 @@ async function settings() {
           { class: "muted" },
           "These are separate connections: a Delinea URL and access token retrieve a secret; each Artifactory URL has its own credential reference to that secret. Simulation builds use neither connection.",
         ),
-        detail("Image sources", catalog.sources),
+        configurationSummary("Artifactory connections", active.connections.artifactory),
+        configurationSummary("Secret Servers", active.connections.secretServers),
+        configurationSummary("Real image sources", active.connections.imageSources),
       ),
       el(
         "section",
@@ -859,13 +878,13 @@ async function settings() {
           { class: "muted" },
           session.mode === "real" ? "Remote project retrieval and real planning are not connected yet. Artifactory service-to-image mappings can be edited independently below." : "Current projects use packaged mock resources. Namespace, release name and values paths are configured per service and target.",
         ),
-        detail("Namespaces & installation bindings", catalog.services),
+        configurationSummary("Services", active.catalog.services),
       ),
       el(
         "section",
         { class: "card" },
         el("h2", {}, "Scenario templates"),
-        detail("Available scenarios", catalog.scenarios),
+        configurationSummary("Scenarios", active.catalog.scenarios),
       ),
     ),
   );
