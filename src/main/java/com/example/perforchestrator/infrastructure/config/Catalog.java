@@ -201,6 +201,19 @@ public class Catalog {
                     || service.allowedOverridePaths() == null
                     || service.deploymentByEnvironment().isEmpty())
                   throw new IllegalArgumentException();
+                if (mode.equals("real")) {
+                  // Real service entries describe intended deployment inputs. Source retrieval
+                  // and executable chart validation remain blocked by requireExecution().
+                  service.deploymentByEnvironment().forEach((environment, destination) -> {
+                    var env = candidate.environments().get(environment);
+                    if (env == null || !env.serviceNamespaces().contains(destination.namespace())
+                        || destination.valuesFiles() == null || destination.valuesFiles().isEmpty())
+                      throw new IllegalArgumentException();
+                    required(destination.releaseName());
+                    destination.valuesFiles().forEach(Catalog::safeRelative);
+                  });
+                  return;
+                }
                 var binding = service.installationBindings();
                 required(binding.exactLine());
                 required(binding.helmValuesKey());

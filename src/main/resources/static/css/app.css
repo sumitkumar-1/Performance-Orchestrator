@@ -789,3 +789,6 @@ select {
     justify-self: start;
   }
 }
+
+.config-import { padding-top: 1rem; border-top: 1px solid var(--border, #dce4df); margin-top: 1rem; align-items: center; }
+.config-import span { overflow-wrap: anywhere; }

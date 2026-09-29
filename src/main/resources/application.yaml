@@ -24,10 +24,39 @@ orchestrator:
   # Real catalog sections; supply organization mappings here or via external Spring YAML.
   # Simulation uses the separate mock catalog selected above.
   catalog-defaults:
-    environments: {}
-    services: {}
-    imageSources: {}
-    scenarios: {}
+    # EXAMPLES: replace cluster/namespace/paths and limits before use.
+    environments:
+      perf3:
+        displayName: Perf3 (example - configure before use)
+        clusterIdentity: ckp-perf3-region.domain
+        serviceNamespaces: [ps-spoolers-smtp-data-producer]
+        loadGeneratorNamespace: ps-spoolers-smtp-data-producer
+        allowedActions: [PLAN]
+        limits:
+          maxRunDurationSeconds: 300
+          maxVirtualUsers: 1
+          maxRequestsPerSecond: 10
+        dashboardUrl: ''
+    services:
+      ps-spoolers-ps-load-gen:
+        projectPath: projects/ps-spoolers-ps-load-gen
+        dependencies: []
+        deploymentByEnvironment:
+          perf3:
+            namespace: ps-spoolers-smtp-data-producer
+            releaseName: ps-spoolers-load-gen
+            valuesFiles: [ckp/helm/ps-spoolers-ps-load-gen/values-perf3-baseline.yaml]
+        # installationBindings omitted: real chart retrieval is not implemented yet
+        allowedOverridePaths: [] # Confirm editable chart fields before allowing overrides
+    imageSources: {} # Simulation-only versions; mocks supply these in simulation mode
+    scenarios:
+      baseline-example:
+        displayName: Baseline (example - configure before use)
+        revision: example-1
+        allowedOverridePaths: []
+        defaults:
+          profilePath: ckp/helm/ps-spoolers-ps-load-gen/values-perf3-baseline.yaml
+          note: Replace with approved load-profile fields; this is not an executable profile
   # Sanitized organization patterns, not verified destinations. No automatic requests.
   connection-defaults:
     artifactory:
@@ -46,7 +75,15 @@ orchestrator:
         secretId: '12345' # EXAMPLE ONLY: replace with the approved registry secret ID
         usernameFieldSlug: username
         passwordFieldSlug: password
-    imageSources: {} # Add exact repositoryKey/imagePaths mappings before discovery
+    imageSources:
+      office-dev:
+        displayName: Dev images (example - configure before use)
+        connectionRef: office
+        repositoryKey: REPLACE_WITH_DOCKER_REPOSITORY
+        imagePaths:
+          ps-spoolers-ps-load-gen: REPLACE_WITH_IMAGE_PATH
+        usernameRequired: false
+        pullRepositoryTemplate: artifactory.domain/{repositoryKey}/{image}
   configuration-file: data/configuration.json
   artifact-root: data/artifacts
   tick-ms: 1200
@@ -60,7 +97,7 @@ spring:
   datasource:
     url: jdbc:h2:file:./data/real/orchestrator;DB_CLOSE_ON_EXIT=FALSE
 orchestrator:
-  catalog: '' # Empty real catalog; no mock data
+  catalog: '' # Use inline real catalog examples; no simulation fixtures
   configuration-file: data/real/configuration.json
   artifact-root: data/real/artifacts
   worker-enabled: false

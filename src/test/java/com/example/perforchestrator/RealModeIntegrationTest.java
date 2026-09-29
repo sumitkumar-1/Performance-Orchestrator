@@ -25,7 +25,7 @@ import org.springframework.test.web.servlet.MockMvc;
     properties = {
       "orchestrator.mode=real",
       "spring.datasource.url=jdbc:h2:mem:real-mode;DB_CLOSE_DELAY=-1",
-      "orchestrator.configuration-file=target/test-real-mode/configuration.json",
+      "orchestrator.configuration-file=target/test-real-mode/${random.uuid}.json",
       "orchestrator.worker-enabled=true"
     })
 @AutoConfigureMockMvc
@@ -42,7 +42,7 @@ class RealModeIntegrationTest {
   @Test
   void realModeHasNoMockBeansOrSeedDataAndRefusesExecution() throws Exception {
     assertThat(catalog.mode()).isEqualTo("real");
-    assertThat(catalog.data().services()).isEmpty();
+    assertThat(catalog.data().services()).containsKey("ps-spoolers-ps-load-gen");
     assertThat(store.profiles()).isEmpty();
     assertThat(context.getBeansOfType(SimulationImages.class)).isEmpty();
     assertThat(

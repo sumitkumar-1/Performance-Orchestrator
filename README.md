@@ -80,7 +80,7 @@ The pilot uses embedded H2 in the application process, backed by the PVC on CKP.
 
 Organization secret provisioning is deferred until the `secretDockerImage`/`pistol` contract is available. An init container can write files on a shared volume; it cannot directly set another container's environment. A future integration can read those files through Spring configuration or an application entrypoint. Existing Delinea, environment Secret and token-file support for external integrations remains available.
 
-`values.yaml` and `application.yaml` include the supplied sanitized Delinea and Artifactory URL patterns. Secret ID `12345` is an example only: replace it and verify field slugs. No image sources are enabled until repository/image mappings are supplied. These defaults do not make outbound requests at startup.
+`values.yaml` and `application.yaml` include the supplied sanitized Delinea and Artifactory URL patterns. Secret ID `12345` and `REPLACE_WITH_*` repository/image paths are examples only: replace them and verify field slugs. These defaults do not make outbound requests at startup.
 
 Override `connections` in the chosen `values-env.yaml`. Helm mounts it as a connections file; it overrides the application's `orchestrator.connection-defaults`. For example:
 
@@ -125,7 +125,7 @@ All editable sections have a startup configuration location:
 | Artifactory, Secret Server, credentials, real image sources | `orchestrator.connection-defaults` | `connections` |
 | Environments, services, mock image sources, scenarios | `orchestrator.catalog-defaults` | `catalog` |
 
-Real catalog maps start empty until organization mappings are provided; server URLs alone cannot define deployments. Simulation still loads its packaged mock catalog. An explicit `orchestrator.catalog` or `orchestrator.connections` file takes precedence over the corresponding inline defaults. Real service entries currently retain the existing project-file/installation-binding validation; this change does not implement remote Git retrieval or enable real execution.
+Real catalog defaults include a labeled perf3 environment, load-generator service and baseline scenario example based on the supplied paths. Limits and unknown fields are illustrative, not approved execution settings. Simulation still loads its packaged mock catalog. An explicit `orchestrator.catalog` or `orchestrator.connections` file takes precedence over the corresponding inline defaults. Real service entries validate metadata, namespace references, dependencies and relative paths without requiring a local checkout. Simulation still validates project files and installation bindings. Remote Git retrieval and real execution remain unavailable.
 
 For local overrides without rebuilding, create an ignored `.local/application.yaml` with only the properties you want to change:
 
@@ -158,10 +158,10 @@ Spring merges these startup properties over packaged defaults. On CKP, put the s
 
 In **Connections & catalog → Edit runtime configuration**:
 
-- The source label identifies startup settings versus saved runtime JSON.
+- The source label identifies startup settings versus saved runtime JSON. The editor initially shows the complete document; section views are also available.
 - **Save configuration** validates and applies all maps together immediately, then persists the complete configuration. Connection changes require a fresh vault sign-in.
 - **Export active configuration** downloads JSON containing the active catalog and connection references. It excludes unsaved editor drafts and does not resolve passwords or tokens. Arbitrary values entered in the catalog are included: do not put plaintext secrets there, and review exports before sharing.
-- **Import configuration JSON** loads an exported file into an editor draft. Review sections and click Save to validate/apply. Import replaces the complete configuration, must match simulation/real mode and is limited to 256 KiB. The destination's current edit revision is used; stale saves remain rejected.
+- **Import JSON…** loads an exported file into the Complete configuration editor, displaying the entire JSON document. Review the document or switch sections and click Save to validate/apply. Import replaces the complete configuration, must match simulation/real mode and is limited to 256 KiB. The destination's current edit revision is used; stale saves remain rejected.
 - **Load startup defaults into editor** loads the startup snapshot for review. Saving it replaces runtime settings with that snapshot but still persists an override.
 
 Saved runtime JSON has highest precedence over YAML/Helm, for the entire configuration rather than individual fields. It is created on the first save and survives restart. To return permanently to file-managed defaults, stop the app and move the saved configuration JSON to a backup location (keep the database), then restart. A new runtime configuration path is also an option for a local trial.
@@ -243,3 +243,9 @@ For an office laptop without Codex, start with the [step-by-step real integratio
 For pending organizational contracts, use the [integration questionnaire](docs/integration/organization-questionnaire.md) and [monitoring contract](docs/integration/monitoring-contract.md). Local implementation notes are in ignored `TASK.md`.
 
 Outstanding organization inputs are tracked in [open integration questions](docs/integration/open-questions.md), including load YAML keys, lifecycle signals and metrics queries.
+
+### AD sign-in prompt
+
+Opening the real-mode UI prompts for AD credentials for a configured portal-mode Secret Server. Select the vault explicitly when multiple connections exist. Configure connections / Not now allow setup before authenticating. The password is cleared after submission; the backend exchanges it for a session-scoped token and returns status/expiry only. Expiry is tracked on the server and checked again before retrieving secrets; the UI schedules a sign-in prompt at expiry and rechecks when the tab becomes visible. Restart, expiry or connection edits can require sign-in again. No automatic password replay or token refresh is implemented.
+
+This is vault authentication for on-demand secret retrieval, not shared-user authorization for hosting the portal publicly. Simulation does not show the initial prompt; environment/file token providers do not ask for AD credentials. Existing saved runtime JSON still supersedes new example defaults—load startup defaults into the editor to review them before saving.

@@ -1,4 +1,5 @@
 import { el, labeled, input, select } from "./dom.js";
+import { secretSignInPrompt } from "./secret-sign-in.js";
 import { deploymentEditor } from "./deployments.js";
 const app = document.querySelector("#app");
 const terminal = new Set([
@@ -7,6 +8,7 @@ const terminal = new Set([
   "CANCELLED",
   "NEEDS_ATTENTION",
 ]);
+let vaultPrompt;
 let session,
   catalog,
   profiles = [],
@@ -711,6 +713,7 @@ async function configurationEditor() {
   let document = await api("/configuration");
   const startup = await api("/configuration/startup");
   const sections = [
+    ["all", "Complete configuration"],
     ["catalog.environments", "Environments & limits"],
     ["catalog.services", "Services, namespaces & releases"],
     ["catalog.imageSources", "Mock image sources & versions"],
@@ -723,8 +726,14 @@ async function configurationEditor() {
   const selector = select(sections, sections[0][0]);
   const editor = el("textarea", { rows: 20, spellcheck: "false", "aria-label": "Configuration JSON" });
   let selected = selector.value;
-  const value = () => { const [group, section] = selected.split("."); return document[group][section]; };
+  const value = () => { if (selected === "all") return document; const [group, section] = selected.split("."); return document[group][section]; };
   const capture = () => {
+    if (selected === "all") {
+      const parsed = JSON.parse(editor.value);
+      if (!parsed || !parsed.catalog || !parsed.connections) throw new Error("Complete configuration requires catalog and connections.");
+      document = { ...parsed, revision: document.revision };
+      return;
+    }
     const [group, section] = selected.split(".");
     document[group][section] = JSON.parse(editor.value);
   };
@@ -748,7 +757,9 @@ async function configurationEditor() {
     editor.value = pretty(value());
     status.textContent = "Loaded the current saved configuration.";
   });
-  const file = el("input", { type: "file", accept: ".json,application/json", "aria-label": "Import configuration JSON" });
+  const file = el("input", { type: "file", hidden: true, accept: ".json,application/json", "aria-label": "Import configuration JSON file" });
+  const fileName = el("span", { class: "muted", role: "status" }, "JSON file · maximum 256 KiB");
+  const importButton = el("button", { type: "button", onclick: () => file.click() }, "Import JSON…");
   file.addEventListener("change", async () => {
     const chosen = file.files[0];
     if (!chosen) return;
@@ -759,7 +770,7 @@ async function configurationEditor() {
           || Object.keys(imported).some(key => !["revision", "catalog", "connections"].includes(key))
           || !imported.catalog || !imported.connections)
         throw new Error("Import a configuration export containing catalog and connections.");
-      for (const [key] of sections) {
+      for (const [key] of sections.filter(([key]) => key !== "all")) {
         const [group, section] = key.split(".");
         const value = imported[group][section];
         if (!value || typeof value !== "object" || Array.isArray(value))
@@ -768,6 +779,9 @@ async function configurationEditor() {
       if (imported.catalog.mode !== session.mode)
         throw new Error("Imported configuration must match the running mode.");
       document = { ...imported, revision: document.revision };
+      selected = "all";
+      selector.value = "all";
+      fileName.textContent = chosen.name;
       editor.value = pretty(value());
       status.textContent = "Imported into the editor only. Review all sections, then Save configuration to validate and apply. This replaces the complete runtime configuration.";
     } catch (error) { showError(error.message); }
@@ -794,7 +808,7 @@ async function configurationEditor() {
     el("p", { class: "muted" }, "Saved settings survive restarts. Active runs retain their prepared inputs; older unsubmitted plans must be prepared again after catalog changes. Connection changes require a fresh Secret Server sign-in."),
     labeled("Configuration section", selector), labeled("JSON", editor), status,
     el("div", { class: "card-actions" }, save, reload, exportSaved, restore),
-    labeled("Import configuration JSON (review before saving)", file));
+    el("div", { class: "card-actions config-import" }, importButton, fileName, file));
 }
 
 async function settings() {
@@ -897,6 +911,7 @@ async function settings() {
           busy(async () => {
             try {
               render(await api(`/secret-auth/${encodeURIComponent(connection)}`, { method: "POST", body: credentials }));
+              await vaultPrompt?.refresh();
             } catch (error) {
               render({ mode: "portal", state: "SIGN_IN_REQUIRED" });
               throw error;
@@ -1027,11 +1042,16 @@ async function route() {
     else if (page === "run") await runDetails(id, generation);
     else if (page === "settings") await settings();
     else await dashboard();
+    await vaultPrompt?.refresh();
   } catch (error) {
     showError(error.message);
   }
 }
 session = await api("/session");
+if (session.mode === "real") vaultPrompt = secretSignInPrompt(api, async state => {
+  toast(`Signed in until ${time(state.expiresAt)}`);
+  await route();
+});
 $("#mode-badge").textContent = session.mode === "real" ? "REAL · READ-ONLY" : "SIMULATION";
 $("#workspace-mode").textContent = session.mode === "real" ? "Real integrations · configured credentials required" : "Simulation mode · synthetic deployments and results";
 if (session.mode === "real") document.querySelector('nav a[href="#configure"]').hidden = true;
