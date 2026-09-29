@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 public class Catalog {
   public record Limits(int maxRunDurationSeconds, int maxVirtualUsers, int maxRequestsPerSecond) {}
 
+  @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
   public record Environment(
       String displayName,
       String clusterIdentity,
@@ -92,6 +93,12 @@ public class Catalog {
       Map<String, Source> imageSources,
       Map<String, Scenario> scenarios) {
     public Data {
+      if ("real".equals(mode) && environments != null) {
+        Map<String, Environment> realEnvironments = new LinkedHashMap<>();
+        environments.forEach((id, env) -> realEnvironments.put(id, env == null ? null
+            : new Environment(env.displayName(), env.clusterIdentity(), null, null, null, null, null, env.monitoring())));
+        environments = realEnvironments;
+      }
       environments = ImmutableConfiguration.map(environments);
       services = ImmutableConfiguration.map(services);
       imageSources = ImmutableConfiguration.map(imageSources);

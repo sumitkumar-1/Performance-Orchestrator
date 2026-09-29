@@ -121,7 +121,9 @@ Checkpoint: one known tag resolves successfully. Record the timestamp and non-se
 
 The startup YAML is a bootstrap file. Once settings are saved through the UI, `data/real/configuration.json` takes precedence, including after restart. Resource files are not watched.
 
-Use **Connections & catalog → Edit runtime configuration** for subsequent changes. The selector exposes separate JSON maps: Artifactory connections, Secret Server authentication, Credential references & secret IDs, and Real image-source mappings. Paste/edit only the selected map as JSON, without its outer section name. Do not paste the whole YAML document. Switching sections captures valid JSON drafts; finish all related references, then click **Save configuration** once. Reauthenticate after changing connections.
+Use the forms in **Connections & catalog** for subsequent changes. Configure Secret Servers, then credential references, then Artifactory connections and image repositories. Environment monitoring and service destinations also have editing forms. Each save validates the complete configuration, including references. Reauthenticate with **Secret Servers → Sign in** after changing connections. Use **Connection diagnostics → Browse versions** to test registry access.
+
+For bulk changes or backups, expand **Advanced JSON · import, export & restore**. The selector exposes separate configuration maps; paste only the selected map as JSON, without its outer section name. Do not paste Spring YAML. Import loads a complete export into the editor for review before saving.
 
 Checkpoint: changes apply immediately and survive restart. A conflict means another edit used a newer revision; reload and reapply your change. A rejected save leaves the previous configuration active.
 

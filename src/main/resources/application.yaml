@@ -31,7 +31,7 @@ orchestrator:
   # Real catalog sections; supply organization mappings here or via external Spring YAML.
   # Simulation uses the separate mock catalog selected above.
   catalog-defaults:
-    # EXAMPLES: replace cluster/namespace/paths and limits before use.
+    # EXAMPLES: replace cluster identities, namespaces and paths before use.
     environments:
       sandbox:
         displayName: sandbox (example - configure before use)

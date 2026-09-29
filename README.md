@@ -66,7 +66,7 @@ For CKP, set `mode: simulation` or `mode: real` in your Helm values. Changing it
 - `docs/integration/examples/`: optional bootstrap examples, not packaged runtime configuration.
 - `src/main/resources/mocks/`: demonstration catalog, chart/values inputs and starter profile.
 
-Use **Connections & catalog → Edit runtime configuration** to update environments, limits, services, namespace/release mappings, image sources, scenarios, connections and credential references. Saves are validated and applied without restart. Conflicting edits are rejected; active runs retain their prepared inputs. Connection changes invalidate portal tokens and require a fresh sign-in.
+Use **Connections & catalog** to edit environment monitoring, service destinations, Secret Servers, credential references, Artifactory connections and image repositories using forms. Connection and service entries can be added or deleted; referenced entries cannot be deleted until their references are updated. The real instance environment/cluster is fixed at startup. Simulator project additions and simulation-only fields remain in Advanced JSON. Scenario templates are read-only in the normal settings view; real profile creation from the overview is not implemented. Saves are validated and applied without restart. Conflicting edits are rejected; active runs retain their prepared inputs. Connection changes invalidate portal tokens and require a fresh sign-in.
 
 Field-level overrides in `data/configuration.json` (or `data/real/configuration.json` in real mode) are applied over packaged or externally supplied defaults on restart. Untouched fields receive new defaults. Changes to resource files alone are not watched. Port, database, worker scheduling and application mode remain startup settings.
 
@@ -156,7 +156,7 @@ orchestrator:
 
 Spring merges these startup properties over packaged defaults. On CKP, put the same environment map under `catalog.environments` in your environment values file. Helm merges base/environment values and renders the application ConfigMap. `application` in Helm values can additionally override Spring startup properties, including catalog defaults. Restart/rollout is required for startup-file changes.
 
-In **Connections & catalog → Edit runtime configuration**:
+In **Connections & catalog → Advanced JSON · import, export & restore**:
 
 - The source label identifies startup settings versus saved runtime overrides. The editor initially shows the complete document; section views are also available.
 - **Save configuration** validates and applies all maps together immediately, then persists the complete configuration. Connection changes require a fresh vault sign-in.
@@ -259,3 +259,13 @@ Deploy with `values-sandbox.yaml`, `values-dev.yaml`, `values-qa.yaml`, `values-
 All environment defaults remain in source control. `deploymentDefaults` holds each service's shared namespace, release and values files. `deploymentByEnvironment` is only for exceptions. Load-profile YAML remains authoritative; the sample scenario is metadata until load-generator integration is implemented. Environment monitoring maps namespace-specific `logsCredentialRef` and `metricsCredentialRef` separately; querying those endpoints is still pending. Repository checkout, Helm execution and service-account RBAC are also pending and have not been enabled by these configuration changes.
 
 Example secret IDs/URLs are placeholders, not live organization credentials. Dashboard changes remain instance-local. Existing snapshots created for another environment/cluster must be reviewed and adapted before importing; the application refuses to switch its target to accommodate an import.
+
+### Connection settings in the portal
+
+- **Secret Servers**: `office-vault` is the example Delinea connection. Configure its API base and OAuth token URL, then use **Sign in** for the AD dialog. Password fields are not displayed in the settings list.
+- **Credential references**: map a secret ID and username/password field slugs to that vault. Environments can select different references for each namespace's logs and metrics.
+- **Artifactory connections**: `office` is the example registry server and its credential reference.
+- **Image repositories**: `office-dev` selects `office`, a Docker repository key, and service-to-image paths. The Docker tags request is `{apiBaseUrl}/{repositoryKey}/v2/{imagePath}/tags/list`, authenticated with the resolved credential. These IDs are examples, not additional servers.
+- **Connection diagnostics → Browse versions** opens a focused read-only registry test. Sign in from the Secret Servers section first when required.
+
+Real-mode environment exports omit simulator limits, allowed actions, dashboard URLs and legacy namespace lists. Service destinations and monitoring namespace credentials hold the real namespace mappings. Old real-mode imports containing those simulator fields remain readable; the unused fields are discarded. Simulation keeps its existing controls.

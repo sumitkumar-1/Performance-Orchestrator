@@ -1,5 +1,6 @@
 import { el, labeled, input, select } from "./dom.js";
 import { secretSignInPrompt } from "./secret-sign-in.js";
+import { configurationManager } from "./configuration-manager.js";
 import { deploymentEditor } from "./deployments.js";
 const app = document.querySelector("#app");
 const terminal = new Set([
@@ -714,7 +715,7 @@ async function configurationEditor() {
   const startup = await api("/configuration/startup");
   const sections = [
     ["all", "Complete configuration"],
-    ["catalog.environments", "Environments & limits"],
+    ["catalog.environments", session.mode === "real" ? "Environments & monitoring" : "Environments & simulation limits"],
     ["catalog.services", "Services, namespaces & releases"],
     ["catalog.imageSources", "Mock image sources & versions"],
     ["catalog.scenarios", "Load scenario templates"],
@@ -805,7 +806,7 @@ async function configurationEditor() {
     editor.value = pretty(value());
     status.textContent = "Loaded startup configuration into the editor. Review and save to replace runtime settings. Saving clears dashboard overrides so future startup defaults apply. The runtime file remains as an empty override document.";
   });
-  return el("details", { class: "card spacer" }, el("summary", {}, "Edit runtime configuration"),
+  return el("details", { class: "card spacer" }, el("summary", {}, "Advanced JSON · import, export & restore"),
     el("p", { class: "muted" }, startup.runtimeOverride
       ? "Active source: startup settings plus saved dashboard changes. Only changed fields override startup defaults."
       : "Active source: startup YAML / Helm settings. No saved runtime override is loaded."),
@@ -816,138 +817,26 @@ async function configurationEditor() {
     el("div", { class: "card-actions config-import" }, importButton, fileName, file));
 }
 
-function configurationSummary(title, entries) {
-  const items = Object.entries(entries || {});
-  return el("div", { class: "configuration-summary" },
-    el("p", { class: "muted" }, `${title}: ${items.length} configured`),
-    items.length
-      ? el("ul", {}, items.map(([id, value]) => el("li", {},
-          el("strong", {}, id),
-          value.displayName ? ` — ${value.displayName}` : value.apiBaseUrl ? ` — ${value.apiBaseUrl}` : "")))
-      : el("p", {}, "No entries in the active configuration. Review startup defaults or add entries in the editor below."),
-    items.length ? detail(`${title} JSON`, entries) : null);
-}
-
 async function settings() {
   const active = await api("/configuration");
   const startup = await api("/configuration/startup");
-  app.append(
-    heading(
-      "WORKSPACE SETTINGS",
-      "Connections & catalog",
-      "Edit runtime configuration and manage connections; secrets stay on the backend.",
-    ),
-    el(
-      "div",
-      { class: "banner" },
-      session.mode === "real"
-        ? "Real integration mode: configured Artifactory discovery and Delinea authentication are available. Deployment, load execution and live metrics are not yet connected. No simulation data is generated."
-        : "Simulation mode: deployments and performance results are synthetic. Configured read-only connections can also be tested here.",
-    ),
-    el("p", { class: "banner" }, startup.runtimeOverride
-      ? "Showing startup defaults plus saved dashboard changes. Untouched fields receive new defaults after restart. Load startup defaults into editor and Save to clear overrides."
-      : "Showing startup configuration from application.yaml and any local / Helm overrides. Expand a JSON section below for full details."),
-    el(
-      "div",
-      { class: "grid" },
-      el(
-        "section",
-        { class: "card" },
-        el("h2", {}, "Environment catalog"),
-        el(
-          "p",
-          { class: "muted" },
-          session.mode === "real" ? "Register environment and namespace mappings here. These mappings do not enable deployment until the real execution adapters are connected." : "An environment is a simulated target cluster plus namespaces and limits. stging is preserved exactly.",
-        ),
-        configurationSummary("Environments", active.catalog.environments),
-      ),
-      el(
-        "section",
-        { class: "card" },
-        el("h2", {}, "Artifactory & Secret Server"),
-        el(
-          "p",
-          { class: "muted" },
-          "These are separate connections: a Delinea URL and access token retrieve a secret; each Artifactory URL has its own credential reference to that secret. Simulation builds use neither connection.",
-        ),
-        configurationSummary("Artifactory connections", active.connections.artifactory),
-        configurationSummary("Secret Servers", active.connections.secretServers),
-        configurationSummary("Real image sources", active.connections.imageSources),
-      ),
-      el(
-        "section",
-        { class: "card" },
-        el("h2", {}, "Service projects"),
-        el(
-          "p",
-          { class: "muted" },
-          session.mode === "real" ? "Remote project retrieval and real planning are not connected yet. Artifactory service-to-image mappings can be edited independently below." : "Current projects use packaged mock resources. Namespace, release name and values paths are configured per service and target.",
-        ),
-        configurationSummary("Services", active.catalog.services),
-      ),
-      el(
-        "section",
-        { class: "card" },
-        el("h2", {}, "Scenario templates"),
-        configurationSummary("Scenarios", active.catalog.scenarios),
-      ),
-    ),
-  );
-  try {
-    app.append(await configurationEditor());
-    const config = await api("/connections");
-    const connectionCard = el(
-      "section",
-      { class: "card spacer" },
-      el("h2", {}, "Configured read-only connections"),
-      detail("Connection status", config),
-    );
-    app.append(connectionCard);
-    const authStates = await api("/secret-auth");
-    for (const [connection, initial] of Object.entries(authStates)) {
-      const status = el("p", { role: "status" });
-      const username = input("", "text", { autocomplete: "username", required: true, maxlength: 512 });
-      const password = input("", "password", { autocomplete: "current-password", required: true, maxlength: 4096 });
-      const form = el("form", { class: "spacer" });
-      const signIn = el("button", { type: "submit" }, "Sign in to Secret Server");
-      const signOut = button("Clear Secret Server session", async () => {
-        await api(`/secret-auth/${encodeURIComponent(connection)}`, { method: "DELETE" });
-        render((await api("/secret-auth"))[connection]);
-      });
-      const render = (state) => {
-        status.textContent = state.state === "AUTHENTICATED"
-          ? `Signed in until ${time(state.expiresAt)}`
-          : state.mode === "portal" ? "Sign in to retrieve this connection’s secrets."
-          : `Administrator-provided token (${state.mode}); availability is checked when used.`;
-        signOut.hidden = state.state !== "AUTHENTICATED";
-      };
-      render(initial);
-      form.append(el("h3", {}, `Secret Server: ${connection}`), status);
-      if (initial.mode === "portal") {
-        form.append(el("div", { class: "form-grid" }, labeled("AD username", username), labeled("AD password", password)),
-          el("div", { class: "card-actions" }, signIn, signOut));
-        form.addEventListener("submit", (event) => {
-          event.preventDefault();
-          if (signIn.disabled) return;
-          signIn.disabled = true;
-          const credentials = { username: username.value, password: password.value };
-          password.value = "";
-          busy(async () => {
-            try {
-              render(await api(`/secret-auth/${encodeURIComponent(connection)}`, { method: "POST", body: credentials }));
-              await vaultPrompt?.refresh();
-            } catch (error) {
-              render({ mode: "portal", state: "SIGN_IN_REQUIRED" });
-              throw error;
-            } finally {
-              credentials.password = "";
-              signIn.disabled = false;
-            }
-          });
-        });
-      }
-      connectionCard.append(form);
-    }
+  const authStates = await api("/secret-auth");
+  app.append(heading("WORKSPACE SETTINGS", "Connections & catalog", "Manage connections and service settings. Changes apply when saved."),
+    el("p", { class: "banner" }, session.mode === "real"
+      ? "Real mode · Vault authentication and image discovery are available. Helm execution and live monitoring are not connected yet."
+      : "Simulation mode · Deployments and results are synthetic. Registry diagnostics use configured real connections."),
+    el("p", { class: "muted" }, startup.runtimeOverride
+      ? "Startup defaults + saved dashboard changes. Export your configuration below to keep a backup."
+      : "Showing startup defaults from application.yaml and local / Helm overrides."),
+    configurationManager(active, { api, mode: session.mode, authStates,
+      onSaved: async () => { await route(); toast("Settings updated."); },
+      onSignIn: id => busy(() => vaultPrompt.open(id)) }));
+  app.append(await configurationEditor());
+  const diagnostics = el("details", { class: "card spacer" }, el("summary", {}, "Connection diagnostics"),
+    el("p", { class: "muted" }, "Test image discovery with your configured registry and credentials. These requests do not deploy anything."));
+  app.append(diagnostics);
+  const config = await api("/connections");
+  if (!Object.keys(config.imageSources).length) diagnostics.append(el("p", {}, "Add an image repository to test discovery."));
     for (const [sourceId, source] of Object.entries(config.imageSources)) {
       const service = select(
         Object.keys(source.imagePaths).map((id) => [id, id]),
@@ -957,8 +846,15 @@ async function settings() {
       username.disabled = !source.usernameRequired;
       const versions = select([["", "Choose a discovered version"]], "");
       const evidence = el("pre", {}, "No request made yet.");
+      const diagnosticButton = (label, fn) => el("button", { type: "button", onclick: async event => {
+        event.currentTarget.disabled = true;
+        const control = event.currentTarget;
+        try { await fn(); } catch (error) { evidence.textContent = error.message; }
+        finally { control.disabled = false; }
+      } }, label);
       let cursor = "";
       const browse = async (more = false) => {
+        if (!service.value) throw new Error("Configure a service image path first.");
         const base = `/registry-sources/${encodeURIComponent(sourceId)}/services/${encodeURIComponent(service.value)}/images`;
         const params = new URLSearchParams({
           limit: "50",
@@ -980,7 +876,7 @@ async function settings() {
           nextCursor: cursor,
         });
       };
-      connectionCard.append(
+      const content = el("div", {},
         el(
           "section",
           { class: "spacer" },
@@ -989,17 +885,17 @@ async function settings() {
             "div",
             { class: "form-grid" },
             labeled("Service", service),
-            labeled("Artifact-owner username", username),
+            source.usernameRequired ? labeled("Artifact-owner username", username) : null,
             labeled("Available version", versions),
           ),
           el(
             "div",
             { class: "card-actions" },
-            button("Discover versions", () => browse(false)),
-            button("Next page", () =>
-              cursor ? browse(true) : toast("No further page available"),
+            diagnosticButton("Discover versions", () => browse(false)),
+            diagnosticButton("Next page", () =>
+              cursor ? browse(true) : (evidence.textContent = "No further page available"),
             ),
-            button("Resolve digest", async () => {
+            diagnosticButton("Resolve digest", async () => {
               if (!versions.value)
                 throw new Error("Choose a discovered version first");
               const params = new URLSearchParams();
@@ -1016,6 +912,14 @@ async function settings() {
           evidence,
         ),
       );
+      diagnostics.append(el("div", { class: "config-row" },
+        el("div", {}, el("strong", {}, source.displayName || sourceId), el("p", { class: "muted" }, `${source.connectionRef} → ${source.repositoryKey}`)),
+        button("Browse versions", () => {
+          const dialog = el("dialog", { class: "deployment-dialog", "aria-label": "Browse image versions" }, content,
+            el("div", { class: "dialog-actions" }, el("button", { type: "button", onclick: () => dialog.close() }, "Close")));
+          dialog.addEventListener("close", () => dialog.remove());
+          document.body.append(dialog); dialog.showModal();
+        })));
       service.addEventListener("change", () => {
         versions.replaceChildren(
           el("option", { value: "" }, "Choose a discovered version"),
@@ -1029,9 +933,6 @@ async function settings() {
         cursor = "";
       });
     }
-  } catch (error) {
-    showError(error.message);
-  }
 }
 function realOverview() {
   app.append(heading("REAL INTEGRATIONS", "Connect your services", "Real connections only. No demo services or synthetic test results are loaded."),
@@ -1066,16 +967,16 @@ async function route() {
     else if (page === "run") await runDetails(id, generation);
     else if (page === "settings") await settings();
     else await dashboard();
-    await vaultPrompt?.refresh();
+    if (session.mode === "real") await vaultPrompt?.refresh();
   } catch (error) {
     showError(error.message);
   }
 }
 session = await api("/session");
-if (session.mode === "real") vaultPrompt = secretSignInPrompt(api, async state => {
+vaultPrompt = secretSignInPrompt(api, async state => {
   toast(`Signed in until ${time(state.expiresAt)}`);
   await route();
-});
+}, session.mode === "real");
 $("#mode-badge").textContent = session.mode === "real" ? "REAL · READ-ONLY" : "SIMULATION";
 $("#workspace-mode").textContent = session.mode === "real" ? `Environment: ${session.targetEnvironment || "unbound"} · Real integrations` : "Simulation mode · synthetic deployments and results";
 if (session.mode === "real") document.querySelector('nav a[href="#configure"]').hidden = true;

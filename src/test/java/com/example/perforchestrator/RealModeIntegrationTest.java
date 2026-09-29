@@ -44,12 +44,32 @@ class RealModeIntegrationTest {
     mvc.perform(get("/api/v1/configuration/startup").header("Host", "localhost"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.configuration.catalog.environments").isNotEmpty())
+        .andExpect(jsonPath("$.configuration.catalog.environments.sandbox.limits").doesNotExist())
+        .andExpect(jsonPath("$.configuration.catalog.environments.sandbox.allowedActions").doesNotExist())
+        .andExpect(jsonPath("$.configuration.catalog.environments.sandbox.dashboardUrl").doesNotExist())
         .andExpect(jsonPath("$.configuration.catalog.services").isNotEmpty())
         .andExpect(jsonPath("$.configuration.catalog.scenarios").isNotEmpty())
         .andExpect(jsonPath("$.configuration.connections.artifactory").isNotEmpty())
         .andExpect(jsonPath("$.configuration.connections.secretServers").isNotEmpty())
         .andExpect(jsonPath("$.configuration.connections.credentials").isNotEmpty())
         .andExpect(jsonPath("$.configuration.connections.imageSources").isNotEmpty());
+  }
+
+  @Test
+  void legacyRealEnvironmentFieldsAreRemovedWithoutLosingMonitoring() {
+    var original = configuration.current().catalog();
+    var tree = Json.MAPPER.valueToTree(original);
+    var env = (com.fasterxml.jackson.databind.node.ObjectNode) tree.path("environments").path("sandbox");
+    env.put("dashboardUrl", "https://example.invalid/dashboard");
+    env.putArray("allowedActions").add("deploy");
+    env.putObject("limits").put("maxRunDurationSeconds", 60);
+    var restored = Json.read(Json.write(tree), Catalog.Data.class);
+    assertThat(restored.environments().get("sandbox").monitoring())
+        .isEqualTo(original.environments().get("sandbox").monitoring());
+    var exported = Json.MAPPER.valueToTree(restored).path("environments").path("sandbox");
+    assertThat(exported.has("limits")).isFalse();
+    assertThat(exported.has("allowedActions")).isFalse();
+    assertThat(exported.has("dashboardUrl")).isFalse();
   }
 
   @Test

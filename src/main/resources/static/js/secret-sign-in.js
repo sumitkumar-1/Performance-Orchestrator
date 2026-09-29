@@ -1,10 +1,10 @@
 import { el, labeled, input, select } from "./dom.js";
 
 // This prompts for vault access; it is not shared-user portal authorization.
-export function secretSignInPrompt(api, onSignedIn) {
+export function secretSignInPrompt(api, onSignedIn, automatic = true) {
   let timer, dialog, checking = false;
   const dismissed = new Set();
-  async function refresh() {
+  async function refresh(preferred) {
     if (checking) return;
     checking = true;
     try {
@@ -22,7 +22,7 @@ export function secretSignInPrompt(api, onSignedIn) {
       const pending = Object.entries(states).filter(([id, state]) =>
         state.mode === "portal" && state.state !== "AUTHENTICATED" && !dismissed.has(id));
       if (!pending.length || dialog?.open) return;
-      const connection = select(pending.map(([id]) => [id, id]), pending[0][0]);
+      const connection = select(pending.map(([id]) => [id, id]), pending.some(([id]) => id === preferred) ? preferred : pending[0][0]);
       const username = input("", "text", { autocomplete: "username", required: true, maxlength: 512 });
       const password = input("", "password", { autocomplete: "current-password", required: true, maxlength: 4096 });
       const status = el("p", { role: "status", class: "muted" });
@@ -30,13 +30,13 @@ export function secretSignInPrompt(api, onSignedIn) {
       const close = () => { pending.forEach(([id]) => dismissed.add(id)); activeDialog.close(); };
       const form = el("form", {},
         el("h2", { id: "vault-signin-title" }, "Sign in to Secret Server"),
-        el("p", { class: "muted" }, "Use your AD credentials to retrieve configured service secrets. The token stays on the server until it expires. Configure your organization's vault URL before signing in."),
-        labeled("Secret Server connection", connection), labeled("AD username", username),
+        el("p", { class: "muted" }, "Use your AD account to access service secrets. Your session token is held on the server until expiry."),
+        pending.length > 1 ? labeled("Secret Server", connection) : el("p", { class: "vault-connection" }, `Connection: ${pending[0][0]}`), labeled("AD username", username),
         labeled("AD password", password), status,
-        el("div", { class: "card-actions" }, submit,
-          el("button", { type: "button", onclick: () => { close(); location.hash = "#settings"; } }, "Configure connections"),
-          el("button", { type: "button", onclick: close }, "Not now")));
-      dialog = el("dialog", { class: "deployment-dialog", "aria-labelledby": "vault-signin-title" }, form);
+        el("div", { class: "dialog-actions" },
+          el("button", { type: "button", onclick: close }, "Not now"), submit),
+        el("a", { href: "#settings", onclick: close, class: "vault-settings-link" }, "Manage vault connection settings"));
+      dialog = el("dialog", { class: "deployment-dialog auth-dialog", "aria-labelledby": "vault-signin-title" }, form);
       const activeDialog = dialog;
       dialog.addEventListener("cancel", event => { event.preventDefault(); close(); });
       dialog.addEventListener("close", () => { password.value = ""; activeDialog.remove(); });
@@ -62,7 +62,7 @@ export function secretSignInPrompt(api, onSignedIn) {
     } finally { checking = false; }
   }
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) refresh().catch(() => {});
+    if (automatic && !document.hidden) refresh().catch(() => {});
   });
-  return { refresh };
+  return { refresh, open: async id => { if (id) dismissed.delete(id); else dismissed.clear(); await refresh(id); } };
 }
