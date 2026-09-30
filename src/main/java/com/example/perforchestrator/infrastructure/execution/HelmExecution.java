@@ -76,6 +76,56 @@ public class HelmExecution {
     } catch(RuntimeException e) { throw Problem.invalid("chart", "Rendered Helm manifests are invalid YAML"); }
     if (!pinned) throw Problem.invalid("image", "Rendered chart does not reference the selected image digest. Chart must consume imageTag/global.imageTag as tag@digest");
   }
+  public void prepareDependencies(Path folder, String chart) throws java.io.IOException {
+    Path directory=folder.resolve(chart);
+    Path metadata=Files.exists(directory.resolve("requirements.yaml"))
+        ?directory.resolve("requirements.yaml"):directory.resolve("Chart.yaml");
+    Object configured=HelmValues.parse(Files.readString(metadata)).get("dependencies");
+    if(configured==null || configured instanceof List<?> list && list.isEmpty())return;
+    if(!(configured instanceof List<?> dependencies))throw Problem.invalid("chart", "Chart dependencies must be a list");
+    Set<String> aliases=new TreeSet<>();
+    for(Object dependency:dependencies) {
+      if(!(dependency instanceof Map<?,?> entry))throw Problem.invalid("chart", "Invalid chart dependency");
+      String repository=Objects.toString(entry.get("repository"), "");
+      if(repository.startsWith("file://")) {
+        Path local=directory.resolve(repository.substring(7)).normalize();
+        if(!local.startsWith(folder.resolve("ckp").normalize()))
+          throw Problem.invalid("chart", "Local chart dependencies must remain inside the CKP snapshot");
+      } else if(repository.startsWith("@") || repository.startsWith("alias:")) {
+        String alias=repository.startsWith("@")?repository.substring(1):repository.substring(6);
+        if(!alias.matches("[A-Za-z0-9][A-Za-z0-9_-]{0,99}"))throw Problem.invalid("chart", "Invalid Helm repository alias");
+        if(!settings.helmRepositories.containsKey(alias))throw Problem.invalid("execution.helm-repositories",
+            "Configure orchestrator.execution.helm-repositories."+alias+" with the chart repository HTTPS URL");
+        aliases.add(alias);
+      } else if(!repository.isEmpty()) {
+        try {
+          var uri=java.net.URI.create(repository);
+          if(!Set.of("https", "oci").contains(uri.getScheme()) || uri.getHost()==null || uri.getUserInfo()!=null)
+            throw new IllegalArgumentException();
+        } catch(IllegalArgumentException e) {
+          throw Problem.invalid("chart", "Chart repositories must use HTTPS, OCI, a configured alias or a CKP-local file reference without embedded credentials");
+        }
+      }
+    }
+    // Each preparation has its own alias file/cache; concurrent reviews cannot overwrite each other's repositories.
+    var dependencyEnvironment=new HashMap<>(environment());
+    Path repositoryHome=folder.resolve(".helm-repositories");Files.createDirectories(repositoryHome);
+    dependencyEnvironment.put("HELM_REPOSITORY_CONFIG",repositoryHome.resolve("repositories.yaml").toString());
+    dependencyEnvironment.put("HELM_REPOSITORY_CACHE",repositoryHome.resolve("cache").toString());
+    for(String alias:aliases) {
+      var registered=commands.run(List.of("helm","repo","add",alias,settings.helmRepositories.get(alias)),folder,
+          dependencyEnvironment,Duration.ofSeconds(settings.timeoutSeconds+15L));
+      if(registered.exit()!=0)throw new Problem(422,"HELM_REPOSITORY_FAILED","execution",
+          "Helm repository registration failed for "+alias+" (exit "+registered.exit()+"). Check the configured URL, network/CA trust and repository access. "
+          +"Portal Artifactory tokens are not automatically forwarded to Helm. Raw output is withheld.");
+    }
+    String operation=Files.exists(directory.resolve("Chart.lock")) || Files.exists(directory.resolve("requirements.lock"))?"build":"update";
+    var result=commands.run(List.of("helm", "dependency", operation, directory.toString()),folder,
+        dependencyEnvironment,Duration.ofSeconds(settings.timeoutSeconds+15L));
+    if(result.exit()!=0)throw new Problem(422,"HELM_DEPENDENCY_FAILED","execution",
+        "Helm dependency "+operation+" failed (exit "+result.exit()+"). Check the chart's dependency repository URL, access credentials, network/CA trust and lock-file consistency. "
+        +"Repository aliases come from orchestrator.execution.helm-repositories. Raw output is withheld because repository errors may contain credentials.");
+  }
   private static boolean containsPinnedContainer(Object node,String digest) {
     boolean found=false;
     if(node instanceof Map<?,?> map) {

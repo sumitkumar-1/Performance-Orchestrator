@@ -11,10 +11,13 @@ public final class HelmDiagnostics {
 
   public static Problem failure(String operation, int exit, String output, Path folder, String chart) {
     String text=output==null?"":output;
-    String lower=text.toLowerCase(Locale.ROOT);
+    String errors=errorDiagnostics(text);
+    String lower=errors.toLowerCase(Locale.ROOT);
     String reason;
-    if(lower.contains("missing in charts/") || lower.contains("missing these dependencies") || lower.contains("found in chart.yaml, but missing"))
-      reason="Missing packaged chart dependencies. The selected Git revision must include dependencies under the chart's charts/ directory. This application does not run helm dependency build/update.";
+    if(missingDependencies(lower))
+      reason="Missing packaged chart dependencies after dependency preparation. Check Chart.yaml dependency declarations and whether the expected library chart was downloaded into charts/.";
+    else if(lower.contains("no template") && lower.contains("associated with template"))
+      reason="A referenced Helm helper template is unavailable. Check the chart's _helpers.tpl files and shared/library chart dependencies in charts/.";
     else if(lower.contains("schema") && (lower.contains("values") || lower.contains("validation")))
       reason="Values do not satisfy the chart's JSON schema. Check required fields, types and permitted formats, including support for digest-qualified image tags.";
     else if(lower.contains("nil pointer") || lower.contains("can't evaluate field") || lower.contains("cannot evaluate field"))
@@ -28,10 +31,30 @@ public final class HelmDiagnostics {
     else if(lower.contains("chart.yaml") && (lower.contains("missing") || lower.contains("version") || lower.contains("required")))
       reason="Helm rejected chart metadata. Check Chart.yaml in the selected revision.";
     else reason="Helm validation failed. Run helm lint locally with the same Git revision, namespace, values files and overrides to inspect the full diagnostic.";
-    String location=location(text,folder,chart);
+    if(!missingDependencies(lower) && missingDependencies(text.toLowerCase(Locale.ROOT)))
+      reason+=" Helm also reported missing chart dependencies; these may explain missing shared helpers. Check dependency declarations and the resolved charts/ contents.";
+    String location=location(errors,folder,chart);
     return new Problem(422,"HELM_"+operation.toUpperCase(Locale.ROOT)+"_FAILED","execution",
         "Helm "+operation+" failed (exit "+exit+")"+(location.isEmpty()?"": " at "+location)+". "+reason
             +" Raw output is not included because template errors can contain secret values.");
+  }
+
+  private static boolean missingDependencies(String text) {
+    return text.contains("missing in charts/") || text.contains("missing these dependencies")
+        || text.contains("found in chart.yaml, but missing");
+  }
+
+  /** Lint emits warnings and errors together; a dependency warning must not hide a template error. */
+  private static String errorDiagnostics(String text) {
+    StringBuilder errors=new StringBuilder();
+    boolean collecting=false;
+    for(String line:text.split("\\R")) {
+      String trimmed=line.stripLeading();
+      if(trimmed.startsWith("[ERROR]")) collecting=true;
+      else if(trimmed.startsWith("[WARNING]") || trimmed.startsWith("[INFO]") || trimmed.startsWith("==>")) collecting=false;
+      if(collecting) errors.append(line).append('\n');
+    }
+    return errors.isEmpty()?text:errors.toString();
   }
 
   private static String location(String text,Path folder,String chart) {

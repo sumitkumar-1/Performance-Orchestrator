@@ -74,7 +74,7 @@ class RealWorkflowTest {
     var plan=plan();var run=worker.enqueue("drift-key",plan.id());worker.tick();when(helm.baseline(any(),any(),any())).thenReturn("CHANGED");worker.tick();
     assertThat(store.run(run.id()).state()).isEqualTo(State.CLEANING_UP);verify(helm,never()).apply(any(),any(),any(),any(),anyBoolean());
   }
-  @Test void preparationSnapshotsCkpCommitDigestAndEditableValues() {
+  @Test void preparationSnapshotsCkpCommitDigestAndEditableValues() throws Exception {
     var destination=new Catalog.Destination("load-ns","load-release",List.of("ckp/helm/load/values.yaml"));
     var service=new Catalog.Service("projects/load",List.of(),Map.of(),null,List.of(),destination,
         new Catalog.ContainerImage("registry","dev","team","load"),
@@ -90,8 +90,16 @@ class RealWorkflowTest {
     var planner=new RealPreparation(catalog,source,helm,images,store,settings,connections);
     doAnswer(call -> {
       java.nio.file.Path folder=call.getArgument(0);
+      java.nio.file.Files.createDirectories(folder.resolve("ckp/helm/load/charts"));
+      java.nio.file.Files.write(folder.resolve("ckp/helm/load/charts/common.tgz"),new byte[]{1,2,3});
+      java.nio.file.Files.writeString(folder.resolve("ckp/helm/load/Chart.lock"),"lock snapshot");
+      return null;
+    }).when(helm).prepareDependencies(any(),any());
+    doAnswer(call -> {
+      java.nio.file.Path folder=call.getArgument(0);
       var metadata=HelmValues.parse(java.nio.file.Files.readString(folder.resolve("ckp/helm/load/Chart.yaml")));
       assertThat(metadata).containsEntry("appVersion","v1").containsEntry("version","0.0.0-build.v1");
+      assertThat(folder.resolve("ckp/helm/load/charts/common.tgz")).exists();
       return null;
     }).when(helm).validate(any(),any(),any(),any(),any());
     var request=new RealPreparation.Request("Prepared",List.of(),new RealPreparation.Deployment("load","main","v1",null,"rate: 20\n"),0,10,600,List.of(),List.of());
@@ -115,6 +123,8 @@ class RealWorkflowTest {
     assertThat(prepared.preparedHashes().get("ckp/helm/load/Chart.yaml")).isEqualTo(Json.hash(preparedChart))
         .isNotEqualTo(prepared.originalHashes().get("ckp/helm/load/Chart.yaml"));
     assertThat(store.plan(plan.id()).services().getFirst().preparedFiles()).isEqualTo(prepared.preparedFiles());
+    assertThat(prepared.preparedFiles()).containsKeys("ckp/helm/load/charts/common.tgz","ckp/helm/load/Chart.lock");
+    assertThat(prepared.originalHashes()).doesNotContainKey("ckp/helm/load/charts/common.tgz");
     assertThat(plan.checksum()).isEqualTo(PlanningService.checksum(store.plan(plan.id())));
     var editedRequest=new RealPreparation.Request("Edited values",List.of(),
         new RealPreparation.Deployment("load","main","v1",List.of("ckp/helm/load/values.yaml"),"",

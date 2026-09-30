@@ -47,7 +47,7 @@ Each service, including the load generator, needs:
 
 Bitbucket repository metadata is read at `GET {apiBaseUrl}/1.0/projects/{projectKey}/repos/{repository}`. Its `links.clone` HTTPS URL is used; `sourceProject.cloneUrl` is an optional override. The clone authority must match the configured Bitbucket authority. Cross-host cloning requires a separate reviewed connection, rather than forwarding a token automatically.
 
-Source preparation uses Git fetch with `--depth=1 --filter=blob:none` and non-cone sparse checkout restricted to `/ckp/`. The server can ignore partial-clone filtering, so this guarantees a CKP-only working tree, not a guarantee of minimal network transfer. The selected revision resolves to a commit and only that snapshot is used. Symlinks, paths outside CKP, snapshots above 16 MiB/2000 files and missing charts are rejected. Dependencies must be vendored under the repository's CKP chart; no automatic dependency downloads/submodules occur.
+Source preparation uses Git fetch with `--depth=1 --filter=blob:none` and non-cone sparse checkout restricted to `/ckp/`. The server can ignore partial-clone filtering, so this guarantees a CKP-only working tree, not a guarantee of minimal network transfer. The selected revision resolves to a commit and only that snapshot is used. Symlinks, paths outside CKP, snapshots above 16 MiB/2000 files and missing charts are rejected. Before lint/render, charts with declared dependencies run `helm dependency build` when Chart.lock (or legacy requirements.lock) exists, otherwise `helm dependency update`. Downloads and the lock file become part of the reviewed snapshot, subject to the same 16 MiB/2000-file limits. Deployment uses this snapshot without resolving dependencies again. Git submodules are not fetched.
 
 Before lint/render, preparation replaces `__REPLACEAPPVERSION__` in the `version` and `appVersion` fields of the selected chart's `Chart.yaml` and unpacked child charts. `appVersion` gets the exact selected image tag, without the digest. Chart `version` must be SemVer: `1.11.0` stays unchanged; `1.11.0.260811-12-4309-05-791d17a0a4bf` becomes `1.11.0-build.260811-12-4309-05-791d17a0a4bf`. A leading `v` is removed for SemVer tags. Other image tags use `0.0.0-build.<tag>`, with dots/underscores converted to hyphens and a `tag-` prefix for leading-zero numeric identifiers. Explicit metadata versions are preserved. Packaged `.tgz` dependencies must already have valid metadata. Only the prepared snapshot changes, not Git; original and prepared file hashes are retained, and deployment uses the same prepared files that were validated. YAML comments in changed metadata files are not retained. When reproducing lint locally, perform this metadata replacement first.
 
@@ -168,4 +168,34 @@ A lint failure happens during preparation, before this run deploys anything. “
 
 On the office laptop, use a checkout of the same selected revision, then run `helm lint <chart-path> --namespace <namespace> -f <selected-values-file>`, repeating `-f` in the same order for multiple files. Reproduce any edited YAML and the organization-specific overrides used by your working deployment. Preparation manages `imageName`, `imageTag`, `global.imageTag`, and `global.environment`; both image tags use `version@sha256:digest`. If the normal command works but review fails, compare those digest-qualified values with the chart schema, as well as namespace, chart dependencies, Helm version and other required values such as cluster subdomain. Local output can contain values; remove secrets before sharing it.
 
-If dependencies are actually missing, ask whether your repository requires a dependency build and authenticated chart repository access. The orchestrator currently expects dependencies packaged under the checked-out chart's `charts/` directory; it does not download them automatically.
+Dependencies are resolved before validation. A failed locked build stops preparation; it does not silently fall back to updating versions. Repository declarations may use HTTPS, OCI, configured Helm aliases, or `file://` paths inside the CKP snapshot. Embedded URL credentials and paths outside CKP are rejected. Repository aliases are configured in `orchestrator.execution.helm-repositories`. Before resolving dependencies, the app runs `helm repo add <alias> <url>` once for each referenced alias. Each preparation uses its own temporary repository configuration/cache outside the CKP snapshot, removed with the preparation workspace. It does not use your personal Helm repository aliases. Other Helm state uses `<orchestrator.execution.workspace>/helm-config`, `helm-cache` and `helm-data`. Portal Artifactory/Secret Server token sessions are not yet forwarded to dependency downloads. Authenticated repository access needs its repository URL/authentication mapping confirmed before it can be wired to those sessions. Do not put tokens into Chart.yaml. See [Helm dependency build](https://helm.sh/docs/helm/helm_dependency_build/) for lock-file behavior.
+
+Helm lint can report both a template error and a missing-dependency warning. Diagnostics prioritize the error and mention the dependency warning separately. A missing helper at `templates/service.yaml:1` can mean that the service includes a shared/library chart template that was not checked into `charts/`. Check the `dependencies:` section of Chart.yaml, the referenced helper and the build steps normally used to populate `charts/`; a source-file location alone does not confirm that cause.
+
+
+### Helm repository aliases
+
+For a chart dependency such as:
+
+```yaml
+dependencies:
+  - name: sng-common-helm-library
+    version: 1.0.0
+    repository: '@helm-release-virtual'
+```
+
+Set startup mappings in application.yaml (replace the example domain):
+
+```yaml
+orchestrator:
+  execution:
+    helm-repositories:
+      helm-dev-virtual: https://artifactory.domain/artifactory/helm-dev-virtual
+      helm-qa-virtual: https://artifactory.domain/artifactory/helm-qa-virtual
+      helm-stable-virtual: https://artifactory.domain/artifactory/helm-stable-virtual
+      helm-release-virtual: https://artifactory.domain/artifactory/helm-release-virtual
+```
+
+On CKP, override these under `application.orchestrator.execution.helm-repositories` in your values file; the chart renders them into the application ConfigMap. Names are flexible but must match Chart.yaml aliases exactly. `@name` and `alias:name` are supported. Only referenced aliases are registered, and these URLs point at Helm repositories, not Docker tag APIs. These are startup settings, so restart after changing them; they are not dashboard runtime overrides.
+
+Registration follows the supplied command without username/password flags. If the endpoint requires authentication, portal token forwarding needs a separate integration; do not embed credentials in repository URLs. A registration failure stops preparation before deployment and identifies the alias without exposing raw command output. The download/build timeout uses `command-timeout-seconds` per command.

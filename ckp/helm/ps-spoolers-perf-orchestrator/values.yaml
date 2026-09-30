@@ -113,6 +113,11 @@ application:
       expected-api-server: https://kubernetes.default.svc
       workspace: /app/data/real/workspaces
       command-timeout-seconds: 300
+      helm-repositories:
+        helm-dev-virtual: https://artifactory.domain/artifactory/helm-dev-virtual
+        helm-qa-virtual: https://artifactory.domain/artifactory/helm-qa-virtual
+        helm-stable-virtual: https://artifactory.domain/artifactory/helm-stable-virtual
+        helm-release-virtual: https://artifactory.domain/artifactory/helm-release-virtual
 # Use an organization-approved account with permissions in each selected service namespace.
 # Namespace creation and RBAC grants are deliberately not performed by the orchestrator.
 serviceAccount:

@@ -35,6 +35,12 @@ orchestrator:
     expected-api-server: '' # Exact HTTPS server URL; prevents use of an unintended context
     workspace: data/real/workspaces
     command-timeout-seconds: 300
+    # Chart.yaml aliases, e.g. repository: '@helm-release-virtual'. Replace the example host.
+    helm-repositories:
+      helm-dev-virtual: https://artifactory.domain/artifactory/helm-dev-virtual
+      helm-qa-virtual: https://artifactory.domain/artifactory/helm-qa-virtual
+      helm-stable-virtual: https://artifactory.domain/artifactory/helm-stable-virtual
+      helm-release-virtual: https://artifactory.domain/artifactory/helm-release-virtual
   target-environment: sandbox # Real-mode instance binding; fixed until restart
   catalog: classpath:mocks/catalog.yaml
   connections: '' # External bootstrap file overrides connection-defaults below

@@ -65,6 +65,12 @@ public class SparseProjects {
       String commit = git(root, env, "rev-parse", "--verify", "FETCH_HEAD^{commit}").strip();
       if (!commit.matches("[a-f0-9]{40,64}")) throw Problem.invalid("revision", "Git did not return a commit identity");
       git(root, env, "checkout", "--detach", commit);
+      return new Checkout(commit, snapshot(root));
+    } catch (java.io.IOException e) { throw Problem.invalid("source", "Unable to read the checked-out CKP directory"); }
+    finally { env.clear(); if (root != null) delete(root); }
+  }
+  /** Includes downloaded charts and lock files, enforcing the same limits as a Git checkout. */
+  public static Map<String,String> snapshot(Path root) throws java.io.IOException {
       Map<String,String> files = new TreeMap<>(); long size = 0;
       try (var paths = Files.walk(root.resolve("ckp"))) {
         for (Path path : paths.toList()) {
@@ -75,9 +81,7 @@ public class SparseProjects {
           files.put(root.relativize(path).toString().replace('\\','/'), Base64.getEncoder().encodeToString(Files.readAllBytes(path)));
         }
       }
-      return new Checkout(commit, Map.copyOf(files));
-    } catch (java.io.IOException e) { throw Problem.invalid("source", "Unable to read the checked-out CKP directory"); }
-    finally { env.clear(); if (root != null) delete(root); }
+      return Map.copyOf(files);
   }
   private String git(Path root, Map<String,String> env, String... args) {
     var list = new ArrayList<String>(); list.add("git"); list.addAll(List.of(args));

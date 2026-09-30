@@ -93,4 +93,87 @@ class RealExecutionContractsTest {
     assertThat(HelmValues.parse("replicaCount: 2\noptional: null\n")).containsEntry("optional",null);
     assertThatThrownBy(()->HelmValues.parse("a: 1\na: 2\n")).hasMessageContaining("duplicate");
   }
+
+  @Test void dependencyWarningDoesNotHideTheTemplateFailure() throws Exception {
+    Files.createDirectories(temp.resolve("ckp/chart/templates"));
+    Files.writeString(temp.resolve("ckp/chart/templates/service.yaml"),"placeholder");
+    String warning="[WARNING] /private/Chart.yaml: chart directory is missing these dependencies: secret-chart\n";
+    String helper="[ERROR] templates/: template: example/templates/service.yaml:1:3: executing at <include secret-helper .>: error calling include: template: no template secret-helper associated with template gotpl\n";
+    var problem=HelmDiagnostics.failure("lint",1,helper+warning,temp,"ckp/chart");
+    assertThat(problem.getMessage()).contains("referenced Helm helper template is unavailable", "also reported missing chart dependencies", "ckp/chart/templates/service.yaml:1")
+        .doesNotContain("secret-chart", "secret-helper", "/private/");
+    var missingValue=HelmDiagnostics.failure("lint",1,warning+"[ERROR] templates/: nil pointer evaluating interface {}.secret",temp,"ckp/chart");
+    assertThat(missingValue.getMessage()).contains("missing value", "also reported missing chart dependencies").doesNotContain("{}.secret");
+  }
+
+  @Test void dependencyPreparationUsesLockAndSnapshotsDownloadedCharts() throws Exception {
+    Path chart=temp.resolve("ckp/chart");Files.createDirectories(chart);
+    Files.writeString(chart.resolve("Chart.yaml"),"apiVersion: v2\nname: app\nversion: 1.0.0\ndependencies:\n- name: common\n  version: 1.0.0\n  repository: https://charts.invalid\n");
+    var runner=mock(CommandRunner.class);
+    when(runner.run(any(),any(),any(),any())).thenAnswer(call->{
+      Files.createDirectories(chart.resolve("charts"));
+      Files.write(chart.resolve("charts/common-1.0.0.tgz"),new byte[]{1,2,3});
+      Files.writeString(chart.resolve("Chart.lock"),"generated lock");
+      return new CommandRunner.Result(0,"");
+    });
+    var helm=new HelmExecution(runner,settings());
+    helm.prepareDependencies(temp,"ckp/chart");
+    verify(runner).run(eq(List.of("helm","dependency","update",chart.toString())),eq(temp),any(),any());
+    var files=SparseProjects.snapshot(temp);
+    assertThat(files).containsKeys("ckp/chart/Chart.lock","ckp/chart/charts/common-1.0.0.tgz");
+    helm.prepareDependencies(temp,"ckp/chart");
+    verify(runner).run(eq(List.of("helm","dependency","build",chart.toString())),eq(temp),any(),any());
+    when(runner.run(any(),any(),any(),any())).thenReturn(new CommandRunner.Result(1,"SECRET token"));
+    assertThatThrownBy(()->helm.prepareDependencies(temp,"ckp/chart"))
+        .hasMessageContaining("dependency build failed").hasMessageNotContaining("SECRET token");
+    verify(runner,times(1)).run(eq(List.of("helm","dependency","update",chart.toString())),eq(temp),any(),any());
+  }
+
+  @Test void dependencyPreparationSkipsEmptyChartsAndRejectsLocalPathEscape() throws Exception {
+    Path chart=temp.resolve("ckp/chart");Files.createDirectories(chart);
+    var runner=mock(CommandRunner.class);var helm=new HelmExecution(runner,settings());
+    Files.writeString(chart.resolve("Chart.yaml"),"name: app\nversion: 1.0.0\n");
+    helm.prepareDependencies(temp,"ckp/chart");
+    Files.writeString(chart.resolve("Chart.yaml"),"dependencies:\n- name: common\n  repository: file://../../outside\n");
+    assertThatThrownBy(()->helm.prepareDependencies(temp,"ckp/chart")).hasMessageContaining("inside the CKP snapshot");
+    verifyNoInteractions(runner);
+  }
+
+  @Test void registersRequiredAliasesBeforeDownloadingDependencies() throws Exception {
+    var env=new MockEnvironment().withProperty("orchestrator.execution.workspace",temp.toString())
+        .withProperty("orchestrator.execution.helm-repositories.helm-release-virtual","https://registry.invalid/artifactory/helm-release-virtual")
+        .withProperty("orchestrator.execution.helm-repositories.helm-dev-virtual","https://registry.invalid/artifactory/helm-dev-virtual");
+    var settings=new ExecutionSettings(env);
+    Path chart=temp.resolve("ckp/chart");Files.createDirectories(chart);
+    Files.writeString(chart.resolve("Chart.yaml"),"apiVersion: v2\nname: app\nversion: 1.0.0\ndependencies:\n"
+        +"- name: common\n  version: 1.0.0\n  repository: '@helm-release-virtual'\n"
+        +"- name: other\n  version: 1.0.0\n  repository: alias:helm-release-virtual\n");
+    var runner=mock(CommandRunner.class);
+    when(runner.run(any(),any(),any(),any())).thenReturn(new CommandRunner.Result(0,""));
+    new HelmExecution(runner,settings).prepareDependencies(temp,"ckp/chart");
+    var ordered=inOrder(runner);
+    var expectedEnvironment=org.mockito.ArgumentCaptor.forClass(Map.class);
+    ordered.verify(runner).run(eq(List.of("helm","repo","add","helm-release-virtual","https://registry.invalid/artifactory/helm-release-virtual")),eq(temp),expectedEnvironment.capture(),any());
+    ordered.verify(runner).run(eq(List.of("helm","dependency","update",chart.toString())),eq(temp),eq(expectedEnvironment.getValue()),any());
+    ordered.verifyNoMoreInteractions();
+    assertThat(expectedEnvironment.getValue().get("HELM_REPOSITORY_CONFIG")).isEqualTo(temp.resolve(".helm-repositories/repositories.yaml").toString());
+    assertThat(SparseProjects.snapshot(temp)).containsOnlyKeys("ckp/chart/Chart.yaml");
+    when(runner.run(any(),any(),any(),any())).thenReturn(new CommandRunner.Result(1,"private-token"));
+    clearInvocations(runner);
+    assertThatThrownBy(()->new HelmExecution(runner,settings).prepareDependencies(temp,"ckp/chart"))
+        .hasMessageContaining("registration failed for helm-release-virtual").hasMessageNotContaining("private-token");
+    verify(runner,times(1)).run(any(),any(),any(),any());
+  }
+
+  @Test void missingAliasGivesConfigurationKeyAndRepositoryUrlsCannotContainCredentials() throws Exception {
+    Path chart=temp.resolve("ckp/chart");Files.createDirectories(chart);
+    Files.writeString(chart.resolve("Chart.yaml"),"dependencies:\n- name: common\n  repository: '@helm-release-virtual'\n");
+    var runner=mock(CommandRunner.class);
+    assertThatThrownBy(()->new HelmExecution(runner,settings()).prepareDependencies(temp,"ckp/chart"))
+        .hasMessageContaining("orchestrator.execution.helm-repositories.helm-release-virtual");
+    verifyNoInteractions(runner);
+    assertThatThrownBy(()->new ExecutionSettings(new MockEnvironment()
+        .withProperty("orchestrator.execution.helm-repositories.common","https://user:secret@registry.invalid/charts")))
+        .hasMessageContaining("without credentials").hasMessageNotContaining("user:secret");
+  }
 }

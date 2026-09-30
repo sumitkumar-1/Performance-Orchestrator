@@ -90,7 +90,7 @@ public class RealPreparation {
     Instant now=Instant.now();
     var plan=new Plan(UUID.randomUUID().toString(),"",now.toString(),now.plusSeconds(900).toString(),com.example.perforchestrator.infrastructure.secrets.SecretServerTokens.currentActor(),null,0,profile,
         catalog.hash(),catalog.environment(catalog.boundEnvironment()).clusterIdentity(),load.namespace(),load.sourceRevision(),Map.copyOf(meta),List.copyOf(prepared),
-        List.of("REAL: this plan executes Helm in the configured cluster.","Only ckp is checked out; chart dependencies must be vendored.",
+        List.of("REAL: this plan executes Helm in the configured cluster.","Only ckp is checked out; Helm dependencies are resolved during preparation and frozen in the reviewed snapshot.",
           "Images are pinned using imageTag/global.imageTag = tag@digest; rendered chart must reference the selected digest.",
           "Load release must be absent; Stop uninstalls only this run's load release. Service deployments remain.",
           "Helm readiness uses --wait for services. Chart hooks and load-generator behavior are defined by the selected chart.",
@@ -136,6 +136,8 @@ public class RealPreparation {
     Path folder=null;
     try {
       folder=Files.createTempDirectory(settings.workspace,"prepare-");SparseProjects.materialize(folder,preparedFiles);
+      helm.prepareDependencies(folder,chart);
+      preparedFiles=SparseProjects.snapshot(folder);
       Files.writeString(folder.resolve("effective-values.json"),Json.write(effective));
       helm.validate(folder,chart,destination.namespace(),destination.releaseName(),image.digest());
     } catch(Problem error){
