@@ -94,6 +94,11 @@ class RealWorkflowTest {
     assertThat(discovered.path("valuesFiles").has("ckp/helm/load/Chart.yaml")).isFalse();
     var legacy=Json.read("{\"serviceId\":\"load\",\"revision\":\"main\",\"imageVersion\":\"v1\",\"valuesFiles\":[],\"overlay\":\"\"}",RealPreparation.Deployment.class);
     assertThat(legacy.valuesEdits()).isNull();
+    assertThat(legacy.gitReference()).isNull();
+    var named=new RealPreparation.Deployment("load","a".repeat(40),"v1",List.of(),"",Map.of(),"refs/heads/master");
+    var namedRestored=Json.read(Json.write(named),RealPreparation.Deployment.class);
+    assertThat(namedRestored.gitReference()).isEqualTo("refs/heads/master");
+    assertThat(namedRestored.revision()).isEqualTo("a".repeat(40));
     var plan=planner.prepare(request);var prepared=plan.services().getFirst();
     assertThat(plan.simulated()).isFalse();assertThat(prepared.sourceRevision()).isEqualTo("a".repeat(40));
     assertThat(prepared.effectiveValues()).containsEntry("rate",20).containsEntry("optional",null);

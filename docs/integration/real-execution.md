@@ -57,11 +57,11 @@ Open Overview → Configure run.
 
 1. Create or load a saved profile.
 2. Click **Add service** to configure a deployment in a dialog. Choose the load generator in its own dialog; it cannot also be a service deployment.
-3. Git branches/tags and all image-version pages load automatically. Git defaults to `master` when available, otherwise the configured revision or an available reference. The image dropdown includes release tags and development hashes, with a filter for long lists.
+3. Git branches/tags and all image-version pages load automatically. The selector contains branches and tags only. On editing a profile it restores the named reference when available; otherwise it prefers `master`, then the configured revision or an available reference. There is no Saved commit option. Exact commits remain pinned internally for the prepared deployment. The image dropdown includes release tags and development hashes, with a filter for long lists.
 4. CKP `values*.yaml` / `values*.yml` files load automatically from the selected Git revision. The environment values file is selected when present. Select one or more files; the editor immediately displays the selected YAML. For multiple files, the numbered editor selector shows merge order; use **Apply earlier** to reorder. Later files take precedence.
 5. Edit YAML if needed. Edits replace that file's contents for preparation and are saved with the run profile; repository files are untouched. **Restore file** discards edits to the displayed file. Helm still applies chart defaults; use YAML null where Helm requires removal of a default key. Older profiles retain their additional overlay under **Existing profile overlay**.
 6. Set measurement duration: the observation window after warmup. **Advanced timing** contains warmup and the overall timeout, which includes deployment. On timeout, cleanup starts; in-flight commands and cleanup can take additional time. The load tool's YAML duration should cover warmup plus measurement.
-7. Optionally supply LogQL measurements and thresholds, then click **Review run**. Review the prepared values and target, confirm, and choose **Start run**.
+7. Add monitoring panels if needed. In a metric panel, optionally enable **Pass/fail check** and enter its maximum acceptable value; no separate threshold JSON section is needed. Then click **Review run**. Review the prepared values and target, confirm, and choose **Start run**.
 
 Service namespace/release settings come from Services, including environment-specific destination exceptions. Preparation does not install charts. It fetches and snapshots CKP, resolves image digests, renders/lints charts and reads Helm release baselines. Plans expire after 15 minutes. Configuration changes, changed image tags or baseline drift require a new plan.
 
@@ -157,3 +157,5 @@ Queries are bounded to 500 log entries, approximately 1000 time samples per seri
 ## Service settings and version ordering
 
 Dependencies require those services to be selected and deployed first. The allowed-values list is a simulation allowlist and is hidden in real mode; real values YAML remains editable. Image versions put stable `major.minor.patch` releases first, in ascending numeric order, then development builds ordered newest first by their `YYMMDD` segment (for example, `1.11.0.260811-...` before `1.11.0.260810-...`). Tags without a valid date follow dated builds; equal-date and undated tags use natural sorting. Run-configuration errors now appear in a sticky alert at the top and receive focus.
+
+Pass/fail rules live in each metric panel in Configure run. Existing saved threshold rules are restored into those controls. Log panels have no numeric checks. Editing a live dashboard does not change the already-prepared verdict rules. When reopening a service selects a newer Git commit, the dialog calls out the refreshed source; review any retained YAML edits before saving.

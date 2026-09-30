@@ -15,7 +15,6 @@ export async function realFlow(api, catalog, navigate) {
   if (!ids.length) { root.append(el("p", { class: "card" }, "Add service Git, image and Helm settings in Connections & catalog first.")); return root; }
   const name = input("Performance test"), duration = input("60", "number", { min: 1 });
   const warmup = input("0", "number", { min: 0 }), deadline = input("900", "number", { min: 60, max: 28800 });
-  const thresholds = el("textarea", { rows: 3, placeholder: 'Optional maximum thresholds (JSON)' });
   const rows = el("div", { class: "run-selections" }), loadSummary = el("div"), preview = el("section");
   const status = el("p", { role: "status" }), error = el("p", { role: "alert", class: "error run-error", tabindex: "-1", hidden: true });
   const errorObserver = new MutationObserver(() => { error.hidden = !error.textContent; if(error.textContent) { error.scrollIntoView({ block: "center", behavior: "smooth" }); error.focus({preventScroll:true}); } });
@@ -24,7 +23,7 @@ export async function realFlow(api, catalog, navigate) {
   let selections = [], load = null, plan = null, savedId = null, savedRevision = null, working = false;
   const invalidate = () => { plan = null; preview.replaceChildren(); };
   const connections = await api("/connections");
-  const monitoring = monitoringConfig(catalog, connections.credentialReferences, invalidate);
+  const monitoring = monitoringConfig(catalog, connections.credentialReferences, invalidate, { evaluation: true });
   const disposeCurrent=root.dispose;root.dispose=()=>{monitoring.dispose();disposeCurrent();};
   const destination = id => catalog.services[id]?.deploymentByEnvironment?.[catalog.environment] || catalog.services[id]?.deploymentDefaults;
   const button = (text, action, primary = false) => el("button", { type: "button", class: primary ? "primary" : "", onclick: action }, text);
@@ -33,7 +32,7 @@ export async function realFlow(api, catalog, navigate) {
     const dest = destination(data.serviceId);
     return el("article", { class: "run-selection" },
       el("div", {}, el("strong", {}, data.serviceId),
-        el("p", { class: "muted" }, `Image ${data.imageVersion} · Git ${data.revision.slice(0, 12)}`),
+        el("p", { class: "muted" }, `Image ${data.imageVersion} · Git ${data.gitReference || "prepared revision"}`),
         el("p", { class: "muted" }, `${dest?.namespace || "Unconfigured namespace"} · ${data.valuesFiles.length} values file(s)${Object.keys(data.valuesEdits || {}).length || data.overlay ? " · edited" : ""}`)),
       el("div", { class: "deployment-actions" }, button("Edit", () => editDeployment(isLoad, index)),
         button("Remove", () => { if (isLoad) load = null; else selections.splice(index, 1); invalidate(); renderSelections(); })));
@@ -129,6 +128,7 @@ export async function realFlow(api, catalog, navigate) {
         edits = Object.fromEntries(Object.entries(saved?.valuesEdits || {}).filter(([path]) => Object.hasOwn(files, path)));
         fileStatus.textContent = paths.length ? `${paths.length} values files available. Select files in the order they should apply.` : "No values*.yaml or values*.yml files found under CKP.";
         if (saved?.valuesFiles?.some(path => !Object.hasOwn(files, path))) fileStatus.textContent += " Some saved files no longer exist; select replacements.";
+        if (saved && saved.revision !== result.commit) fileStatus.textContent += " This reference now points to a different commit. Review the refreshed YAML and any retained edits before saving.";
         commitNote.textContent = `Source pinned to ${pinnedCommit.slice(0, 12)} for this run.`;
         filesReady = true; renderFiles();
       } catch (reason) { if (valid() && ticket === fileEpoch && expectedEpoch === epoch) fileStatus.textContent = reason.message; }
@@ -145,10 +145,10 @@ export async function realFlow(api, catalog, navigate) {
           if (!valid() || ticket !== epoch) return;
           groups.forEach((refs, i) => revision.append(el("optgroup", { label: i === 0 ? "Branches" : "Tags" }, refs.map(ref => el("option", { value: ref.id }, ref.displayName)))));
           const refs = groups.flat(), configured = catalog.services[serviceId].sourceProject.revision;
-          const preferred = saved?.revision || groups[0].find(ref => ref.displayName === "master")?.id || configured;
+          const preferred = saved?.gitReference || saved?.revision;
           const match = refs.find(ref => ref.id === preferred || ref.displayName === preferred);
-          if (saved && !match && /^[a-f0-9]{40,64}$/.test(preferred)) revision.append(el("optgroup", { label: "Saved commit" }, el("option", { value: preferred }, preferred.slice(0, 12))));
-          revision.value = match?.id || (saved && /^[a-f0-9]{40,64}$/.test(preferred) ? preferred : refs[0]?.id || "");
+          const fallback = groups[0].find(ref => ref.displayName === "master") || refs.find(ref => ref.id === configured || ref.displayName === configured) || refs[0];
+          revision.value = match?.id || fallback?.id || "";
           if (!revision.value) throw new Error("No Git branches or tags are available for this service.");
           previousRevision = revision.value; gitReady = true; gitStatus.textContent = "Branches and tags loaded. Master is selected by default when available.";
           await loadFiles(saved, ticket);
@@ -175,7 +175,7 @@ export async function realFlow(api, catalog, navigate) {
     yaml.addEventListener("input", () => { if (editFile.value) { if (yaml.value === files[editFile.value]) delete edits[editFile.value]; else edits[editFile.value] = yaml.value; } });
     function commit() {
       if (save.disabled) return;
-      const data = { serviceId: service.value, revision: pinnedCommit, imageVersion: version.value, valuesFiles: [...selected], overlay: legacyOverlay.value,
+      const data = { serviceId: service.value, revision: pinnedCommit, gitReference: revision.value, imageVersion: version.value, valuesFiles: [...selected], overlay: legacyOverlay.value,
         valuesEdits: Object.fromEntries(selected.filter(path => Object.hasOwn(edits, path)).map(path => [path, edits[path]])) };
       if (isLoad) load = data; else if (original) selections[index] = data; else selections.push(data);
       invalidate(); renderSelections(); dialog.close();
@@ -201,14 +201,14 @@ export async function realFlow(api, catalog, navigate) {
   const readProfile = () => {
     if (!load) throw new Error("Choose a load generator before saving or preparing this run.");
     return { name: name.value, services: selections, loadGenerator: load, warmupSeconds: Number(warmup.value), measurementSeconds: Number(duration.value), maxRunDurationSeconds: Number(deadline.value),
-      metrics: monitoring.read(), thresholds: thresholds.value.trim() ? JSON.parse(thresholds.value) : [] };
+      metrics: monitoring.read(), thresholds: monitoring.readThresholds() };
   };
   savedSelect.addEventListener("change", () => {
     const saved = savedProfiles.find(p => p.id === savedSelect.value); savedId = saved?.id || null; savedRevision = saved?.revision || null; invalidate();
     const p = saved?.profile;
     name.value = p?.name || "Performance test"; warmup.value = p?.warmupSeconds ?? 0; duration.value = p?.measurementSeconds ?? 60; deadline.value = p?.maxRunDurationSeconds ?? 900;
     selections = structuredClone(p?.services || []); load = p?.loadGenerator ? structuredClone(p.loadGenerator) : null;
-    monitoring.set(p?.metrics || []); thresholds.value = p?.thresholds?.length ? JSON.stringify(p.thresholds, null, 2) : ""; renderSelections();
+    monitoring.set(p?.metrics || [], p?.thresholds || []); renderSelections();
   });
   const saveProfile = button("Save profile", async () => {
     saveProfile.disabled = true; error.textContent = "";
@@ -250,8 +250,8 @@ export async function realFlow(api, catalog, navigate) {
       el("p", { class: "muted" }, "How long to observe traffic after warmup. Results use this window; when it ends, the orchestrator collects metrics and stops its load generator. Traffic rate and the tool’s own duration come from its values YAML."),
       el("details", {}, el("summary", {}, "Advanced timing"), el("div", { class: "form-grid spacer" }, labeled("Warmup (seconds)", warmup), labeled("Overall timeout (seconds)", deadline)),
         el("p", { class: "muted" }, "Warmup is excluded from measurements. The overall timeout includes deployment, warmup and measurement. On timeout, cleanup starts; an in-progress Helm command and cleanup can take additional time. Allow enough time for deployment, and set the load YAML duration to cover warmup plus measurement."))),
-    monitoring.node, el("details", { class: "card" }, el("summary", {}, "Optional performance thresholds"), el("p", { class: "muted" }, "Configure approved LogQL queries. Without measurements, results are inconclusive. A positive request_count and configured thresholds are required for PASS."), labeled("Maximum thresholds (JSON)", thresholds)),
+    monitoring.node,
     el("div", {}, el("p", { class: "muted" }, "Services remain deployed. Only this run’s load-generator release is uninstalled after completion or cancellation."), status, el("div", { class: "card-actions" }, saveProfile, prepare)), preview);
-  for (const field of [name, warmup, duration, deadline, thresholds]) field.addEventListener("input", invalidate);
+  for (const field of [name, warmup, duration, deadline]) field.addEventListener("input", invalidate);
   renderSelections(); return root;
 }

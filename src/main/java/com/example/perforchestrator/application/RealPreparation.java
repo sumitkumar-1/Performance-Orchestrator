@@ -15,7 +15,10 @@ import org.springframework.stereotype.Service;
 @Service
 public class RealPreparation {
   public record Deployment(String serviceId, String revision, String imageVersion, List<String> valuesFiles,
-      String overlay, Map<String,String> valuesEdits) {
+      String overlay, Map<String,String> valuesEdits, String gitReference) {
+    public Deployment(String serviceId, String revision, String imageVersion, List<String> valuesFiles, String overlay, Map<String,String> valuesEdits) {
+      this(serviceId, revision, imageVersion, valuesFiles, overlay, valuesEdits, null);
+    }
     public Deployment(String serviceId, String revision, String imageVersion, List<String> valuesFiles, String overlay) {
       this(serviceId, revision, imageVersion, valuesFiles, overlay, Map.of());
     }
