@@ -63,10 +63,10 @@ public class HelmExecution {
     return Json.read(call(args, settings.workspace, "Helm release status"), Map.class);
   }
   public void validate(Path folder, String chart, String namespace, String release, String digest) {
-    call(List.of("helm", "lint", folder.resolve(chart).toString(), "--values", folder.resolve("effective-values.json").toString()), folder, "Helm lint (dependencies must be vendored in ckp)");
+    validationCall(List.of("helm", "lint", folder.resolve(chart).toString(), "--namespace", namespace, "--values", folder.resolve("effective-values.json").toString()), folder, chart, "lint");
     // Rendering is intentionally local; never persist rendered manifests containing Secrets.
-    String rendered=call(List.of("helm", "template", release, folder.resolve(chart).toString(), "--namespace", namespace,
-        "--values", folder.resolve("effective-values.json").toString()), folder, "Helm render");
+    String rendered=validationCall(List.of("helm", "template", release, folder.resolve(chart).toString(), "--namespace", namespace,
+        "--values", folder.resolve("effective-values.json").toString()), folder, chart, "render");
     var loaderOptions=new org.yaml.snakeyaml.LoaderOptions();
     loaderOptions.setAllowDuplicateKeys(false);loaderOptions.setMaxAliasesForCollections(30);
     boolean pinned=false;
@@ -117,10 +117,18 @@ public class HelmExecution {
     call(args, settings.workspace, "Owned load-generator cleanup");
     return baseline(target,load.namespace(),load.releaseName()).equals("ABSENT");
   }
-  private String call(List<String> args, Path dir, String operation) {
-    // Helm clients may write caches; keep them in the execution workspace, not the read-only image.
-    var env=Map.of("HELM_CACHE_HOME", settings.workspace.resolve("helm-cache").toString(),
+  private String validationCall(List<String> args,Path folder,String chart,String operation) {
+    CommandRunner.Result result;
+    try { result=commands.run(args,folder,environment(),Duration.ofSeconds(settings.timeoutSeconds+15L)); }
+    catch(Problem error) { throw new Problem(error.status(),error.code(),error.field(),"Helm "+operation+": "+error.getMessage()); }
+    if(result.exit()!=0)throw HelmDiagnostics.failure(operation,result.exit(),result.output(),folder,chart);
+    return result.output();
+  }
+  private Map<String,String> environment() {
+    return Map.of("HELM_CACHE_HOME", settings.workspace.resolve("helm-cache").toString(),
         "HELM_CONFIG_HOME", settings.workspace.resolve("helm-config").toString(), "HELM_DATA_HOME", settings.workspace.resolve("helm-data").toString());
-    return commands.require(args,dir,env,Duration.ofSeconds(settings.timeoutSeconds+15L),operation);
+  }
+  private String call(List<String> args, Path dir, String operation) {
+    return commands.require(args,dir,environment(),Duration.ofSeconds(settings.timeoutSeconds+15L),operation);
   }
 }

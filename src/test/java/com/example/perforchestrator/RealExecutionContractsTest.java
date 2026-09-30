@@ -67,6 +67,27 @@ class RealExecutionContractsTest {
     var service=new com.example.perforchestrator.domain.Model.PreparedService("load",Model.Action.DEPLOY,"ns","load",null,"ABSENT","commit",Map.of(),Map.of(),Map.of(),Map.of(),Map.of(),List.of());
     assertThatThrownBy(()->helm.stop("run",helm.target(),service)).hasMessageContaining("ownership");
   }
+  @Test void helmLintUsesTargetNamespaceAndReportsSafeTemplateLocation() throws Exception {
+    Path chart=temp.resolve("ckp/helm/service");Files.createDirectories(chart.resolve("templates"));
+    Files.writeString(chart.resolve("templates/deployment.yaml"),"placeholder");
+    var runner=mock(CommandRunner.class);
+    when(runner.run(any(),any(),any(),any())).thenReturn(new CommandRunner.Result(1,
+        "[ERROR] templates/: template: service/templates/deployment.yaml:12:5: executing at <.Values.credentials.password>: nil pointer evaluating interface {}.password SECRET-VALUE"));
+    var helm=new HelmExecution(runner,settings());
+    assertThatThrownBy(()->helm.validate(temp,"ckp/helm/service","target-ns","release","sha256:test"))
+        .hasMessageContaining("missing value").hasMessageContaining("ckp/helm/service/templates/deployment.yaml:12")
+        .hasMessageNotContaining("SECRET-VALUE").hasMessageNotContaining("credentials.password");
+    verify(runner).run(argThat(args->args.contains("lint") && args.contains("--namespace") && args.contains("target-ns")),eq(temp),any(),any());
+    verifyNoMoreInteractions(runner);
+  }
+  @Test void helmDiagnosticsDoNotAssumeDependenciesOrExposeRawOutput(){
+    var missing=HelmDiagnostics.failure("lint",1,"[ERROR] Chart.yaml: chart metadata is missing these dependencies: private-name",temp,"ckp/chart");
+    assertThat(missing.getMessage()).contains("Missing packaged chart dependencies").doesNotContain("private-name");
+    var schema=HelmDiagnostics.failure("lint",1,"values don't meet the specifications of the schema(s): token=private",temp,"ckp/chart");
+    assertThat(schema.getMessage()).contains("JSON schema").doesNotContain("token=private");
+    var unknown=HelmDiagnostics.failure("lint",1,"arbitrary rendered secret private",temp,"ckp/chart");
+    assertThat(unknown.getMessage()).contains("Run helm lint locally").doesNotContain("private","Missing packaged chart dependencies");
+  }
   @Test void snapshotRejectsTraversalAndHelmValuesRetainNullOverrides() throws Exception {
     assertThatThrownBy(()->SparseProjects.materialize(temp,Map.of("ckp/../../escape","eA=="))).isInstanceOf(Problem.class);
     assertThat(HelmValues.parse("replicaCount: 2\noptional: null\n")).containsEntry("optional",null);

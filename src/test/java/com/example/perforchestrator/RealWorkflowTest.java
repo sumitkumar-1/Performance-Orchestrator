@@ -83,11 +83,17 @@ class RealWorkflowTest {
     when(catalog.environment("sandbox")).thenReturn(new Catalog.Environment("Sandbox","cluster",null,null,null,null,null,null));
     when(helm.target()).thenReturn(Map.of("context","sandbox","server","https://cluster.invalid"));
     var source=mock(SparseProjects.class);
-    var files=Map.of("ckp/helm/load/Chart.yaml",Base64.getEncoder().encodeToString("apiVersion: v2\nname: load\nversion: 1.0.0\n".getBytes()),
+    var files=Map.of("ckp/helm/load/Chart.yaml",Base64.getEncoder().encodeToString("apiVersion: v2\nname: load\nversion: __REPLACEAPPVERSION__\nappVersion: __REPLACEAPPVERSION__\n".getBytes()),
         "ckp/helm/load/values.yaml",Base64.getEncoder().encodeToString("rate: 10\noptional: null\n".getBytes()));
     when(source.checkout(any(),eq("main"))).thenReturn(new SparseProjects.Checkout("a".repeat(40),files));
     when(images.resolve(eq("load"),eq("service:load"),isNull(),eq("v1"))).thenReturn(new Image("service:load","","repo/load","v1","sha256:"+"a".repeat(64)));
     var planner=new RealPreparation(catalog,source,helm,images,store,settings,connections);
+    doAnswer(call -> {
+      java.nio.file.Path folder=call.getArgument(0);
+      var metadata=HelmValues.parse(java.nio.file.Files.readString(folder.resolve("ckp/helm/load/Chart.yaml")));
+      assertThat(metadata).containsEntry("appVersion","v1").containsEntry("version","0.0.0-build.v1");
+      return null;
+    }).when(helm).validate(any(),any(),any(),any(),any());
     var request=new RealPreparation.Request("Prepared",List.of(),new RealPreparation.Deployment("load","main","v1",null,"rate: 20\n"),0,10,600,List.of(),List.of());
     var discovered=Json.MAPPER.valueToTree(planner.profiles("load","main"));
     assertThat(discovered.path("valuesFiles").has("ckp/helm/load/values.yaml")).isTrue();
@@ -103,6 +109,12 @@ class RealWorkflowTest {
     assertThat(plan.simulated()).isFalse();assertThat(prepared.sourceRevision()).isEqualTo("a".repeat(40));
     assertThat(prepared.effectiveValues()).containsEntry("rate",20).containsEntry("optional",null);
     assertThat(prepared.effectiveValues().get("imageTag")).isEqualTo("v1@sha256:"+"a".repeat(64));
+    String preparedChart=prepared.preparedFiles().get("ckp/helm/load/Chart.yaml");
+    assertThat(new String(Base64.getDecoder().decode(preparedChart))).doesNotContain("__REPLACEAPPVERSION__");
+    assertThat(prepared.originalHashes().get("ckp/helm/load/Chart.yaml")).isEqualTo(Json.hash(files.get("ckp/helm/load/Chart.yaml")));
+    assertThat(prepared.preparedHashes().get("ckp/helm/load/Chart.yaml")).isEqualTo(Json.hash(preparedChart))
+        .isNotEqualTo(prepared.originalHashes().get("ckp/helm/load/Chart.yaml"));
+    assertThat(store.plan(plan.id()).services().getFirst().preparedFiles()).isEqualTo(prepared.preparedFiles());
     assertThat(plan.checksum()).isEqualTo(PlanningService.checksum(store.plan(plan.id())));
     var editedRequest=new RealPreparation.Request("Edited values",List.of(),
         new RealPreparation.Deployment("load","main","v1",List.of("ckp/helm/load/values.yaml"),"",

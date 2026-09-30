@@ -116,6 +116,7 @@ public class RealPreparation {
     var snapshot=projects.checkout(service.sourceProject(),selection.revision());
     if(!snapshot.files().containsKey(chart+"/Chart.yaml"))throw Problem.invalid("chartPath","Chart.yaml is missing from the sparse CKP snapshot");
     var image=images.resolve(selection.serviceId(),"service:"+selection.serviceId(),null,selection.imageVersion());
+    var preparedFiles=ChartVersions.prepare(snapshot.files(),chart,image.version());
     List<String> values=selection.valuesFiles()==null || selection.valuesFiles().isEmpty()?destination.valuesFiles():selection.valuesFiles();
     var edits=selection.valuesEdits()==null?Map.<String,String>of():selection.valuesEdits();
     if(!values.containsAll(edits.keySet()))throw Problem.invalid("valuesEdits","Edits must belong to selected values files");
@@ -134,15 +135,19 @@ public class RealPreparation {
     effective=HelmValues.merge(effective,Map.of("global",Map.of("imageTag",image.version()+"@"+image.digest(),"environment",catalog.boundEnvironment())));
     Path folder=null;
     try {
-      folder=Files.createTempDirectory(settings.workspace,"prepare-");SparseProjects.materialize(folder,snapshot.files());
+      folder=Files.createTempDirectory(settings.workspace,"prepare-");SparseProjects.materialize(folder,preparedFiles);
       Files.writeString(folder.resolve("effective-values.json"),Json.write(effective));
       helm.validate(folder,chart,destination.namespace(),destination.releaseName(),image.digest());
-    } catch(java.io.IOException e){throw Problem.invalid("source","Unable to prepare chart files");}
+    } catch(Problem error){
+      throw new Problem(error.status(),error.code(),error.field(),"Service "+selection.serviceId()+", chart "+chart
+          +", namespace "+destination.namespace()+", values "+String.join(", ",values)+": "+error.getMessage());
+    } catch(java.io.IOException e){throw Problem.invalid("source","Unable to prepare chart files for service "+selection.serviceId());}
     finally{if(folder!=null)SparseProjects.delete(folder);}
     var hashes=new TreeMap<String,String>();snapshot.files().forEach((path,content)->hashes.put(path,Json.hash(content)));
+    var preparedHashes=new TreeMap<String,String>();preparedFiles.forEach((path,content)->preparedHashes.put(path,Json.hash(content)));
     charts.put(selection.serviceId(),chart);
     return new PreparedService(selection.serviceId(),Action.DEPLOY,destination.namespace(),destination.releaseName(),image,
-        helm.baseline(target,destination.namespace(),destination.releaseName()),snapshot.commit(),hashes,snapshot.files(),hashes,
+        helm.baseline(target,destination.namespace(),destination.releaseName()),snapshot.commit(),hashes,preparedFiles,preparedHashes,
         ImmutableConfiguration.values(effective),HelmValues.diff(base,effective),List.of());
   }
   private static void ConnectionConfigSafe(String path) {
