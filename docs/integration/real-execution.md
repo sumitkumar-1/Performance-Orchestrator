@@ -156,4 +156,4 @@ Queries are bounded to 500 log entries, approximately 1000 time samples per seri
 
 ## Service settings and version ordering
 
-Dependencies require those services to be selected and deployed first. The allowed-values list is a simulation allowlist and is hidden in real mode; real values YAML remains editable. Image versions put stable `major.minor.patch` releases first, in ascending numeric order, then development/hash tags using natural sorting. Run-configuration errors now appear in a sticky alert at the top and receive focus.
+Dependencies require those services to be selected and deployed first. The allowed-values list is a simulation allowlist and is hidden in real mode; real values YAML remains editable. Image versions put stable `major.minor.patch` releases first, in ascending numeric order, then development builds ordered newest first by their `YYMMDD` segment (for example, `1.11.0.260811-...` before `1.11.0.260810-...`). Tags without a valid date follow dated builds; equal-date and undated tags use natural sorting. Run-configuration errors now appear in a sticky alert at the top and receive focus.
