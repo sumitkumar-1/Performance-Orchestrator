@@ -89,11 +89,27 @@ class RealWorkflowTest {
     when(images.resolve(eq("load"),eq("service:load"),isNull(),eq("v1"))).thenReturn(new Image("service:load","","repo/load","v1","sha256:"+"a".repeat(64)));
     var planner=new RealPreparation(catalog,source,helm,images,store,settings,connections);
     var request=new RealPreparation.Request("Prepared",List.of(),new RealPreparation.Deployment("load","main","v1",null,"rate: 20\n"),0,10,600,List.of(),List.of());
+    var discovered=Json.MAPPER.valueToTree(planner.profiles("load","main"));
+    assertThat(discovered.path("valuesFiles").has("ckp/helm/load/values.yaml")).isTrue();
+    assertThat(discovered.path("valuesFiles").has("ckp/helm/load/Chart.yaml")).isFalse();
+    var legacy=Json.read("{\"serviceId\":\"load\",\"revision\":\"main\",\"imageVersion\":\"v1\",\"valuesFiles\":[],\"overlay\":\"\"}",RealPreparation.Deployment.class);
+    assertThat(legacy.valuesEdits()).isNull();
     var plan=planner.prepare(request);var prepared=plan.services().getFirst();
     assertThat(plan.simulated()).isFalse();assertThat(prepared.sourceRevision()).isEqualTo("a".repeat(40));
     assertThat(prepared.effectiveValues()).containsEntry("rate",20).containsEntry("optional",null);
     assertThat(prepared.effectiveValues().get("imageTag")).isEqualTo("v1@sha256:"+"a".repeat(64));
     assertThat(plan.checksum()).isEqualTo(PlanningService.checksum(store.plan(plan.id())));
+    var editedRequest=new RealPreparation.Request("Edited values",List.of(),
+        new RealPreparation.Deployment("load","main","v1",List.of("ckp/helm/load/values.yaml"),"",
+          Map.of("ckp/helm/load/values.yaml","editedRate: 30\n")),0,10,600,List.of(),List.of());
+    var edited=planner.prepare(editedRequest).services().getFirst().effectiveValues();
+    assertThat(edited).containsEntry("editedRate",30).doesNotContainKeys("rate","optional");
+    var restored=Json.read(Json.write(editedRequest),RealPreparation.Request.class);
+    assertThat(restored.loadGenerator().valuesEdits()).isEqualTo(editedRequest.loadGenerator().valuesEdits());
+    var invalidEdits=new RealPreparation.Request("Invalid file",List.of(),
+        new RealPreparation.Deployment("load","main","v1",List.of("ckp/helm/load/values.yaml"),"",
+          Map.of("ckp/unselected.yaml","rate: 1")),0,10,600,List.of(),List.of());
+    assertThatThrownBy(()->planner.prepare(invalidEdits)).hasMessageContaining("selected values files");
     when(helm.baseline(any(),any(),any())).thenReturn("EXISTS");
     assertThatThrownBy(()->planner.prepare(request)).hasMessageContaining("already exists");
   }

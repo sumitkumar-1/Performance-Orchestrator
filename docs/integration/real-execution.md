@@ -53,15 +53,15 @@ Use token sessions or Secret Server token references for Git/Artifactory. Sign i
 
 ## 3. Prepare a profile
 
-Open Overview → Configure a real run.
+Open Overview → Configure run.
 
 1. Create or load a saved profile.
-2. Add service deployments. The load generator is selected separately and must not also be listed as a normal service deployment.
-3. Fetch image versions and Git tags/branches. Select the image version and Git revision.
-4. Load CKP values files. This pins the displayed files to the returned commit. Select one or more files; their selected order controls merging. To edit a profile, copy one selected file into the YAML editor and change it, or supply a smaller overlay.
-5. Set warmup, measurement time and the maximum run duration. Allow enough time for service installation/readiness before load starts.
-6. Optionally supply LogQL measurements and thresholds.
-7. Prepare, review the namespaces, releases, commit, image digest and values changes, then explicitly confirm Start real run.
+2. Click **Add service** to configure a deployment in a dialog. Choose the load generator in its own dialog; it cannot also be a service deployment.
+3. Git branches/tags and all image-version pages load automatically. Git defaults to `master` when available, otherwise the configured revision or an available reference. The image dropdown includes release tags and development hashes, with a filter for long lists.
+4. CKP `values*.yaml` / `values*.yml` files load automatically from the selected Git revision. The environment values file is selected when present. Select one or more files; the editor immediately displays the selected YAML. For multiple files, the numbered editor selector shows merge order; use **Apply earlier** to reorder. Later files take precedence.
+5. Edit YAML if needed. Edits replace that file's contents for preparation and are saved with the run profile; repository files are untouched. **Restore file** discards edits to the displayed file. Helm still applies chart defaults; use YAML null where Helm requires removal of a default key. Older profiles retain their additional overlay under **Existing profile overlay**.
+6. Set measurement duration: the observation window after warmup. **Advanced timing** contains warmup and the overall timeout, which includes deployment. On timeout, cleanup starts; in-flight commands and cleanup can take additional time. The load tool's YAML duration should cover warmup plus measurement.
+7. Optionally supply LogQL measurements and thresholds, then click **Review run**. Review the prepared values and target, confirm, and choose **Start run**.
 
 Service namespace/release settings come from Services, including environment-specific destination exceptions. Preparation does not install charts. It fetches and snapshots CKP, resolves image digests, renders/lints charts and reads Helm release baselines. Plans expire after 15 minutes. Configuration changes, changed image tags or baseline drift require a new plan.
 

@@ -829,3 +829,23 @@ select {
 .scenario-properties dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .scenario-properties .scenario-properties { margin: 0; }
 @media (max-width: 600px) { .scenario-properties { grid-template-columns: 1fr; gap: 6px; } .scenario-properties dd { margin-bottom: 12px; } }
+
+.run-builder { display: grid; gap: 20px; }
+.run-builder .card > h2 { margin-top: 0; }
+.run-builder .dialog-heading { margin-bottom: 16px; }
+.run-selection { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 16px 0; border-top: 1px solid var(--border); }
+.run-selection > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.run-selection p { margin: 6px 0 0; }
+.run-service-dialog { width: min(880px, calc(100vw - 32px)); }
+.run-service-dialog > label { display: grid; gap: 8px; }
+.run-service-dialog .muted { margin: 8px 0 16px; font-size: 13px; }
+.values-file-list { max-height: 180px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.values-file-list label { display: flex; flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: 10px; overflow-wrap: anywhere; padding: 6px 0; font-size: 13px; }
+.values-file-list input { width: auto; flex-shrink: 0; }
+.values-editor-heading { display: flex; align-items: end; gap: 10px; margin: 18px 0 12px; }
+.values-editor-heading label { flex: 1; min-width: 0; }
+.values-editor { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; tab-size: 2; }
+@media (max-width: 700px) {
+  .run-selection, .values-editor-heading { align-items: stretch; flex-direction: column; }
+  .run-builder .dialog-heading { flex-wrap: wrap; }
+}

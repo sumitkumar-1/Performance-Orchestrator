@@ -14,7 +14,12 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class RealPreparation {
-  public record Deployment(String serviceId, String revision, String imageVersion, List<String> valuesFiles, String overlay) {}
+  public record Deployment(String serviceId, String revision, String imageVersion, List<String> valuesFiles,
+      String overlay, Map<String,String> valuesEdits) {
+    public Deployment(String serviceId, String revision, String imageVersion, List<String> valuesFiles, String overlay) {
+      this(serviceId, revision, imageVersion, valuesFiles, overlay, Map.of());
+    }
+  }
   public record Metric(String serviceId, String name, String query) {}
   public record Request(String name, List<Deployment> services, Deployment loadGenerator, int warmupSeconds,
       int measurementSeconds, int maxRunDurationSeconds, List<Metric> metrics, List<Threshold> thresholds) {}
@@ -30,7 +35,7 @@ public class RealPreparation {
     enabled(); var svc=catalog.service(id); var snapshot=projects.checkout(svc.sourceProject(),revision);
     Map<String,String> values=new TreeMap<>();
     snapshot.files().forEach((path,encoded) -> {
-      if ((path.endsWith(".yaml") || path.endsWith(".yml")) && !path.contains("/templates/") && !path.endsWith("Chart.yaml")) {
+      if (path.substring(path.lastIndexOf('/')+1).matches("values[^/]*\\.ya?ml") && !path.contains("/templates/")) {
         byte[] bytes=Base64.getDecoder().decode(encoded);
         if (bytes.length<=65536) values.put(path,new String(bytes,StandardCharsets.UTF_8));
       }
@@ -105,11 +110,15 @@ public class RealPreparation {
     if(!snapshot.files().containsKey(chart+"/Chart.yaml"))throw Problem.invalid("chartPath","Chart.yaml is missing from the sparse CKP snapshot");
     var image=images.resolve(selection.serviceId(),"service:"+selection.serviceId(),null,selection.imageVersion());
     List<String> values=selection.valuesFiles()==null || selection.valuesFiles().isEmpty()?destination.valuesFiles():selection.valuesFiles();
+    var edits=selection.valuesEdits()==null?Map.<String,String>of():selection.valuesEdits();
+    if(!values.containsAll(edits.keySet()))throw Problem.invalid("valuesEdits","Edits must belong to selected values files");
     Map<String,Object> effective=new TreeMap<>();
     for(String path:values) {
       ConnectionConfigSafe(path); var encoded=snapshot.files().get(path);
       if(encoded==null)throw Problem.invalid("valuesFiles","Selected values file is absent from the checked-out revision");
-      effective=HelmValues.merge(effective,HelmValues.parse(new String(Base64.getDecoder().decode(encoded),StandardCharsets.UTF_8)));
+      String content=edits.containsKey(path)?edits.get(path):new String(Base64.getDecoder().decode(encoded),StandardCharsets.UTF_8);
+      if(content==null)throw Problem.invalid("valuesEdits","Edited YAML content is required");
+      effective=HelmValues.merge(effective,HelmValues.parse(content));
     }
     var base=new TreeMap<>(effective);
     effective=HelmValues.merge(effective,HelmValues.parse(selection.overlay()));

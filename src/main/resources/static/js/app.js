@@ -322,7 +322,7 @@ async function configure(id) {
   app.append(
     heading(
       "CONFIGURATION",
-      saved ? "Edit performance profile" : "Configure a performance run",
+      saved ? "Edit performance profile" : "Configure run",
       "Choose each service’s source and version independently.",
     ),
   );
@@ -863,7 +863,7 @@ function realOverview() {
         ? "Prepare service charts and a load profile from CKP directories, review pinned inputs, then deploy and run. Owned load is uninstalled at completion; services remain."
         : "Configure orchestrator.execution.enabled, kube-context and expected-api-server, then restart. Git, Helm and kubectl must be installed on the application host."),
       el("div", { class: "card-actions" },
-        enabled ? link("Configure a real run", "#configure", "button primary") : null,
+        enabled ? link("Configure run", "#configure", "button primary") : null,
         link("Browse service diagnostics", "#settings/diagnostics", "button"),
         link("Configure connections", "#settings", "button"))),
     el("section", { class: "card spacer" }, el("h2", {}, "Measurement requirements"),
@@ -888,8 +888,11 @@ async function route() {
     if (generation !== routeGeneration) return;
     app.replaceChildren();
     if (session.mode === "real" && page === "configure") {
-      app.append(heading("REAL EXECUTION", "Configure a performance run", "Prepare and review the deployment before starting."));
-      app.append(await realFlow(api, { services: catalog.services, environment: session.targetEnvironment }, hash => { location.hash = hash; }));
+      app.append(heading("REAL EXECUTION", "Configure run", "Prepare and review the deployment before starting."));
+      const flow = await realFlow(api, { services: catalog.services, environment: session.targetEnvironment }, hash => { location.hash = hash; });
+      if (generation !== routeGeneration) { flow.dispose?.(); return; }
+      app.append(flow);
+      pageCleanup = () => flow.dispose?.();
     }
     else if (session.mode === "real" && page === "plan") {
       const prepared = await api("/plans/" + id);
