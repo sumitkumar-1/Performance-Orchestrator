@@ -26,18 +26,16 @@ public class LokiMeasurements {
     var array=Json.MAPPER.valueToTree(plan.effectiveLoadConfiguration().get("metrics"));
     for(var item:array) {
       var metric=Json.read(item.toString(),RealPreparation.Metric.class);
+      if(metric.logs())continue;
       var service=catalog.service(metric.serviceId()); var env=catalog.environment(plan.profile().targetEnvironment());
-      String reference=service.monitoringCredentials().get(plan.profile().targetEnvironment());
+      String reference=metric.credentialRef()==null || metric.credentialRef().isBlank()?service.monitoringCredentials().get(plan.profile().targetEnvironment()):metric.credentialRef();
       if(reference==null || env.monitoring()==null)throw Problem.invalid("metrics","Configure monitoring credentials and the environment Loki connection");
       var loki=connections.data().loki().get(env.monitoring().connectionRef());
       if(loki==null)throw Problem.invalid("metrics","Unknown Loki connection");
       var secret=credentials.resolve(reference);
       String authorization=secret.token()?RequestAuthentication.bearer(secret.password()):RequestAuthentication.basic(secret.username(),secret.password());
-      var prepared=plan.services().stream().filter(s->s.serviceId().equals(metric.serviceId())).findFirst().orElseThrow();
-      String query=metric.query().replace("{{namespace}}",prepared.namespace())
-          .replace("{{clusterEnv}}",plan.profile().targetEnvironment()).replace("{{clustEnv}}",plan.profile().targetEnvironment())
-          .replace("{{durationSeconds}}",String.valueOf(plan.profile().loadGenerator().measurementSeconds()));
-      if(query.contains("{{"))throw Problem.invalid("metrics","Unresolved query placeholder");
+      String ns=com.example.perforchestrator.application.RunMonitoring.namespace(metric,service,plan.profile().targetEnvironment());
+      String query=com.example.perforchestrator.application.RunMonitoring.query(metric,ns,plan.profile().targetEnvironment(),plan.profile().loadGenerator().measurementSeconds());
       queries.add(new Query(metric.name(),loki.apiBaseUrl(),authorization,query));
     }
     runs.put(runId,List.copyOf(queries));

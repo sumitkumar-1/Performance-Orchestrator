@@ -140,6 +140,37 @@ class SecretServerAuthenticationTest {
   }
 
   @Test
+  void adExchangeTracksVerifiedUsernameAndServerExpiryWithoutStoringPassword() {
+    var config=config(new ConnectionConfig.SecretServer("https://vault.invalid/SecretServer/api/v1",null,
+        "interactive","https://vault.invalid/SecretServer/oauth2/token",null));
+    var tokens=tokens(config,now);var req=request();
+    when(http.tokenForm(any(),eq("DOMAIN\\alice"),eq("private-password"))).thenReturn(response(200,
+        "{\"access_token\":\"issued-token\",\"token_type\":\"Bearer\",\"expires_in\":120}"));
+    var status=tokens.login("organization","DOMAIN\\alice","private-password",req.getSession());
+    assertThat(status).containsEntry("state","AUTHENTICATED").containsEntry("username","DOMAIN\\alice")
+        .containsEntry("expiresAt",now.plusSeconds(120).toString());
+    assertThat(SecretServerTokens.currentActor()).isEqualTo("DOMAIN\\alice");
+    assertThat(Json.write(status)).doesNotContain("private-password","issued-token");
+    assertThat(tokens.authorization("organization")).isEqualTo("Bearer issued-token");
+    tokens.signOut("organization",req.getSession());
+    assertThat(SecretServerTokens.currentActor()).isEqualTo("local-developer");
+    when(http.tokenForm(any(),any(),any())).thenReturn(response(401,"private upstream payload"));
+    assertThatThrownBy(()->tokens.login("organization","alice","wrong",req.getSession()))
+        .hasMessageContaining("HTTP 401").hasMessageNotContaining("private upstream payload");
+    assertThat(tokens.status("organization",req.getSession())).containsEntry("state","SIGN_IN_REQUIRED");
+  }
+
+  @Test
+  void adLoginRejectsUnboundedExpiryAndCrossHostTokenEndpoints() {
+    var config=config(new ConnectionConfig.SecretServer("https://vault.invalid/api/v1",null,"interactive","https://vault.invalid/oauth2/token",null));
+    var tokens=tokens(config,now);var req=request();
+    when(http.tokenForm(any(),any(),any())).thenReturn(response(200,"{\"access_token\":\"token\"}"));
+    assertThatThrownBy(()->tokens.login("organization","alice","password",req.getSession())).hasMessageContaining("expires_in");
+    assertThat(tokens.status("organization",req.getSession())).containsEntry("state","SIGN_IN_REQUIRED");
+    assertThatThrownBy(()->config(new ConnectionConfig.SecretServer("https://vault.invalid/api/v1",null,"interactive","https://other.invalid/token",null))).isInstanceOf(RuntimeException.class);
+  }
+
+  @Test
   void readsRotatingMountedTokenAndRejectsAmbiguousModes() throws Exception {
     Path file = temp.resolve("token");
     Files.writeString(file, "first-token\n");

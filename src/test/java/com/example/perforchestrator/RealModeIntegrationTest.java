@@ -118,7 +118,7 @@ class RealModeIntegrationTest {
 
   @ParameterizedTest
   @ValueSource(strings = {"/api/v1/real/plans", "/api/v1/real/runs", "/api/v1/real/profiles",
-      "/api/v1/real/services/ps-spoolers-ps-load-gen/values", "/api/v1/real/runs/example/recover"})
+      "/api/v1/real/services/ps-spoolers-ps-load-gen/values", "/api/v1/real/runs/example/recover", "/api/v1/real/runs/example/monitoring/query"})
   void realMutationsRequireCsrf(String endpoint) throws Exception {
     mvc.perform(post(endpoint).header("Host", "localhost").contentType("application/json").content("{}"))
         .andExpect(status().isForbidden());

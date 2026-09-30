@@ -100,6 +100,18 @@ class SecretAuthenticationApiTest {
   }
 
   @Test
+  void adLoginRequiresCsrfAndDoesNotReturnPasswordOrToken() throws Exception {
+    String body="{\"username\":\"alice\",\"password\":\"private\"}";
+    mvc.perform(post("/api/v1/secret-auth/organization/ad").header("Host","localhost").contentType("application/json").content(body))
+        .andExpect(status().isForbidden());
+    verifyNoInteractions(tokens);
+    when(tokens.login(eq("organization"),eq("alice"),eq("private"),any())).thenReturn(Map.of("state","AUTHENTICATED","username","alice"));
+    mvc.perform(post("/api/v1/secret-auth/organization/ad").header("Host","localhost").with(csrf()).contentType("application/json").content(body))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.username").value("alice"))
+        .andExpect(jsonPath("$.password").doesNotExist()).andExpect(jsonPath("$.access_token").doesNotExist());
+  }
+
+  @Test
   void exampleConfigurationLoadsWithExplicitAuthenticationModes() throws Exception {
     var config = new ConnectionConfig("docs/integration/examples/connections.yaml");
     assertThat(config.data().secretServers().get("organization").mode()).isEqualTo("token");

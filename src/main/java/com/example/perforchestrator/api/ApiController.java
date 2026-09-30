@@ -51,7 +51,7 @@ public class ApiController {
   public Object session(CsrfToken token) {
     return Map.of(
         "actor",
-        "local-developer",
+        com.example.perforchestrator.infrastructure.secrets.SecretServerTokens.currentActor(),
         "mode",
         catalog.mode(),
         "targetEnvironment", catalog.boundEnvironment(),

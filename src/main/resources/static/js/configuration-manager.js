@@ -97,8 +97,12 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, onC
     } else if (key === "secretServers") {
       bind("Secret Server API base URL", "apiBaseUrl", { required: true });
       note("Use https://domain/SecretServer/api/v1. The client appends /secrets/{secretId}.");
-      note("Supply a REST API Bearer access token through Sign in. No AD credentials or token-generation endpoint are used.");
-      readers.push(() => { value.authMode = "token"; value.tokenUrl = null; value.credentialRef = null; value.bearerTokenEnvironmentVariable = null; value.bearerTokenFile = null; });
+      const authMode = bind("Authentication", "authMode", { choices: [["interactive", "AD sign-in or access token"], ["token", "Access token only"]] });
+      const tokenUrl = bind("OAuth token URL", "tokenUrl");
+      const updateAuth = () => { tokenUrl.parentElement.hidden = authMode.value !== "interactive"; tokenUrl.required = authMode.value === "interactive"; };
+      authMode.addEventListener("change", updateAuth); updateAuth();
+      note("AD credentials are exchanged for a token and never saved. The returned expiry is tracked automatically. Token-only sessions do not verify a username.");
+      readers.push(() => { if(value.authMode !== "interactive") value.tokenUrl = null; value.credentialRef = null; value.bearerTokenEnvironmentVariable = null; value.bearerTokenFile = null; });
     } else if (key === "credentials") {
       value.provider ||= "delinea";
       const provider = bind("Provider", "provider", { choices: ["delinea", "environment"] });
@@ -163,8 +167,9 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, onC
           readers.push(() => { if (credential.value) credentials[environment] = credential.value; else delete credentials[environment]; });
         }
       }
-      bind("Dependencies (one service ID per line)", "dependencies", { multiline: true });
-      bind("Allowed values override paths (one per line)", "allowedOverridePaths", { multiline: true });
+      bind("Deploy these services first (one service ID per line)", "dependencies", { multiline: true });
+      note("Dependencies determine deployment order. Include those services in the run; leave empty when there is no ordering requirement.");
+      if (mode === "simulation") bind("Allowed values override paths (simulation only, one per line)", "allowedOverridePaths", { multiline: true });
       value.deploymentByEnvironment ||= {};
       const targets = real ? Object.keys(active.catalog.environments) : Object.keys(value.deploymentByEnvironment);
       if (real) {
@@ -236,7 +241,7 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, onC
       if (key === "secretServers") {
         const state = authStates[id];
         text.append(el("small", {}, ["AUTHENTICATED", "TOKEN_PROVIDED"].includes(state?.state) ? `Token stored until ${new Date(state.expiresAt).toLocaleString()} · not verified at sign-in` : `${entry.authMode || "environment"} authentication`));
-        if (state?.mode === "token") controls.prepend(action(["AUTHENTICATED", "TOKEN_PROVIDED"].includes(state.state) ? "Sign out" : "Sign in", async () => {
+        if (["token", "interactive"].includes(state?.mode)) controls.prepend(action(["AUTHENTICATED", "TOKEN_PROVIDED"].includes(state.state) ? "Sign out" : "Sign in", async () => {
           if (!["AUTHENTICATED", "TOKEN_PROVIDED"].includes(state.state)) return onSignIn(id);
           const ui = modal("Sign out of Secret Server?");
           ui.body.append(el("p", {}, "The current vault session will be cleared.")); ui.save.textContent = "Sign out";

@@ -1,3 +1,4 @@
+import { runMonitoring } from "./run-monitoring.js";
 import { realFlow } from "./real-flow.js";
 import { el, labeled, input, select } from "./dom.js";
 import { secretSignInPrompt } from "./secret-sign-in.js";
@@ -575,9 +576,10 @@ async function runDetails(id, generation) {
     heading(
       "RUN DETAILS",
       plan.profile.name,
-      `${plan.profile.targetEnvironment} · ${id}`,
+      `${plan.profile.targetEnvironment} · ${id} · Prepared by ${plan.actor}`,
     ),
     status,
+    plan.simulated ? null : link("Open monitoring", "#monitor/" + id, "button primary"),
     el(
       "div",
       { class: "detail-grid spacer" },
@@ -901,10 +903,15 @@ async function route() {
         el("pre", {}, pretty(prepared.services.map(s => ({ service: s.serviceId, namespace: s.namespace, release: s.releaseName, commit: s.sourceRevision, image: s.image, effectiveValues: s.effectiveValues })))),
         link("Prepare another run", "#configure", "button"));
     }
-    else if (session.mode === "real" && !["settings", "history", "run"].includes(page)) realOverview();
+    else if (session.mode === "real" && !["settings", "history", "run", "monitor"].includes(page)) realOverview();
     else if (page === "configure") await configure(id);
     else if (page === "plan") await planScreen(id);
     else if (page === "history") await history();
+    else if (page === "monitor") {
+      const view = await runMonitoring(api, id, {services: catalog.services, environment: session.targetEnvironment});
+      if (generation !== routeGeneration) {view.dispose();return;}
+      app.append(view);pageCleanup=()=>view.dispose();
+    }
     else if (page === "run") await runDetails(id, generation);
     else if (page === "settings") await settings(id);
     else await dashboard();
@@ -915,7 +922,7 @@ async function route() {
 }
 session = await api("/session");
 vaultPrompt = secretSignInPrompt(api, async state => {
-  toast(`Vault token stored until ${time(state.expiresAt)}; access is verified when a secret is requested.`);
+  toast(state.state === "AUTHENTICATED" ? `Signed in as ${state.username} until ${time(state.expiresAt)}.` : `Vault token stored until ${time(state.expiresAt)}; access is verified when a secret is requested.`);
   await route();
 }, session.mode === "real");
 $("#mode-badge").textContent = session.mode === "real" ? (session.capabilities.execution ? "REAL · EXECUTION" : "REAL · READ-ONLY") : "SIMULATION";

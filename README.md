@@ -70,7 +70,7 @@ Use **Connections & catalog** to edit environment monitoring, service destinatio
 
 Field-level overrides in `data/configuration.json` (or `data/real/configuration.json` in real mode) are applied over packaged or externally supplied defaults on restart. Untouched fields receive new defaults. Changes to resource files alone are not watched. Port, database, worker scheduling and application mode remain startup settings.
 
-Secret Server, Artifactory and Bitbucket use supplied Bearer access tokens. AD login and password exchange are removed. Paste tokens into the session dialogs; never put tokens in configuration. Artifactory/Bitbucket can alternatively resolve a token credential reference. Secret Server also supports mounted/environment tokens or a token from another vault. See [connection configuration](docs/adapters/connections.md).
+Secret Server supports AD sign-in or supplied Bearer tokens with `authMode: interactive` and a configured OAuth token URL. AD passwords are exchanged and discarded; the returned token expiry and username are tracked. Artifactory and Bitbucket use supplied or vault-referenced Bearer tokens. Never put passwords or tokens in configuration. Artifactory/Bitbucket can alternatively resolve a token credential reference. Secret Server also supports mounted/environment tokens or a token from another vault. See [connection configuration](docs/adapters/connections.md).
 
 ## Helm environment overrides
 
@@ -250,7 +250,7 @@ Outstanding organization inputs are tracked in [open integration questions](docs
 
 The real-mode UI prompts for a Secret Server REST API Bearer access token and its remaining lifetime (up to eight hours). Artifactory and Bitbucket have separate token sessions under Connections & catalog. Tokens stay server-side, are not exported, and must be supplied again after expiry, sign-out, configuration changes or restart. Session duration does not extend provider validity; an upstream 401 requires a new token. Signing out clears local access but does not revoke a portal-generated token at its provider.
 
-This is integration authentication, not shared-user authorization for publicly hosting the application. Legacy AD connection modes migrate to token mode on load; no password exchange remains.
+This is integration authentication, not shared-user authorization for publicly hosting the application. Use Secret Server `authMode: interactive` for AD or token sign-in; legacy `portal` entries still migrate to token-only mode.
 
 
 ## One instance per environment
@@ -291,3 +291,5 @@ Spring tests explicitly load `src/test/resources/application-test.yaml` instead 
 ## Real performance execution
 
 Use [the real execution guide](docs/integration/real-execution.md) to configure an explicit kube-context/API server, service repositories and load values. Overview provides profile preparation and a reviewed start action when execution is enabled. Each checkout contains only CKP working-tree files. No office deployment was performed during development; sandbox verification is still required.
+
+Runs now offer **Open monitoring** for configurable LogQL log/metric panels with per-service credential defaults, namespace overrides and live range queries. See [authentication and live monitoring](docs/integration/real-execution.md#live-monitoring).

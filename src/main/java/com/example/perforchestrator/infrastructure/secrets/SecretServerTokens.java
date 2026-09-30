@@ -45,19 +45,50 @@ public class SecretServerTokens {
     return server;
   }
 
+  private static boolean interactive(String mode) { return mode.equals("token") || mode.equals("interactive"); }
+
+  public Map<String,Object> login(String id, String username, String password, HttpSession session) {
+    var server=server(id);
+    if(!server.mode().equals("interactive"))throw Problem.invalid("secretServer","Enable AD or token authentication for this vault first");
+    if(username==null || username.isBlank() || username.length()>100 || username.chars().anyMatch(Character::isISOControl)
+        || password==null || password.isEmpty() || password.length()>8192)throw Problem.invalid("credentials","Enter an AD username and password");
+    session.removeAttribute(PREFIX+id);
+    var response=http.tokenForm(java.net.URI.create(server.tokenUrl()),username.trim(),password);
+    if(response.status()<200 || response.status()>=300)throw new Problem(401,"SECRET_AD_LOGIN_FAILED","secretServer",
+        "Secret Server AD sign-in failed (HTTP "+response.status()+"). Check credentials and whether this vault permits the password grant. You can also provide a token.");
+    try {
+      var body=com.example.perforchestrator.infrastructure.config.Json.MAPPER.readTree(response.body());
+      String value=body.path("access_token").asText();long expiry=body.path("expires_in").asLong(0);
+      if(!validToken(value) || expiry<=0 || !body.path("token_type").asText("Bearer").equalsIgnoreCase("Bearer"))throw new IllegalArgumentException();
+      session.setAttribute(PREFIX+id,new Token(value,clock.instant().plusSeconds(Math.min(expiry,28800)),config.generation(),username.trim(),config,clock));
+      return status(id,session);
+    } catch(Exception error) {throw new Problem(502,"SECRET_TOKEN_SCHEMA","secretServer","Token response must include a Bearer access_token and positive expires_in; no session was created");}
+  }
+
+  public static String currentActor() {
+    var session=currentSession(); if(session==null)return "local-developer";
+    var names=session.getAttributeNames();
+    while(names.hasMoreElements()) {
+      String name=names.nextElement(); Object entry=session.getAttribute(name);
+      if(name.startsWith(PREFIX) && entry instanceof Token token && token.generation==token.config.generation()
+          && token.clock.instant().isBefore(token.expires) && token.username!=null)return token.username;
+    }
+    return "local-developer";
+  }
+
   public Map<String, Object> useToken(String id, String value, long expiresInSeconds, HttpSession session) {
-    if (!server(id).mode().equals("token")) throw Problem.invalid("connection", "Select token authentication first");
+    if (!interactive(server(id).mode())) throw Problem.invalid("connection", "Select token authentication first");
     session.removeAttribute(PREFIX + id);
     RequestAuthentication.bearer(value);
     if (expiresInSeconds < 1 || expiresInSeconds > 28800)
       throw Problem.invalid("expiresInSeconds", "Provide remaining token lifetime, at most 8 hours");
-    session.setAttribute(PREFIX + id, new Token(value, clock.instant().plusSeconds(expiresInSeconds), config.generation()));
+    session.setAttribute(PREFIX + id, new Token(value, clock.instant().plusSeconds(expiresInSeconds), config.generation(), null, config, clock));
     return status(id, session);
   }
 
   public Map<String, Object> status(String id, HttpSession session) {
     var server = server(id);
-    if (!server.mode().equals("token"))
+    if (!interactive(server.mode()))
       return Map.of("mode", server.mode(), "state", "ADMINISTRATOR_PROVIDED");
     Token token = session == null ? null : (Token) session.getAttribute(PREFIX + id);
     if (token != null
@@ -67,7 +98,7 @@ public class SecretServerTokens {
     }
     return token == null
         ? Map.of("mode", server.mode(), "state", "SIGN_IN_REQUIRED")
-        : Map.of("mode", server.mode(), "state", server.mode().equals("token") ? "TOKEN_PROVIDED" : "AUTHENTICATED", "expiresAt", token.expires.toString());
+        : Map.of("mode", server.mode(), "state", token.username == null ? "TOKEN_PROVIDED" : "AUTHENTICATED", "expiresAt", token.expires.toString(), "username", token.username == null ? "" : token.username);
   }
 
   public Map<String, Object> statuses(HttpSession session) {
@@ -94,7 +125,7 @@ public class SecretServerTokens {
         if (!credential.token()) throw unavailable();
         value = credential.password();
       }
-      case "token" -> {
+      case "token", "interactive" -> {
         HttpSession session = currentSession();
         status(id, session); // Evict expired token before use.
         Token token = session == null ? null : (Token) session.getAttribute(PREFIX + id);
@@ -117,7 +148,7 @@ public class SecretServerTokens {
   }
 
   public void rejected(String id) {
-    if (server(id).mode().equals("token")) {
+    if (interactive(server(id).mode())) {
       signOut(id, currentSession());
       throw new Problem(401, "SECRET_TOKEN_REJECTED", "secretServer",
           "Secret Server connection '" + id + "' rejected the supplied Bearer token (HTTP 401) while reading a secret. "
@@ -161,7 +192,10 @@ public class SecretServerTokens {
 
     final long generation;
 
-    Token(String value, Instant expires, long generation) {
+    final String username; final ConnectionConfig config; final Clock clock;
+
+    Token(String value, Instant expires, long generation, String username, ConnectionConfig config, Clock clock) {
+      this.username=username; this.config=config; this.clock=clock;
       this.generation = generation;
       this.value = value;
       this.expires = expires;

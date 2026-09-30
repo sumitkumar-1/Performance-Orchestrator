@@ -81,7 +81,7 @@ Use Kubernetes Secret references in values. Prepared chart snapshots and values 
 
 ## 5. LogQL measurements
 
-Measurements are optional JSON rows in the real-run form. Each query uses the selected service's namespace and environment-specific monitoring credential, against its environment's shared Loki connection:
+Use **Monitoring → Add panel** in Configure run. Each panel has a title, service, display type (logs or metric), editable Loki namespace, LogQL query and optional credential-reference override. Defaults come from the service's namespace and environment-specific credential. Multiple services/namespaces can share one environment Loki endpoint with distinct secrets. The panel ID identifies end-of-run metric thresholds. The equivalent profile JSON is:
 
 ```json
 [
@@ -95,7 +95,7 @@ Measurements are optional JSON rows in the real-run form. Each query uses the se
 
 This is an example, not an approved organization query. Supply actual generator and downstream queries. Each must return exactly one aggregated numeric vector sample from `/query`. Multiple series, empty results, non-finite values, authorization failures and malformed responses remain unavailable. `{{namespace}}`, `{{clusterEnv}}` (also `{{clustEnv}}`) and `{{durationSeconds}}` are supported. A log count equals a message count only if events correspond one-to-one and ingestion is complete. No custom tenant header is implemented yet.
 
-The initial adapter collects at the end of the measurement window using its end timestamp. It is not a live chart or raw log viewer. Ingestion lag and query window semantics must be accounted for in the approved queries. Monitoring credentials are resolved at submission and retained in memory only for the active run, then discarded; expired upstream credentials produce unavailable evidence. No background Secret Server password login or token renewal occurs.
+The verdict adapter collects metric panels at the end of the measurement window using its end timestamp; log panels do not contribute numeric verdict evidence. Ingestion lag and query window semantics must be accounted for in the approved queries. Monitoring credentials are resolved at submission and retained in memory only for the active run, then discarded; expired upstream credentials produce unavailable evidence. No background Secret Server password login or token renewal occurs.
 
 A positive `request_count` and configured thresholds are required for a PASS. Thresholds currently express **maximum** values, suitable for error ratios/latency, not minimum throughput. Example:
 
@@ -135,3 +135,25 @@ The account must already exist with approved access to each service/load namespa
 - [Git sparse checkout](https://git-scm.com/docs/git-sparse-checkout)
 - [Helm upgrade](https://docs.helm.sh/docs/helm/helm_upgrade/)
 - [Loki HTTP API](https://grafana.com/docs/loki/latest/reference/loki-http-api/)
+
+## Secret Server AD or token sign-in
+
+Configure the vault with `authMode: interactive` and `tokenUrl: https://domain/SecretServer/oauth2/token`. `apiBaseUrl` remains `https://domain/SecretServer/api/v1`; both endpoints must use the same authority. Application and CKP defaults now use this mode. Existing saved dashboard overrides retain precedence: edit the vault and choose **AD sign-in or access token** if it still shows token-only mode.
+
+The initial prompt offers AD username/password or a supplied token. AD uses the password grant, discards the password after the request, retains only the token and username in the server session, and honors the returned expiry (capped at 8 hours). Sign-out, expiry and connection changes invalidate the identity. Your vault must permit this grant; MFA/browser-only policies may require the token option. Token-only login does not verify a username. AD usernames are captured in prepared plans and existing action audit records, including configuration updates. This remains integration authentication for a loopback application, not shared-user role authorization.
+
+[Secret Server password-grant documentation](https://docs.delinea.com/online-help/secret-server-11-6-x/api-scripting/authenticating/index.htm)
+
+## Live monitoring
+
+Open a run and choose **Open monitoring**. Panels query Loki's `/query_range` endpoint with their own mapped credentials, using your current session. They show log entries or metric trends and refresh every 15 seconds while enabled. Start/end times are editable in local time; requests use UTC. The initial window starts at run start and spans `generator.runTime` (or `generator.runTIme`) from the effective load YAML, otherwise 15 minutes. Ranges are capped at 7 days; this does not change execution duration or its 8-hour maximum.
+
+Add, edit or remove panels during/after a run, then **Save monitoring panels**. These changes persist for that run only and do not change its frozen verdict queries. Update a saved run profile to reuse new panels in future runs. No credentials are stored with panel definitions. Reauthenticate if your vault session expires. Queries use the service's current environment credential unless a panel selects an existing reference explicitly. Set the LogQL namespace using `{{namespace}}` to use the panel's namespace input; a hard-coded query namespace takes precedence within that query.
+
+Queries are bounded to 500 log entries, approximately 1000 time samples per series and a 2 MiB upstream response. The UI plots up to 20 metric series and provides sample values. Each panel reports failures independently; missing data is not treated as zero. There is no custom Loki tenant-header support yet.
+
+[Loki range-query protocol](https://grafana.com/docs/loki/latest/reference/loki-http-api/)
+
+## Service settings and version ordering
+
+Dependencies require those services to be selected and deployed first. The allowed-values list is a simulation allowlist and is hidden in real mode; real values YAML remains editable. Image versions put stable `major.minor.patch` releases first, in ascending numeric order, then development/hash tags using natural sorting. Run-configuration errors now appear in a sticky alert at the top and receive focus.

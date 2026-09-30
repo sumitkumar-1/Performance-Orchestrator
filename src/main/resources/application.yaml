@@ -130,7 +130,8 @@ orchestrator:
     secretServers:
       office-vault:
         apiBaseUrl: https://domain/SecretServer/api/v1
-        authMode: token
+        authMode: interactive
+        tokenUrl: https://domain/SecretServer/oauth2/token
     credentials:
       bitbucket-reader:
         provider: delinea

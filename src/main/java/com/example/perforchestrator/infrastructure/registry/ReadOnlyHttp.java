@@ -43,6 +43,15 @@ public class ReadOnlyHttp {
     return send(request);
   }
 
+  public Response tokenForm(URI uri, String username, String password) {
+    ConnectionConfig.base(uri.toString());
+    String body = "grant_type=password&username=" + java.net.URLEncoder.encode(username, java.nio.charset.StandardCharsets.UTF_8)
+        + "&password=" + java.net.URLEncoder.encode(password, java.nio.charset.StandardCharsets.UTF_8);
+    return send(HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(12))
+        .header("Content-Type", "application/x-www-form-urlencoded").header("Accept", "application/json")
+        .POST(HttpRequest.BodyPublishers.ofString(body)).build());
+  }
+
   private Response send(HttpRequest request) {
     CompletableFuture<HttpResponse<byte[]>> future =
         client.sendAsync(request, info -> new LimitedBody(2 * 1024 * 1024));

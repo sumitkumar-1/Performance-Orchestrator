@@ -1,3 +1,5 @@
+import { monitoringConfig } from "./monitoring-config.js";
+import { sortImageVersions } from "./image-versions.js";
 import { el, input, labeled, select } from "./dom.js";
 
 export async function realFlow(api, catalog, navigate) {
@@ -13,12 +15,17 @@ export async function realFlow(api, catalog, navigate) {
   if (!ids.length) { root.append(el("p", { class: "card" }, "Add service Git, image and Helm settings in Connections & catalog first.")); return root; }
   const name = input("Performance test"), duration = input("60", "number", { min: 1 });
   const warmup = input("0", "number", { min: 0 }), deadline = input("900", "number", { min: 60, max: 28800 });
-  const metrics = el("textarea", { rows: 4, placeholder: 'Optional LogQL query definitions (JSON)' });
   const thresholds = el("textarea", { rows: 3, placeholder: 'Optional maximum thresholds (JSON)' });
   const rows = el("div", { class: "run-selections" }), loadSummary = el("div"), preview = el("section");
-  const status = el("p", { role: "status" }), error = el("p", { role: "alert", class: "error" });
+  const status = el("p", { role: "status" }), error = el("p", { role: "alert", class: "error run-error", tabindex: "-1", hidden: true });
+  const errorObserver = new MutationObserver(() => { error.hidden = !error.textContent; if(error.textContent) { error.scrollIntoView({ block: "center", behavior: "smooth" }); error.focus({preventScroll:true}); } });
+  errorObserver.observe(error, { childList: true, characterData: true, subtree: true });
+  const disposeBase=root.dispose; root.dispose=()=>{errorObserver.disconnect();disposeBase();};
   let selections = [], load = null, plan = null, savedId = null, savedRevision = null, working = false;
   const invalidate = () => { plan = null; preview.replaceChildren(); };
+  const connections = await api("/connections");
+  const monitoring = monitoringConfig(catalog, connections.credentialReferences, invalidate);
+  const disposeCurrent=root.dispose;root.dispose=()=>{monitoring.dispose();disposeCurrent();};
   const destination = id => catalog.services[id]?.deploymentByEnvironment?.[catalog.environment] || catalog.services[id]?.deploymentDefaults;
   const button = (text, action, primary = false) => el("button", { type: "button", class: primary ? "primary" : "", onclick: action }, text);
 
@@ -152,7 +159,7 @@ export async function realFlow(api, catalog, navigate) {
         try {
           const tags = await pages(cursor => api(`/registry-sources/${encodeURIComponent("service:" + serviceId)}/services/${encodeURIComponent(serviceId)}/images/query`, { method: "POST", body: { cursor, limit: 50, authentication: null } }), "nextCursor", "versions", "", () => ticket === epoch);
           if (!valid() || ticket !== epoch) return;
-          imageTags = [...new Set(tags)]; imagesReady = true; renderImages(saved?.imageVersion || "");
+          imageTags = sortImageVersions(tags); imagesReady = true; renderImages(saved?.imageVersion || "");
           imageStatus.textContent = imageTags.length ? `${imageTags.length} versions, including release tags and development hashes.` : "No image versions found.";
           if (saved?.imageVersion && !imageTags.includes(saved.imageVersion)) imageStatus.textContent += " The saved version is no longer available; choose another.";
         } catch (reason) { if (valid() && ticket === epoch) imageStatus.textContent = reason.message; }
@@ -194,14 +201,14 @@ export async function realFlow(api, catalog, navigate) {
   const readProfile = () => {
     if (!load) throw new Error("Choose a load generator before saving or preparing this run.");
     return { name: name.value, services: selections, loadGenerator: load, warmupSeconds: Number(warmup.value), measurementSeconds: Number(duration.value), maxRunDurationSeconds: Number(deadline.value),
-      metrics: metrics.value.trim() ? JSON.parse(metrics.value) : [], thresholds: thresholds.value.trim() ? JSON.parse(thresholds.value) : [] };
+      metrics: monitoring.read(), thresholds: thresholds.value.trim() ? JSON.parse(thresholds.value) : [] };
   };
   savedSelect.addEventListener("change", () => {
     const saved = savedProfiles.find(p => p.id === savedSelect.value); savedId = saved?.id || null; savedRevision = saved?.revision || null; invalidate();
     const p = saved?.profile;
     name.value = p?.name || "Performance test"; warmup.value = p?.warmupSeconds ?? 0; duration.value = p?.measurementSeconds ?? 60; deadline.value = p?.maxRunDurationSeconds ?? 900;
     selections = structuredClone(p?.services || []); load = p?.loadGenerator ? structuredClone(p.loadGenerator) : null;
-    metrics.value = p?.metrics?.length ? JSON.stringify(p.metrics, null, 2) : ""; thresholds.value = p?.thresholds?.length ? JSON.stringify(p.thresholds, null, 2) : ""; renderSelections();
+    monitoring.set(p?.metrics || []); thresholds.value = p?.thresholds?.length ? JSON.stringify(p.thresholds, null, 2) : ""; renderSelections();
   });
   const saveProfile = button("Save profile", async () => {
     saveProfile.disabled = true; error.textContent = "";
@@ -235,7 +242,7 @@ export async function realFlow(api, catalog, navigate) {
     } catch (reason) { error.textContent = reason.message; status.textContent = ""; }
     finally { working = false; controls.forEach(node => node.disabled = false); }
   }, true);
-  root.append(el("section", { class: "card" }, el("div", { class: "form-grid" }, labeled("Saved profile", savedSelect), labeled("Run name", name)),
+  root.append(error, el("section", { class: "card" }, el("div", { class: "form-grid" }, labeled("Saved profile", savedSelect), labeled("Run name", name)),
       el("p", { class: "muted" }, `Environment: ${catalog.environment} · Context: ${settings.kubeContext}`)),
     el("section", { class: "card" }, el("div", { class: "dialog-heading" }, el("h2", {}, "Services"), add), rows),
     el("section", { class: "card" }, el("div", { class: "dialog-heading" }, el("h2", {}, "Load generator"), chooseLoad), loadSummary),
@@ -243,8 +250,8 @@ export async function realFlow(api, catalog, navigate) {
       el("p", { class: "muted" }, "How long to observe traffic after warmup. Results use this window; when it ends, the orchestrator collects metrics and stops its load generator. Traffic rate and the tool’s own duration come from its values YAML."),
       el("details", {}, el("summary", {}, "Advanced timing"), el("div", { class: "form-grid spacer" }, labeled("Warmup (seconds)", warmup), labeled("Overall timeout (seconds)", deadline)),
         el("p", { class: "muted" }, "Warmup is excluded from measurements. The overall timeout includes deployment, warmup and measurement. On timeout, cleanup starts; an in-progress Helm command and cleanup can take additional time. Allow enough time for deployment, and set the load YAML duration to cover warmup plus measurement."))),
-    el("details", { class: "card" }, el("summary", {}, "Optional measurements and thresholds"), el("p", { class: "muted" }, "Configure approved LogQL queries. Without measurements, results are inconclusive. A positive request_count and configured thresholds are required for PASS."), labeled("LogQL measurements (JSON)", metrics), labeled("Maximum thresholds (JSON)", thresholds)),
-    el("div", {}, el("p", { class: "muted" }, "Services remain deployed. Only this run’s load-generator release is uninstalled after completion or cancellation."), status, error, el("div", { class: "card-actions" }, saveProfile, prepare)), preview);
-  for (const field of [name, warmup, duration, deadline, metrics, thresholds]) field.addEventListener("input", invalidate);
+    monitoring.node, el("details", { class: "card" }, el("summary", {}, "Optional performance thresholds"), el("p", { class: "muted" }, "Configure approved LogQL queries. Without measurements, results are inconclusive. A positive request_count and configured thresholds are required for PASS."), labeled("Maximum thresholds (JSON)", thresholds)),
+    el("div", {}, el("p", { class: "muted" }, "Services remain deployed. Only this run’s load-generator release is uninstalled after completion or cancellation."), status, el("div", { class: "card-actions" }, saveProfile, prepare)), preview);
+  for (const field of [name, warmup, duration, deadline, thresholds]) field.addEventListener("input", invalidate);
   renderSelections(); return root;
 }

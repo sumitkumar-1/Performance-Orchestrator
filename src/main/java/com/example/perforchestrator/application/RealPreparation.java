@@ -20,7 +20,10 @@ public class RealPreparation {
       this(serviceId, revision, imageVersion, valuesFiles, overlay, Map.of());
     }
   }
-  public record Metric(String serviceId, String name, String query) {}
+  public record Metric(String serviceId, String name, String query, String title, String namespace, String kind, String credentialRef) {
+    public Metric(String serviceId,String name,String query){this(serviceId,name,query,null,null,null,null);}
+    public boolean logs(){return "logs".equals(kind);}
+  }
   public record Request(String name, List<Deployment> services, Deployment loadGenerator, int warmupSeconds,
       int measurementSeconds, int maxRunDurationSeconds, List<Metric> metrics, List<Threshold> thresholds) {}
   private final Catalog catalog; private final SparseProjects projects; private final HelmExecution helm;
@@ -70,7 +73,8 @@ public class RealPreparation {
     for(var metric:metrics) {
       if(metric==null || metric.name()==null || !metric.name().matches("[a-z][a-z0-9_]{0,63}") || !names.add(metric.name())
           || metric.query()==null || metric.query().isBlank() || metric.query().length()>8192
-          || prepared.stream().noneMatch(s->s.serviceId().equals(metric.serviceId()))) throw Problem.invalid("metrics","Supply unique named LogQL queries for selected services");
+          || !catalog.data().services().containsKey(metric.serviceId())) throw Problem.invalid("metrics","Supply unique named LogQL queries for configured services");
+      RunMonitoring.validate(metric,catalog,connections);
     }
     var thresholds=request.thresholds()==null?List.<Threshold>of():List.copyOf(request.thresholds());
     for(var threshold:thresholds)if(threshold==null || !names.contains(threshold.metric()) || !Double.isFinite(threshold.maximum()))throw Problem.invalid("thresholds","Thresholds must reference a configured metric and finite maximum");
@@ -81,7 +85,7 @@ public class RealPreparation {
         new Build(s.image().sourceRef(),null,s.image().version()),"")).toList(),
         new Load("real-yaml",0,0,request.warmupSeconds(),request.measurementSeconds(),""),request.maxRunDurationSeconds(),thresholds,SimulationCase.SUCCESS);
     Instant now=Instant.now();
-    var plan=new Plan(UUID.randomUUID().toString(),"",now.toString(),now.plusSeconds(900).toString(),"local-developer",null,0,profile,
+    var plan=new Plan(UUID.randomUUID().toString(),"",now.toString(),now.plusSeconds(900).toString(),com.example.perforchestrator.infrastructure.secrets.SecretServerTokens.currentActor(),null,0,profile,
         catalog.hash(),catalog.environment(catalog.boundEnvironment()).clusterIdentity(),load.namespace(),load.sourceRevision(),Map.copyOf(meta),List.copyOf(prepared),
         List.of("REAL: this plan executes Helm in the configured cluster.","Only ckp is checked out; chart dependencies must be vendored.",
           "Images are pinned using imageTag/global.imageTag = tag@digest; rendered chart must reference the selected digest.",

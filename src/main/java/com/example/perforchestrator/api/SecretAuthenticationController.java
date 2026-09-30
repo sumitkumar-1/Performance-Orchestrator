@@ -30,6 +30,15 @@ public class SecretAuthenticationController {
     return result;
   }
 
+  public record AdInput(String username, String password) {
+    @Override public String toString(){return "[REDACTED]";}
+  }
+  @PostMapping("/{connection}/ad")
+  public Object login(@PathVariable String connection, @RequestBody AdInput input, HttpServletRequest request) {
+    var result=tokens.login(connection,input.username(),input.password(),request.getSession());
+    request.changeSessionId(); return result;
+  }
+
   @DeleteMapping("/{connection}")
   public Object signOut(@PathVariable String connection, HttpServletRequest request) {
     tokens.signOut(connection, request.getSession(false));

@@ -177,9 +177,13 @@ public class Store {
   }
 
   public void audit(String action, String target) {
+    audit(com.example.perforchestrator.infrastructure.secrets.SecretServerTokens.currentActor(),action,target);
+  }
+  public void audit(String actor, String action, String target) {
     db.update(
         "INSERT INTO audit_events(actor,action,target,occurred_at) VALUES"
-            + " ('local-developer',?,?,?)",
+            + " (?,?,?,?)",
+        actor,
         action,
         target,
         Instant.now().toString());

@@ -167,6 +167,13 @@ public class ConnectionConfig {
               if (!"secret-server".equals(c.mode()) && c.credentialRef() != null)
                 throw new IllegalArgumentException("Credential reference is only used by Secret Server authentication");
               switch (c.mode()) {
+                case "interactive" -> {
+                  if (c.tokenUrl()==null || c.bearerTokenFile()!=null || c.bearerTokenEnvironmentVariable()!=null)
+                    throw new IllegalArgumentException("AD or token mode requires an OAuth token URL only");
+                  var tokenEndpoint=base(c.tokenUrl());
+                  if(!tokenEndpoint.getRawAuthority().equals(base(c.apiBaseUrl()).getRawAuthority()))
+                    throw new IllegalArgumentException("Token URL must use the Secret Server authority");
+                }
                 case "token" -> {
                   if (c.tokenUrl() != null || c.bearerTokenFile() != null || c.bearerTokenEnvironmentVariable() != null)
                     throw new IllegalArgumentException("Interactive token mode accepts no stored token configuration");
