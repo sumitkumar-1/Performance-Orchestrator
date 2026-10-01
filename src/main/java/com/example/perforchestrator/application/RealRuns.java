@@ -91,7 +91,7 @@ public class RealRuns {
     switch(run.state()) {
       case QUEUED -> write(run,State.PREFLIGHT,run.verdict(),"Checking cluster and Helm release baselines",run.metrics(),null,null,null,null);
       case PREFLIGHT -> {
-        for(var service:plan.services())if(!helm.baseline(target(plan),service.namespace(),service.releaseName()).equals(service.baselineDigest()))throw Problem.conflict("Helm release changed since preparation: "+service.serviceId());
+        for(var service:plan.services())if(!helm.baseline(target(plan),service.namespace(),service.releaseName()).equals(service.baselineDigest()))throw Problem.conflict("Helm release changed since preparation: "+service.serviceId()+". Preflight stopped before service deployment or load generation. Review and prepare a new run against the current release.");
         write(run,State.DEPLOYING,run.verdict(),"Preflight passed; applying prepared services",run.metrics(),null,null,null,null);
       }
       case DEPLOYING -> {
@@ -121,7 +121,7 @@ public class RealRuns {
       case CLEANING_UP -> {
         if(!helm.stop(run.id(),target(plan),load))throw Problem.conflict("Cannot confirm owned load cleanup");
         var state=State.valueOf(run.desiredOutcome());
-        write(run,state,run.verdict(),"Real execution ended; owned load uninstalled, service releases retained. "+run.message(),run.metrics(),null,null,null,null);
+        write(run,state,run.verdict(),run.message()+" Cleanup confirmed the load release is absent; service releases retained.",run.metrics(),null,null,null,null);
         store.releaseEnvironment(run.id());metrics.detach(run.id());live.remove(run.id());
       }
       default -> throw Problem.conflict("Unsupported real run state; verify cleanup");

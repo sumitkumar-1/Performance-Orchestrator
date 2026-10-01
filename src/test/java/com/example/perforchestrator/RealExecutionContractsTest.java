@@ -213,6 +213,37 @@ class RealExecutionContractsTest {
     verify(runner,times(1)).require(eq(List.of("helm","version","--template","{{.Version}}")),any(),any(),any(),any());
   }
 
+  @Test void releaseBaselineIgnoresLiveResourcesButDetectsStoredReleaseChanges() {
+    var runner=mock(CommandRunner.class);
+    var info=new LinkedHashMap<String,Object>(Map.of("status","deployed","description","Upgrade complete","last_deployed","2026-09-30T12:00:00Z"));
+    var release=new LinkedHashMap<String,Object>(Map.of("name","receiver","namespace","ns","version",3,
+        "info",info,"manifest","original manifest","config",Map.of("replicas",2),"chart",Map.of("metadata",Map.of("version","1.0.0"))));
+    when(runner.require(any(),any(),any(),any(),any())).thenAnswer(call->{
+      List<String> args=call.getArgument(0);
+      if(args.contains("view"))return "https://cluster.invalid";
+      if(args.contains("version"))return "v4.3.0";
+      if(args.contains("list"))return "[{\"name\":\"receiver\"}]";
+      if(args.contains("status"))return Json.write(release);
+      throw new AssertionError("Unexpected command: "+args);
+    });
+    var helm=new HelmExecution(runner,settings());
+    var target=Map.<String,Object>of("context","sandbox","server","https://cluster.invalid");
+    String baseline=helm.baseline(target,"ns","receiver");
+    info.put("resources",Map.of("v1/Pod",List.of(Map.of("metadata",Map.of("resourceVersion","100"),"status",Map.of("phase","Pending")))));
+    assertThat(helm.baseline(target,"ns","receiver")).isEqualTo(baseline);
+    info.put("resources",Map.of("v1/Pod",List.of(Map.of("metadata",Map.of("resourceVersion","101"),"status",Map.of("phase","Running")))));
+    assertThat(helm.baseline(target,"ns","receiver")).isEqualTo(baseline);
+    for(var change:Map.<String,Object>of("version",4,"manifest","changed manifest","config",Map.of("replicas",3),"chart",Map.of("metadata",Map.of("version","2.0.0"))).entrySet()) {
+      Object original=release.put(change.getKey(),change.getValue());
+      assertThat(helm.baseline(target,"ns","receiver")).as(change.getKey()).isNotEqualTo(baseline);
+      release.put(change.getKey(),original);
+    }
+    info.put("status","pending-upgrade");
+    assertThat(helm.baseline(target,"ns","receiver")).isNotEqualTo(baseline);
+    info.put("status","deployed");info.put("last_deployed","2026-09-30T13:00:00Z");
+    assertThat(helm.baseline(target,"ns","receiver")).isNotEqualTo(baseline);
+  }
+
   @Test void helmRepositoryTokenUsesStdinAndPrivateTemporaryConfig() throws Exception {
     var settings=new ExecutionSettings(new MockEnvironment().withProperty("orchestrator.execution.workspace",temp.toString())
         .withProperty("orchestrator.execution.helm-repositories.release","https://registry.invalid/charts")

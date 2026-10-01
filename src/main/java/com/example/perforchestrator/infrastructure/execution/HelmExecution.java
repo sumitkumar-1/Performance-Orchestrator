@@ -64,8 +64,16 @@ public class HelmExecution {
     args.addAll(List.of("--namespace", namespace, "--filter", "^"+release+"$", "--output", "json"));
     var result = Json.read(call(args, settings.workspace, "Helm release lookup"), List.class);
     if (result.isEmpty()) return "ABSENT";
-    var status=status(target, namespace, release);
-    return Json.hash(Json.write(status));
+    var releaseRecord=new LinkedHashMap<>(status(target, namespace, release));
+    // Helm 4 adds live Kubernetes objects to info.resources on every status lookup.
+    // Pod/resource changes are not Helm release changes. Preserve all stored release
+    // fields (revision, status, chart, values, manifest, etc.) in the comparison.
+    if(releaseRecord.get("info") instanceof Map<?,?> info) {
+      var storedInfo=new LinkedHashMap<>(info);
+      storedInfo.remove("resources");
+      releaseRecord.put("info",storedInfo);
+    }
+    return Json.hash(Json.write(releaseRecord));
   }
   private synchronized int helmMajor() {
     if(helmMajor!=0)return helmMajor;

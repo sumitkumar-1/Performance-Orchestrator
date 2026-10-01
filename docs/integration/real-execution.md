@@ -239,6 +239,14 @@ Run these as the same OS user and with the same KUBECONFIG as the application. P
 
 Helm 4 removed `helm list --all` and includes all release statuses by default. The application detects the installed Helm major version once per process: it uses `--all` on Helm 3 and omits it on Helm 4. This retains visibility of pending, failed and uninstalling releases. Restart the app if you replace the Helm binary while it is running. For the manual lookup command above, add `--all` when using Helm 3. See [Helm list](https://helm.sh/docs/helm/helm_list/).
 
+### Release changed since preparation
+
+This preflight check stops the run before service deployment or load generation if a Helm release differs from the reviewed snapshot. Prepare a new run after another deployment, rollback or release-state change.
+
+Helm 4 includes live Kubernetes objects in `helm status` under `info.resources`. The baseline excludes that transient field so pod readiness, resource versions and other live updates do not falsely invalidate the plan. Stored release fields, including revision, status, chart, values and manifest, remain checked. After upgrading from an application version that hashed live resources, prepare a fresh plan; old plans retain their original baseline hash. See the [Helm status implementation](https://github.com/helm/helm/blob/main/pkg/action/status.go).
+
+Cleanup confirms the load release is absent; this can mean it was never installed. A preflight failure does not imply the service deployment itself failed.
+
 ## Command and API activity
 
 Diagnostics are disabled by default. Enable them in `application.yaml` and restart:
