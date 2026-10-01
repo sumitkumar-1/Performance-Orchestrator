@@ -9,7 +9,9 @@ public final class ClusterDiagnostics {
   public static Problem failure(String operation,int exit,String output) {
     String text=output==null?"":output.toLowerCase(Locale.ROOT);
     String reason;
-    if(text.contains("unauthorized") || text.contains("provide credentials") || text.contains("must be logged in") || text.contains("authentication required"))
+    if(text.contains("unknown flag") || text.contains("unknown shorthand flag"))
+      reason="The installed Helm version rejected a command option. Check helm version --short and update the application for that Helm version; this is not a cluster authentication failure.";
+    else if(text.contains("unauthorized") || text.contains("provide credentials") || text.contains("must be logged in") || text.contains("authentication required"))
       reason="Cluster authentication is missing or expired. Renew oc/kubectl login for the application's kube-context. Secret Server login does not authenticate Helm to CKP.";
     else if(text.contains("forbidden") || text.contains("cannot list resource") || text.contains("cannot get resource"))
       reason="The cluster identity lacks permission to read Helm release records in this namespace. Check Kubernetes RBAC (normally get/list Secrets for Helm's default storage).";

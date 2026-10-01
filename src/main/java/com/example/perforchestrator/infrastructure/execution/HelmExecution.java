@@ -13,6 +13,7 @@ public class HelmExecution {
   private final CommandRunner commands;
   private final ExecutionSettings settings;
   private final HelmRepositoryAuth repositoryAuth;
+  private volatile int helmMajor;
   public HelmExecution(CommandRunner commands, ExecutionSettings settings) { this(commands,settings,null); }
   @org.springframework.beans.factory.annotation.Autowired
   public HelmExecution(CommandRunner commands, ExecutionSettings settings,HelmRepositoryAuth repositoryAuth) {
@@ -57,11 +58,22 @@ public class HelmExecution {
   }
   public String baseline(Map<String,Object> target, String namespace, String release) {
     verifyTarget(target);
-    var args=helm(target); args.addAll(List.of("list", "--all", "--namespace", namespace, "--filter", "^"+release+"$", "--output", "json"));
+    var args=helm(target); args.add("list");
+    // Helm 3 defaults to deployed/failed; Helm 4 defaults to every status and removed --all.
+    if(helmMajor()==3)args.add("--all");
+    args.addAll(List.of("--namespace", namespace, "--filter", "^"+release+"$", "--output", "json"));
     var result = Json.read(call(args, settings.workspace, "Helm release lookup"), List.class);
     if (result.isEmpty()) return "ABSENT";
     var status=status(target, namespace, release);
     return Json.hash(Json.write(status));
+  }
+  private synchronized int helmMajor() {
+    if(helmMajor!=0)return helmMajor;
+    String version=call(List.of("helm","version","--template","{{.Version}}"),settings.workspace,"Helm version check").strip();
+    var match=java.util.regex.Pattern.compile("v?([0-9]+)\\.[0-9]+\\.[0-9]+(?:[-+].*)?").matcher(version);
+    if(!match.matches() || !Set.of("3","4").contains(match.group(1)))
+      throw Problem.invalid("execution","Unable to identify a supported Helm version (3 or 4). Check the Helm executable used by the application");
+    helmMajor=Integer.parseInt(match.group(1));return helmMajor;
   }
   public Map<String,Object> status(Map<String,Object> target, String namespace, String release) {
     var args=helm(target); args.addAll(List.of("status", release, "--namespace", namespace, "--output", "json"));

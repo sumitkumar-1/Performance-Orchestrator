@@ -229,10 +229,12 @@ JFrog supports tokens for Helm repository authentication, but the organization m
 To reproduce a lookup without making cluster changes, substitute your configured context:
 
 ```sh
-helm --kube-context YOUR_CONTEXT list --all \
+helm --kube-context YOUR_CONTEXT list \
   --namespace ps-spoolers-sng-smtp-receiver --output json
 kubectl --context YOUR_CONTEXT auth can-i list secrets \
   --namespace ps-spoolers-sng-smtp-receiver
 ```
 
 Run these as the same OS user and with the same KUBECONFIG as the application. Preparation, profile-save and run-submission messages now appear in a sticky banner at the top of Configure run, with errors in the same visible area.
+
+Helm 4 removed `helm list --all` and includes all release statuses by default. The application detects the installed Helm major version once per process: it uses `--all` on Helm 3 and omits it on Helm 4. This retains visibility of pending, failed and uninstalling releases. Restart the app if you replace the Helm binary while it is running. For the manual lookup command above, add `--all` when using Helm 3. See [Helm list](https://helm.sh/docs/helm/helm_list/).

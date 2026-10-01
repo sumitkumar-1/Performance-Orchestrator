@@ -60,6 +60,7 @@ class RealExecutionContractsTest {
     when(runner.require(any(),any(),any(),any(),any())).thenAnswer(call->{
       List<String> args=call.getArgument(0);
       if(args.contains("view"))return "https://cluster.invalid";
+      if(args.contains("version"))return "v3.17.3";
       if(args.contains("list"))return "[{\"name\":\"load\"}]";
       if(args.contains("status"))return "{\"info\":{\"description\":\"someone-else\"}}";
       throw new AssertionError("Unexpected mutation: "+args);
@@ -186,6 +187,30 @@ class RealExecutionContractsTest {
     assertThat(ClusterDiagnostics.failure("Helm release lookup",1,"Unauthorized private-token").getMessage())
         .contains("Renew oc/kubectl login","Secret Server login does not authenticate Helm").doesNotContain("private-token");
     assertThat(ClusterDiagnostics.failure("Helm release lookup",1,"x509: certificate signed by unknown authority").getMessage()).contains("TLS verification failed");
+    assertThat(ClusterDiagnostics.failure("Helm release lookup",1,"unknown flag: --all private-token").getMessage())
+        .contains("Helm version rejected a command option").doesNotContain("private-token");
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings={"v3.17.3+ge4da497","v4.3.0+gbec5b06"})
+  void releaseLookupPreservesAllStatusesAcrossHelmVersions(String version) {
+    var runner=mock(CommandRunner.class);
+    when(runner.require(any(),any(),any(),any(),any())).thenAnswer(call->{
+      List<String> args=call.getArgument(0);
+      if(args.contains("view"))return "https://cluster.invalid";
+      if(args.contains("version"))return version;
+      if(args.contains("list")) {
+        assertThat(args.contains("--all")).isEqualTo(version.startsWith("v3."));
+        assertThat(args).containsSubsequence("--namespace","ns","--filter","^load$","--output","json");
+        return "[{\"name\":\"load\",\"status\":\"pending-install\"}]";
+      }
+      if(args.contains("status"))return "{\"info\":{\"status\":\"pending-install\"}}";
+      throw new AssertionError("Unexpected command");
+    });
+    var helm=new HelmExecution(runner,settings());var target=Map.<String,Object>of("context","sandbox","server","https://cluster.invalid");
+    assertThat(helm.baseline(target,"ns","load")).isNotEqualTo("ABSENT");
+    assertThat(helm.baseline(target,"ns","load")).isNotEqualTo("ABSENT");
+    verify(runner,times(1)).require(eq(List.of("helm","version","--template","{{.Version}}")),any(),any(),any(),any());
   }
 
   @Test void helmRepositoryTokenUsesStdinAndPrivateTemporaryConfig() throws Exception {
