@@ -16,6 +16,7 @@ public class ExecutionSettings {
   public final Path workspace;
   public final int timeoutSeconds;
   public final Map<String,String> helmRepositories;
+  public final String helmRepositoryConnection,helmRepositoryUsername;
   public ExecutionSettings(Environment env) {
     enabled = env.getProperty("orchestrator.execution.enabled", Boolean.class, false);
     context = env.getProperty("orchestrator.execution.kube-context", "");
@@ -23,6 +24,8 @@ public class ExecutionSettings {
     workspace = Path.of(env.getProperty("orchestrator.execution.workspace", "data/real/workspaces")).toAbsolutePath().normalize();
     timeoutSeconds = env.getProperty("orchestrator.execution.command-timeout-seconds", Integer.class, 300);
     if (timeoutSeconds < 10 || timeoutSeconds > 1800) throw new IllegalArgumentException("Execution command timeout must be 10–1800 seconds");
+    helmRepositoryConnection=env.getProperty("orchestrator.execution.helm-repository-connection","").strip();
+    helmRepositoryUsername=env.getProperty("orchestrator.execution.helm-repository-username","").strip();
     helmRepositories=Map.copyOf(Binder.get(env).bind("orchestrator.execution.helm-repositories",
         Bindable.mapOf(String.class,String.class)).orElse(Map.of()));
     helmRepositories.forEach((name,url)->{

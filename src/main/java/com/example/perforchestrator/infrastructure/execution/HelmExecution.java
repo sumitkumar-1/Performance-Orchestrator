@@ -12,7 +12,12 @@ import org.springframework.stereotype.Component;
 public class HelmExecution {
   private final CommandRunner commands;
   private final ExecutionSettings settings;
-  public HelmExecution(CommandRunner commands, ExecutionSettings settings) { this.commands=commands; this.settings=settings; }
+  private final HelmRepositoryAuth repositoryAuth;
+  public HelmExecution(CommandRunner commands, ExecutionSettings settings) { this(commands,settings,null); }
+  @org.springframework.beans.factory.annotation.Autowired
+  public HelmExecution(CommandRunner commands, ExecutionSettings settings,HelmRepositoryAuth repositoryAuth) {
+    this.commands=commands; this.settings=settings;this.repositoryAuth=repositoryAuth;
+  }
   public Map<String,Object> target() {
     if (!settings.enabled) throw Problem.invalid("execution", "Enable orchestrator.execution.enabled after configuring the cluster");
     if (!settings.expectedServer.startsWith("https://") || settings.context.isBlank())
@@ -110,14 +115,28 @@ public class HelmExecution {
     // Each preparation has its own alias file/cache; concurrent reviews cannot overwrite each other's repositories.
     var dependencyEnvironment=new HashMap<>(environment());
     Path repositoryHome=folder.resolve(".helm-repositories");Files.createDirectories(repositoryHome);
+    try { Files.setPosixFilePermissions(repositoryHome,java.nio.file.attribute.PosixFilePermissions.fromString("rwx------")); }
+    catch(UnsupportedOperationException e) {
+      if(!settings.helmRepositoryConnection.isEmpty())throw Problem.invalid("execution","Authenticated Helm repositories require a filesystem supporting private POSIX directory permissions");
+    }
     dependencyEnvironment.put("HELM_REPOSITORY_CONFIG",repositoryHome.resolve("repositories.yaml").toString());
     dependencyEnvironment.put("HELM_REPOSITORY_CACHE",repositoryHome.resolve("cache").toString());
+    try {
     for(String alias:aliases) {
-      var registered=commands.run(List.of("helm","repo","add",alias,settings.helmRepositories.get(alias)),folder,
-          dependencyEnvironment,Duration.ofSeconds(settings.timeoutSeconds+15L));
+      String url=settings.helmRepositories.get(alias);
+      var args=new ArrayList<>(List.of("helm","repo","add",alias,url,"--force-update"));
+      var credential=repositoryAuth==null?null:repositoryAuth.resolve(settings,url);
+      CommandRunner.Result registered;
+      if(credential==null)registered=commands.run(args,folder,dependencyEnvironment,Duration.ofSeconds(settings.timeoutSeconds+15L));
+      else {
+        args.addAll(List.of("--username",credential.username,"--password-stdin"));
+        byte[] input=(credential.token+"\n").getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        try { registered=commands.runWithInput(args,folder,dependencyEnvironment,Duration.ofSeconds(settings.timeoutSeconds+15L),input); }
+        finally { Arrays.fill(input,(byte)0); }
+      }
       if(registered.exit()!=0)throw new Problem(422,"HELM_REPOSITORY_FAILED","execution",
           "Helm repository registration failed for "+alias+" (exit "+registered.exit()+"). Check the configured URL, network/CA trust and repository access. "
-          +"Portal Artifactory tokens are not automatically forwarded to Helm. Raw output is withheld.");
+          +"For authenticated repositories, check helm-repository-connection and helm-repository-username, and the token's Helm repository read permission. Raw output is withheld.");
     }
     String operation=Files.exists(directory.resolve("Chart.lock")) || Files.exists(directory.resolve("requirements.lock"))?"build":"update";
     var result=commands.run(List.of("helm", "dependency", operation, directory.toString()),folder,
@@ -125,6 +144,7 @@ public class HelmExecution {
     if(result.exit()!=0)throw new Problem(422,"HELM_DEPENDENCY_FAILED","execution",
         "Helm dependency "+operation+" failed (exit "+result.exit()+"). Check the chart's dependency repository URL, access credentials, network/CA trust and lock-file consistency. "
         +"Repository aliases come from orchestrator.execution.helm-repositories. Raw output is withheld because repository errors may contain credentials.");
+    } finally { SparseProjects.delete(repositoryHome); }
   }
   private static boolean containsPinnedContainer(Object node,String digest) {
     boolean found=false;

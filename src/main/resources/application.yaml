@@ -35,6 +35,8 @@ orchestrator:
     expected-api-server: '' # Exact HTTPS server URL; prevents use of an unintended context
     workspace: data/real/workspaces
     command-timeout-seconds: 300
+    helm-repository-connection: office # Existing Artifactory connection; blank for anonymous repositories
+    helm-repository-username: '' # Token owner's short username; blank derives it from the current AD login
     # Chart.yaml aliases, e.g. repository: '@helm-release-virtual'. Replace the example host.
     helm-repositories:
       helm-dev-virtual: https://artifactory.domain/artifactory/helm-dev-virtual

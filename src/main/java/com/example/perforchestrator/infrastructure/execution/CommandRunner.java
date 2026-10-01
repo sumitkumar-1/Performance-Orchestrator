@@ -14,13 +14,16 @@ import org.springframework.stereotype.Component;
 public class CommandRunner {
   public record Result(int exit, String output) {}
   public Result run(List<String> args, Path directory, Map<String,String> environment, Duration timeout) {
+    return runWithInput(args,directory,environment,timeout,new byte[0]);
+  }
+  public Result runWithInput(List<String> args, Path directory, Map<String,String> environment, Duration timeout, byte[] input) {
     Process process = null;
     var reader = Executors.newSingleThreadExecutor();
     try {
       var builder = new ProcessBuilder(args).directory(directory.toFile()).redirectErrorStream(true);
       builder.environment().putAll(environment);
       process = builder.start();
-      process.getOutputStream().close();
+      try(var stdin=process.getOutputStream()){stdin.write(input);}
       final Process running = process;
       var output = reader.submit(() -> {
         try (var stream = running.getInputStream(); var bytes = new ByteArrayOutputStream()) {
@@ -50,6 +53,8 @@ public class CommandRunner {
   }
   public String require(List<String> args, Path directory, Map<String,String> environment, Duration timeout, String operation) {
     var result = run(args, directory, environment, timeout);
+    if(result.exit()!=0 && (operation.equals("Helm release lookup") || operation.equals("Helm release status")))
+      throw ClusterDiagnostics.failure(operation,result.exit(),result.output());
     if (result.exit() != 0) throw new Problem(502, "EXECUTION_COMMAND_FAILED", "execution", operation + " failed (exit " + result.exit() + "); raw command output is withheld because charts may contain secrets");
     return result.output();
   }

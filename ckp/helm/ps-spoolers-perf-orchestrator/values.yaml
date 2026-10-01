@@ -113,6 +113,8 @@ application:
       expected-api-server: https://kubernetes.default.svc
       workspace: /app/data/real/workspaces
       command-timeout-seconds: 300
+      helm-repository-connection: office
+      helm-repository-username: '' # Set token owner's short username, or derive from current AD login
       helm-repositories:
         helm-dev-virtual: https://artifactory.domain/artifactory/helm-dev-virtual
         helm-qa-virtual: https://artifactory.domain/artifactory/helm-qa-virtual

@@ -176,7 +176,7 @@ A lint failure happens during preparation, before this run deploys anything. “
 
 On the office laptop, use a checkout of the same selected revision, then run `helm lint <chart-path> --namespace <namespace> -f <selected-values-file>`, repeating `-f` in the same order for multiple files. Reproduce any edited YAML and the organization-specific overrides used by your working deployment. Preparation manages `imageName`, `imageTag`, `global.imageTag`, and `global.environment`; both image tags use `version@sha256:digest`. If the normal command works but review fails, compare those digest-qualified values with the chart schema, as well as namespace, chart dependencies, Helm version and other required values such as cluster subdomain. Local output can contain values; remove secrets before sharing it.
 
-Dependencies are resolved before validation. A failed locked build stops preparation; it does not silently fall back to updating versions. Repository declarations may use HTTPS, OCI, configured Helm aliases, or `file://` paths inside the CKP snapshot. Embedded URL credentials and paths outside CKP are rejected. Repository aliases are configured in `orchestrator.execution.helm-repositories`. Before resolving dependencies, the app runs `helm repo add <alias> <url>` once for each referenced alias. Each preparation uses its own temporary repository configuration/cache outside the CKP snapshot, removed with the preparation workspace. It does not use your personal Helm repository aliases. Other Helm state uses `<orchestrator.execution.workspace>/helm-config`, `helm-cache` and `helm-data`. Portal Artifactory/Secret Server token sessions are not yet forwarded to dependency downloads. Authenticated repository access needs its repository URL/authentication mapping confirmed before it can be wired to those sessions. Do not put tokens into Chart.yaml. See [Helm dependency build](https://helm.sh/docs/helm/helm_dependency_build/) for lock-file behavior.
+Dependencies are resolved before validation. A failed locked build stops preparation; it does not silently fall back to updating versions. Repository declarations may use HTTPS, OCI, configured Helm aliases, or `file://` paths inside the CKP snapshot. Embedded URL credentials and paths outside CKP are rejected. Repository aliases are configured in `orchestrator.execution.helm-repositories`. Before resolving dependencies, the app runs `helm repo add <alias> <url> --force-update` once for each referenced alias. Each preparation uses its own temporary repository configuration/cache outside the CKP snapshot, removed with the preparation workspace. It does not use your personal Helm repository aliases. Other Helm state uses `<orchestrator.execution.workspace>/helm-config`, `helm-cache` and `helm-data`. For configured aliases, `helm-repository-connection` selects the existing Artifactory token session or Secret Server token reference to use for dependency downloads. The repository HTTPS host/port must match that connection. Direct HTTPS/OCI dependency URLs without aliases do not use this credential bridge. Do not put tokens into Chart.yaml. See [Helm dependency build](https://helm.sh/docs/helm/helm_dependency_build/) for lock-file behavior.
 
 Helm lint can report both a template error and a missing-dependency warning. Diagnostics prioritize the error and mention the dependency warning separately. A missing helper at `templates/service.yaml:1` can mean that the service includes a shared/library chart template that was not checked into `charts/`. Check the `dependencies:` section of Chart.yaml, the referenced helper and the build steps normally used to populate `charts/`; a source-file location alone does not confirm that cause.
 
@@ -206,4 +206,33 @@ orchestrator:
 
 On CKP, override these under `application.orchestrator.execution.helm-repositories` in your values file; the chart renders them into the application ConfigMap. Names are flexible but must match Chart.yaml aliases exactly. `@name` and `alias:name` are supported. Only referenced aliases are registered, and these URLs point at Helm repositories, not Docker tag APIs. These are startup settings, so restart after changing them; they are not dashboard runtime overrides.
 
-Registration follows the supplied command without username/password flags. If the endpoint requires authentication, portal token forwarding needs a separate integration; do not embed credentials in repository URLs. A registration failure stops preparation before deployment and identifies the alias without exposing raw command output. The download/build timeout uses `command-timeout-seconds` per command.
+Authenticated alias registration uses `--username <short-name> --password-stdin --force-update`, passing the Artifactory token through stdin. Do not embed credentials in repository URLs. A registration failure stops preparation before deployment and identifies the alias without exposing raw command output. The download/build timeout uses `command-timeout-seconds` per command.
+
+
+### Helm authentication and release lookup
+
+Configure the existing Artifactory connection and token owner in application.yaml, or the corresponding `application.orchestrator.execution` block in CKP values:
+
+```yaml
+orchestrator:
+  execution:
+    helm-repository-connection: office
+    helm-repository-username: first.last
+```
+
+The username must match the Artifactory token owner. Leaving it blank derives the short username from the current Secret Server AD login (`first.last@domain.net` or `DOMAIN\first.last` becomes `first.last`). A token-only Secret Server login has no verified username, so set it explicitly in that case. Secret Server still receives the full AD login. Its AD password is discarded after exchanging it for a Secret Server token; it is not reused for Helm. The `office` connection supplies an **Artifactory** token through its existing token session or credential reference, not the Secret Server token itself. Set `helm-repository-connection` to an empty string for anonymous repositories.
+
+JFrog supports tokens for Helm repository authentication, but the organization must permit this token to read the selected Helm repository. The app passes the token via stdin, not argv or environment variables. Helm itself writes it to a private temporary repository configuration (directory mode 0700 on POSIX filesystems). That directory is deleted after dependency preparation, including ordinary failure, and is excluded from prepared snapshots. A process crash or filesystem cleanup failure can leave the temporary directory behind; remove abandoned preparation folders securely. No AD password is requested or saved for Helm.
+
+**Helm release lookup** is a separate Kubernetes operation (`helm list`), unrelated to repository authentication. It now runs before source checkout/chart preparation and reports the service, namespace and context. The application reports recognized authentication, RBAC, TLS and network errors without returning raw output. If the login is expired, renew `oc login` for the kube-context used by the app. If access is forbidden, confirm the cluster identity can read Helm release records (normally Kubernetes Secrets) in that namespace. A lookup failure is not treated as an absent release.
+
+To reproduce a lookup without making cluster changes, substitute your configured context:
+
+```sh
+helm --kube-context YOUR_CONTEXT list --all \
+  --namespace ps-spoolers-sng-smtp-receiver --output json
+kubectl --context YOUR_CONTEXT auth can-i list secrets \
+  --namespace ps-spoolers-sng-smtp-receiver
+```
+
+Run these as the same OS user and with the same KUBECONFIG as the application. Preparation, profile-save and run-submission messages now appear in a sticky banner at the top of Configure run, with errors in the same visible area.

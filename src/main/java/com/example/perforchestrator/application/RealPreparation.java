@@ -113,6 +113,12 @@ public class RealPreparation {
     if(!destinations.add(destination.namespace()+"/"+destination.releaseName()))throw Problem.invalid("deployment","Two services cannot share a Helm release");
     if(service.sourceProject()==null || service.containerImage()==null)throw Problem.invalid("service","Configure Git and container image mappings");
     String chart=service.sourceProject().chartPath();ConnectionConfigSafe(chart);
+    String baseline;
+    try { baseline=helm.baseline(target,destination.namespace(),destination.releaseName()); }
+    catch(Problem error) {
+      throw new Problem(error.status(),error.code(),error.field(),"Service "+selection.serviceId()+", namespace "+destination.namespace()
+          +", release "+destination.releaseName()+", context "+target.get("context")+": "+error.getMessage());
+    }
     var snapshot=projects.checkout(service.sourceProject(),selection.revision());
     if(!snapshot.files().containsKey(chart+"/Chart.yaml"))throw Problem.invalid("chartPath","Chart.yaml is missing from the sparse CKP snapshot");
     var image=images.resolve(selection.serviceId(),"service:"+selection.serviceId(),null,selection.imageVersion());
@@ -149,7 +155,7 @@ public class RealPreparation {
     var preparedHashes=new TreeMap<String,String>();preparedFiles.forEach((path,content)->preparedHashes.put(path,Json.hash(content)));
     charts.put(selection.serviceId(),chart);
     return new PreparedService(selection.serviceId(),Action.DEPLOY,destination.namespace(),destination.releaseName(),image,
-        helm.baseline(target,destination.namespace(),destination.releaseName()),snapshot.commit(),hashes,preparedFiles,preparedHashes,
+        baseline,snapshot.commit(),hashes,preparedFiles,preparedHashes,
         ImmutableConfiguration.values(effective),HelmValues.diff(base,effective),List.of());
   }
   private static void ConnectionConfigSafe(String path) {

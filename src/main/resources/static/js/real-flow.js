@@ -16,12 +16,19 @@ export async function realFlow(api, catalog, navigate) {
   const name = input("Performance test"), duration = input("60", "number", { min: 1 });
   const warmup = input("0", "number", { min: 0 }), deadline = input("900", "number", { min: 60, max: 28800 });
   const rows = el("div", { class: "run-selections" }), loadSummary = el("div"), preview = el("section");
-  const status = el("p", { role: "status" }), error = el("p", { role: "alert", class: "error run-error", tabindex: "-1", hidden: true });
-  const errorObserver = new MutationObserver(() => { error.hidden = !error.textContent; if(error.textContent) { error.scrollIntoView({ block: "center", behavior: "smooth" }); error.focus({preventScroll:true}); } });
+  const status = el("p", { role: "status", class: "run-status", "aria-live": "polite", hidden: true }), error = el("p", { role: "alert", class: "error run-error", tabindex: "-1", hidden: true });
+  const notices = el("div", {class:"run-notices",hidden:true},error,status);
+  const errorObserver = new MutationObserver(() => {
+    error.hidden = !error.textContent; status.hidden = !status.textContent || !!error.textContent;
+    notices.hidden = error.hidden && status.hidden;
+    if(!notices.hidden)notices.scrollIntoView({block:"nearest",behavior:"smooth"});
+    if(error.textContent)error.focus({preventScroll:true});
+  });
   errorObserver.observe(error, { childList: true, characterData: true, subtree: true });
+  errorObserver.observe(status, { childList: true, characterData: true, subtree: true });
   const disposeBase=root.dispose; root.dispose=()=>{errorObserver.disconnect();disposeBase();};
   let selections = [], load = null, plan = null, savedId = null, savedRevision = null, working = false;
-  const invalidate = () => { plan = null; preview.replaceChildren(); };
+  const invalidate = () => { plan = null; preview.replaceChildren(); status.textContent=""; };
   const connections = await api("/connections");
   const monitoring = monitoringConfig(catalog, connections.credentialReferences, invalidate, { evaluation: true, api });
   const disposeCurrent=root.dispose;root.dispose=()=>{monitoring.dispose();disposeCurrent();};
@@ -211,7 +218,7 @@ export async function realFlow(api, catalog, navigate) {
     monitoring.set(p?.metrics || [], p?.thresholds || []); renderSelections();
   });
   const saveProfile = button("Save profile", async () => {
-    saveProfile.disabled = true; error.textContent = "";
+    saveProfile.disabled = true; error.textContent = ""; status.textContent="Saving run profile…";
     try {
       const result = await api("/real/profiles", { method: "POST", body: { id: savedId, revision: savedRevision, profile: readProfile() } });
       if (disposed) return;
@@ -219,7 +226,7 @@ export async function realFlow(api, catalog, navigate) {
       const index = savedProfiles.findIndex(p => p.id === result.id); if (index < 0) savedProfiles.push(result); else savedProfiles[index] = result;
       savedSelect.replaceChildren(el("option", { value: "" }, "New profile"), ...savedProfiles.map(p => el("option", { value: p.id }, p.profile.name))); savedSelect.value = result.id;
       status.textContent = "Profile saved.";
-    } catch (reason) { error.textContent = reason.message; } finally { saveProfile.disabled = false; }
+    } catch (reason) { error.textContent = reason.message; status.textContent=""; } finally { saveProfile.disabled = false; }
   });
   const prepare = button("Review run", async () => {
     if (working) return; working = true; error.textContent = ""; invalidate();
@@ -229,9 +236,9 @@ export async function realFlow(api, catalog, navigate) {
       const prepared = plan, confirmed = el("input", { type: "checkbox" }), key = crypto.randomUUID();
       const run = button("Start run", async () => {
         if (plan !== prepared || !confirmed.checked) { error.textContent = "Review and confirm this plan before starting."; return; }
-        run.disabled = true;
+        run.disabled = true; error.textContent=""; status.textContent="Submitting the run…";
         try { const result = await api("/real/runs", { method: "POST", headers: { "Idempotency-Key": key }, body: { planId: prepared.id } }); if (!disposed) navigate(`#run/${result.id}`); }
-        catch (reason) { error.textContent = reason.message; run.disabled = false; }
+        catch (reason) { error.textContent = reason.message; status.textContent=""; run.disabled = false; }
       }, true);
       preview.className = "card";
       preview.append(el("h2", {}, "Review run"), ...plan.services.map(s => el("div", { class: "run-selection" }, el("div", {}, el("strong", {}, s.serviceId), el("p", {}, `${s.namespace} / ${s.releaseName}`), el("p", { class: "muted" }, `Image ${s.image.version} · commit ${s.sourceRevision.slice(0, 12)}`),
@@ -242,7 +249,7 @@ export async function realFlow(api, catalog, navigate) {
     } catch (reason) { error.textContent = reason.message; status.textContent = ""; }
     finally { working = false; controls.forEach(node => node.disabled = false); }
   }, true);
-  root.append(error, el("section", { class: "card" }, el("div", { class: "form-grid" }, labeled("Saved profile", savedSelect), labeled("Run name", name)),
+  root.append(notices, el("section", { class: "card" }, el("div", { class: "form-grid" }, labeled("Saved profile", savedSelect), labeled("Run name", name)),
       el("p", { class: "muted" }, `Environment: ${catalog.environment} · Context: ${settings.kubeContext}`)),
     el("section", { class: "card" }, el("div", { class: "dialog-heading" }, el("h2", {}, "Services"), add), rows),
     el("section", { class: "card" }, el("div", { class: "dialog-heading" }, el("h2", {}, "Load generator"), chooseLoad), loadSummary),
@@ -251,7 +258,7 @@ export async function realFlow(api, catalog, navigate) {
       el("details", {}, el("summary", {}, "Advanced timing"), el("div", { class: "form-grid spacer" }, labeled("Warmup (seconds)", warmup), labeled("Overall timeout (seconds)", deadline)),
         el("p", { class: "muted" }, "Warmup is excluded from measurements. The overall timeout includes deployment, warmup and measurement. On timeout, cleanup starts; an in-progress Helm command and cleanup can take additional time. Allow enough time for deployment, and set the load YAML duration to cover warmup plus measurement."))),
     monitoring.node,
-    el("div", {}, el("p", { class: "muted" }, "Services remain deployed. Only this run’s load-generator release is uninstalled after completion or cancellation."), status, el("div", { class: "card-actions" }, saveProfile, prepare)), preview);
+    el("div", {}, el("p", { class: "muted" }, "Services remain deployed. Only this run’s load-generator release is uninstalled after completion or cancellation."), el("div", { class: "card-actions" }, saveProfile, prepare)), preview);
   for (const field of [name, warmup, duration, deadline]) field.addEventListener("input", invalidate);
   renderSelections(); return root;
 }

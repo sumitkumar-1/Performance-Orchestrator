@@ -139,6 +139,11 @@ class RealWorkflowTest {
     assertThatThrownBy(()->planner.prepare(invalidEdits)).hasMessageContaining("selected values files");
     when(helm.baseline(any(),any(),any())).thenReturn("EXISTS");
     assertThatThrownBy(()->planner.prepare(request)).hasMessageContaining("already exists");
+    clearInvocations(source);
+    when(helm.baseline(any(),any(),any())).thenThrow(new com.example.perforchestrator.domain.Problem(502,"LOOKUP_FAILED","execution","Cluster login expired"));
+    assertThatThrownBy(()->planner.prepare(request)).hasMessageContaining("Service load, namespace load-ns, release load-release, context sandbox")
+        .hasMessageContaining("Cluster login expired");
+    verifyNoInteractions(source);
   }
 
 }

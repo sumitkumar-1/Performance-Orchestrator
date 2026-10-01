@@ -153,7 +153,7 @@ class RealExecutionContractsTest {
     new HelmExecution(runner,settings).prepareDependencies(temp,"ckp/chart");
     var ordered=inOrder(runner);
     var expectedEnvironment=org.mockito.ArgumentCaptor.forClass(Map.class);
-    ordered.verify(runner).run(eq(List.of("helm","repo","add","helm-release-virtual","https://registry.invalid/artifactory/helm-release-virtual")),eq(temp),expectedEnvironment.capture(),any());
+    ordered.verify(runner).run(eq(List.of("helm","repo","add","helm-release-virtual","https://registry.invalid/artifactory/helm-release-virtual","--force-update")),eq(temp),expectedEnvironment.capture(),any());
     ordered.verify(runner).run(eq(List.of("helm","dependency","update",chart.toString())),eq(temp),eq(expectedEnvironment.getValue()),any());
     ordered.verifyNoMoreInteractions();
     assertThat(expectedEnvironment.getValue().get("HELM_REPOSITORY_CONFIG")).isEqualTo(temp.resolve(".helm-repositories/repositories.yaml").toString());
@@ -175,5 +175,51 @@ class RealExecutionContractsTest {
     assertThatThrownBy(()->new ExecutionSettings(new MockEnvironment()
         .withProperty("orchestrator.execution.helm-repositories.common","https://user:secret@registry.invalid/charts")))
         .hasMessageContaining("without credentials").hasMessageNotContaining("user:secret");
+  }
+
+  @Test void clusterLookupDiagnosticsExplainAuthenticationAndPermissionsWithoutRawOutput() {
+    var runner=new CommandRunner(){@Override public Result run(List<String> args,Path directory,Map<String,String> env,Duration timeout){
+      return new Result(1,"Error: secrets is forbidden: User private-person cannot list resource secrets. TOKEN=private");
+    }};
+    assertThatThrownBy(()->runner.require(List.of("helm","list"),temp,Map.of(),Duration.ofSeconds(1),"Helm release lookup"))
+        .hasMessageContaining("RBAC").hasMessageNotContaining("private-person").hasMessageNotContaining("TOKEN=private");
+    assertThat(ClusterDiagnostics.failure("Helm release lookup",1,"Unauthorized private-token").getMessage())
+        .contains("Renew oc/kubectl login","Secret Server login does not authenticate Helm").doesNotContain("private-token");
+    assertThat(ClusterDiagnostics.failure("Helm release lookup",1,"x509: certificate signed by unknown authority").getMessage()).contains("TLS verification failed");
+  }
+
+  @Test void helmRepositoryTokenUsesStdinAndPrivateTemporaryConfig() throws Exception {
+    var settings=new ExecutionSettings(new MockEnvironment().withProperty("orchestrator.execution.workspace",temp.toString())
+        .withProperty("orchestrator.execution.helm-repositories.release","https://registry.invalid/charts")
+        .withProperty("orchestrator.execution.helm-repository-connection","office")
+        .withProperty("orchestrator.execution.helm-repository-username","first.last@domain.net"));
+    var config=new ConnectionConfig(new ConnectionConfig.Data(Map.of("office",new ConnectionConfig.Artifactory("https://registry.invalid/artifactory",null,"token")),Map.of(),Map.of(),Map.of()));
+    var sessions=new ConnectionSessions(config,ref->{throw new AssertionError("Unexpected secret resolution");});
+    var request=new org.springframework.mock.web.MockHttpServletRequest();
+    org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(new org.springframework.web.context.request.ServletRequestAttributes(request));
+    sessions.remember("artifactory","office",new RequestAuthentication(null,null,"private-token"),300,request.getSession());
+    try {
+    var auth=new HelmRepositoryAuth(config,sessions);
+    assertThat(HelmRepositoryAuth.shortUsername("DOMAIN\\first.last")).isEqualTo("first.last");
+    Path chart=temp.resolve("ckp/chart");Files.createDirectories(chart);
+    Files.writeString(chart.resolve("Chart.yaml"),"dependencies:\n- name: common\n  repository: '@release'\n");
+    var runner=mock(CommandRunner.class);
+    when(runner.runWithInput(any(),any(),any(),any(),any())).thenAnswer(call->{
+      List<String> args=call.getArgument(0);byte[] stdin=call.getArgument(4);
+      assertThat(args).containsSubsequence("--username","first.last","--password-stdin").contains("--force-update");
+      assertThat(args.toString()).doesNotContain("private-token","@domain.net");
+      assertThat(new String(stdin,StandardCharsets.UTF_8)).isEqualTo("private-token\n");
+      assertThat(Files.getPosixFilePermissions(temp.resolve(".helm-repositories")))
+          .isEqualTo(java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"));
+      Files.writeString(temp.resolve(".helm-repositories/repositories.yaml"),"private-token");
+      return new CommandRunner.Result(0,"");
+    });
+    when(runner.run(any(),any(),any(),any())).thenReturn(new CommandRunner.Result(1,"download failed private-token"));
+    assertThatThrownBy(()->new HelmExecution(runner,settings,auth).prepareDependencies(temp,"ckp/chart"))
+        .hasMessageContaining("dependency update failed").hasMessageNotContaining("private-token");
+    assertThat(temp.resolve(".helm-repositories")).doesNotExist();
+    assertThat(SparseProjects.snapshot(temp)).containsOnlyKeys("ckp/chart/Chart.yaml");
+    assertThatThrownBy(()->auth.resolve(settings,"https://unrelated.invalid/charts")).hasMessageContaining("host and port");
+    } finally { sessions.close();org.springframework.web.context.request.RequestContextHolder.resetRequestAttributes(); }
   }
 }
