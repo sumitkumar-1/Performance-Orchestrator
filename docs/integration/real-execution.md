@@ -239,6 +239,23 @@ Run these as the same OS user and with the same KUBECONFIG as the application. P
 
 Helm 4 removed `helm list --all` and includes all release statuses by default. The application detects the installed Helm major version once per process: it uses `--all` on Helm 3 and omits it on Helm 4. This retains visibility of pending, failed and uninstalling releases. Restart the app if you replace the Helm binary while it is running. For the manual lookup command above, add `--all` when using Helm 3. See [Helm list](https://helm.sh/docs/helm/helm_list/).
 
+### Service deployment or readiness failure
+
+Version replacement and dependency resolution apply to both ordinary services and the load generator during Review run. `__REPLACEAPPVERSION__` is replaced in chart metadata, dependencies are built when a lock file exists (updated otherwise), and the resulting chart files and packages are saved in the prepared snapshot. Execution deploys that snapshot without downloading dependencies again.
+
+A later deployment/readiness failure is separate from preparation. The error identifies service, namespace, release and context and classifies recognized failures (timeouts, hooks, ownership, authentication, permissions and Kubernetes validation). Unrecognized failures remain explicitly unclassified; raw output is not exposed because it can include rendered credentials.
+
+Use those exact context, namespace and release values for read-only diagnosis:
+
+```sh
+helm --kube-context <context> status <release> --namespace <namespace>
+helm --kube-context <context> history <release> --namespace <namespace>
+kubectl --context <context> get pods,jobs --namespace <namespace>
+kubectl --context <context> get events --namespace <namespace> --sort-by=.metadata.creationTimestamp
+```
+
+Inspect this output locally and remove credentials or sensitive values before sharing excerpts. Services may have been partially deployed before a timeout; retained service releases are not rolled back automatically. If service readiness fails, load generation has not started.
+
 ### Release changed since preparation
 
 This preflight check stops the run before service deployment or load generation if a Helm release differs from the reviewed snapshot. Prepare a new run after another deployment, rollback or release-state change.

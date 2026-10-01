@@ -244,6 +244,37 @@ class RealExecutionContractsTest {
     assertThat(helm.baseline(target,"ns","receiver")).isNotEqualTo(baseline);
   }
 
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(booleans={false,true})
+  void deploymentUsesPreparedChartAndDependenciesAndReportsReadinessFailure(boolean load) {
+    var runner=mock(CommandRunner.class);
+    when(runner.require(any(),any(),any(),any(),any())).thenReturn("https://cluster.invalid");
+    String chart="ckp/helm/service";
+    var files=Map.of(chart+"/Chart.yaml",Base64.getEncoder().encodeToString("version: 1.2.3\nappVersion: 1.2.3\n".getBytes(StandardCharsets.UTF_8)),
+        chart+"/charts/common.tgz",Base64.getEncoder().encodeToString(new byte[]{1,2,3}));
+    var service=new Model.PreparedService("service",Model.Action.DEPLOY,"ns","release",null,"ABSENT","commit",Map.of(),files,Map.of(),Map.of(),Map.of(),List.of());
+    when(runner.run(any(),any(),any(),any())).thenAnswer(call->{
+      List<String> args=call.getArgument(0);Path folder=call.getArgument(1);
+      assertThat(Files.readString(folder.resolve(chart+"/Chart.yaml"))).contains("version: 1.2.3").doesNotContain("__REPLACEAPPVERSION__");
+      assertThat(Files.readAllBytes(folder.resolve(chart+"/charts/common.tgz"))).containsExactly(1,2,3);
+      assertThat(args).contains(load?"install":"upgrade");
+      assertThat(args.contains("--wait")).isEqualTo(!load);
+      return new CommandRunner.Result(1,"UPGRADE FAILED: context deadline exceeded password=private-token");
+    });
+    assertThatThrownBy(()->new HelmExecution(runner,settings()).apply("run",Map.of("context","sandbox","server","https://cluster.invalid"),service,chart,load))
+        .hasMessageContaining("Service service, namespace ns, release release, context sandbox")
+        .hasMessageContaining("exceeded its deadline").hasMessageNotContaining("private-token");
+  }
+
+  @Test void deploymentDiagnosticsClassifyFailuresWithoutReturningRawValues() {
+    for(var sample:Map.of("forbidden","permissions", "another operation is in progress","pending", "invalid ownership metadata","ownership",
+        "failed pre-install hook","hook", "cannot patch immutable field","immutable", "no matches for kind","CRD",
+        "admission webhook denied","admission", "unknown failure","unclassified").entrySet()) {
+      assertThat(DeploymentDiagnostics.failure("Deployment",1,sample.getKey()+" private-token").getMessage())
+          .contains(sample.getValue()).doesNotContain("private-token");
+    }
+  }
+
   @Test void helmRepositoryTokenUsesStdinAndPrivateTemporaryConfig() throws Exception {
     var settings=new ExecutionSettings(new MockEnvironment().withProperty("orchestrator.execution.workspace",temp.toString())
         .withProperty("orchestrator.execution.helm-repositories.release","https://registry.invalid/charts")

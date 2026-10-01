@@ -192,7 +192,13 @@ public class HelmExecution {
             "--description", "perf-orchestrator:"+runId, "--timeout", settings.timeoutSeconds+"s"));
         if (!load) args.add("--wait");
         // No create-namespace, dependency-update, take-ownership or destructive rollback.
-        call(args, folder, load ? "Load-generator installation" : "Service deployment and readiness");
+        String operation=load ? "Load-generator installation" : "Service deployment and readiness";
+        var result=commands.run(args,folder,environment(),Duration.ofSeconds(settings.timeoutSeconds+15L));
+        if(result.exit()!=0) {
+          var failure=DeploymentDiagnostics.failure(operation,result.exit(),result.output());
+          throw new Problem(failure.status(),failure.code(),failure.field(),"Service "+service.serviceId()+", namespace "+service.namespace()
+              +", release "+service.releaseName()+", context "+target.get("context")+": "+failure.getMessage());
+        }
       } finally { SparseProjects.delete(folder); }
     } catch(java.io.IOException e) { throw Problem.invalid("execution", "Unable to materialize the prepared Helm snapshot"); }
   }
