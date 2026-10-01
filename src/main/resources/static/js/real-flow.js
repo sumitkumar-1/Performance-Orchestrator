@@ -29,7 +29,7 @@ export async function realFlow(api, catalog, navigate) {
   errorObserver.observe(status, { childList: true, characterData: true, subtree: true });
   const disposeBase=root.dispose; root.dispose=()=>{errorObserver.disconnect();disposeBase();};
   const diagnostics=diagnosticsPanel(api);
-  notices.append(el("button",{type:"button","data-during-preparation":true,onclick:()=>diagnostics.node.scrollIntoView({block:"start",behavior:"smooth"})},"View command & API activity"));
+
   const disposeDiagnostics=root.dispose;root.dispose=()=>{diagnostics.dispose();disposeDiagnostics();};
   let selections = [], load = null, plan = null, savedId = null, savedRevision = null, working = false;
   const invalidate = () => { plan = null; preview.replaceChildren(); status.textContent=""; };
@@ -237,7 +237,7 @@ export async function realFlow(api, catalog, navigate) {
     const controls = [...root.querySelectorAll("input,select,textarea,button:not([data-during-preparation])")]; controls.forEach(node => node.disabled = true); status.textContent = "Preparing charts and checking the cluster…";
     try {
       const profile=readProfile();const trace=await diagnostics.start();
-      plan = await api("/real/plans", { method: "POST", headers:{"X-Diagnostic-ID":trace}, body: profile }); if (disposed) return;
+      plan = await api("/real/plans", { method: "POST", headers:trace?{"X-Diagnostic-ID":trace}:{}, body: profile }); if (disposed) return;
       const prepared = plan, confirmed = el("input", { type: "checkbox" }), key = crypto.randomUUID();
       const run = button("Start run", async () => {
         if (plan !== prepared || !confirmed.checked) { error.textContent = "Review and confirm this plan before starting."; return; }
@@ -263,7 +263,7 @@ export async function realFlow(api, catalog, navigate) {
       el("details", {}, el("summary", {}, "Advanced timing"), el("div", { class: "form-grid spacer" }, labeled("Warmup (seconds)", warmup), labeled("Overall timeout (seconds)", deadline)),
         el("p", { class: "muted" }, "Warmup is excluded from measurements. The overall timeout includes deployment, warmup and measurement. On timeout, cleanup starts; an in-progress Helm command and cleanup can take additional time. Allow enough time for deployment, and set the load YAML duration to cover warmup plus measurement."))),
     monitoring.node,
-    el("div", {}, el("p", { class: "muted" }, "Services remain deployed. Only this run’s load-generator release is uninstalled after completion or cancellation."), el("div", { class: "card-actions" }, saveProfile, prepare)), preview,diagnostics.node);
+    el("div", {}, el("p", { class: "muted" }, "Services remain deployed. Only this run’s load-generator release is uninstalled after completion or cancellation."), el("div", { class: "card-actions" }, saveProfile, prepare, diagnostics.toggle)), preview,diagnostics.node);
   for (const field of [name, warmup, duration, deadline]) field.addEventListener("input", invalidate);
   renderSelections(); return root;
 }

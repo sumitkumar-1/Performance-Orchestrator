@@ -568,7 +568,8 @@ async function history() {
 async function runDetails(id, generation) {
   const initial = await api("/runs/" + id),
     plan = await api("/plans/" + initial.planId);
-  const status = el("div"),
+  const diagnostics=plan.simulated?null:diagnosticsPanel(api,{runId:id});
+  const status = el("div",{class:"card run-status-card"}),
     timeline = el("ol", { class: "timeline" }),
     metrics = el("div", { class: "metrics" }),
     actions = el("div", { class: "card-actions" }),
@@ -579,15 +580,17 @@ async function runDetails(id, generation) {
       plan.profile.name,
       `${plan.profile.targetEnvironment} · ${id} · Prepared by ${plan.actor}`,
     ),
+    el("div",{class:"run-toolbar"},
+      plan.simulated?null:el("a",{href:"#monitor/"+id,target:"_blank",rel:"noopener",class:"button primary"},"Open monitoring ↗"),
+      diagnostics?.toggle,actions),
     status,
-    plan.simulated ? null : link("Open monitoring", "#monitor/" + id, "button primary"),
     el(
       "div",
       { class: "detail-grid spacer" },
       el(
-        "section",
+        "details",
         { class: "card" },
-        el("h2", {}, "Execution timeline"),
+        el("summary", {}, "Execution timeline"),
         timeline,
       ),
       el(
@@ -599,12 +602,11 @@ async function runDetails(id, generation) {
           el("h2", {}, "Performance measurements"),
           monitoring,
           metrics,
-          actions,
         ),
         el(
-          "section",
+          "details",
           { class: "card spacer" },
-          el("h2", {}, "Pinned inputs"),
+          el("summary", {}, "Pinned inputs"),
           el("p", { class: "muted" }, "Inputs are frozen for this execution."),
           link("Inspect original plan", "#plan/" + plan.id),
           detail(
@@ -626,7 +628,7 @@ async function runDetails(id, generation) {
       ),
     ),
   );
-  if(!plan.simulated){const diagnostics=diagnosticsPanel(api,{runId:id});app.append(diagnostics.node);pageCleanup=()=>diagnostics.dispose();}
+  if(diagnostics){app.append(diagnostics.node);pageCleanup=()=>diagnostics.dispose();}
   let cursor = 0;
   const update = async () => {
     const [run, events] = await Promise.all([

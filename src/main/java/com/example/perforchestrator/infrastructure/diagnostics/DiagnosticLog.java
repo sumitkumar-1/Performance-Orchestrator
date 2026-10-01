@@ -11,12 +11,16 @@ public class DiagnosticLog {
   private record Context(DiagnosticLog log,String id) {}
   private static final ThreadLocal<Context> CURRENT=new ThreadLocal<>();
   private final JdbcTemplate db;
-  public DiagnosticLog(JdbcTemplate db){this.db=db;}
-  public String create(String parent){String id=UUID.randomUUID().toString();db.update("INSERT INTO diagnostic_traces(id,created_at,parent_id) VALUES (?,?,?)",id,Instant.now().toString(),parent);return id;}
-  public List<Map<String,Object>> recent(){return db.query("SELECT id,created_at,plan_id,run_id FROM diagnostic_traces ORDER BY created_at DESC LIMIT 30",(r,n)->{
+  private final boolean enabled;
+  public DiagnosticLog(JdbcTemplate db){this(db,true);}
+  @org.springframework.beans.factory.annotation.Autowired
+  public DiagnosticLog(JdbcTemplate db,@org.springframework.beans.factory.annotation.Value("${orchestrator.diagnostics.enabled:false}") boolean enabled){this.db=db;this.enabled=enabled;}
+  public boolean enabled(){return enabled;}
+  public String create(String parent){if(!enabled)return null;String id=UUID.randomUUID().toString();db.update("INSERT INTO diagnostic_traces(id,created_at,parent_id) VALUES (?,?,?)",id,Instant.now().toString(),parent);return id;}
+  public List<Map<String,Object>> recent(){if(!enabled)return List.of();return db.query("SELECT id,created_at,plan_id,run_id FROM diagnostic_traces ORDER BY created_at DESC LIMIT 30",(r,n)->{
     Map<String,Object> row=new LinkedHashMap<>();row.put("id",r.getString(1));row.put("createdAt",r.getString(2));row.put("planId",r.getString(3));row.put("runId",r.getString(4));return row;});}
   public Scope scope(String id){
-    if(id==null)return new Scope(CURRENT.get(),false);
+    if(!enabled || id==null)return new Scope(CURRENT.get(),false);
     if(db.queryForObject("SELECT COUNT(*) FROM diagnostic_traces WHERE id=?",Integer.class,id)==0)throw Problem.missing("Diagnostic attempt");
     var previous=CURRENT.get();CURRENT.set(new Context(this,id));return new Scope(previous,true);
   }
@@ -27,10 +31,11 @@ public class DiagnosticLog {
   }
   public String forPlan(String plan){return lookup("plan_id",plan);}
   public String forRun(String run){return lookup("run_id",run);}
-  private String lookup(String column,String value){var ids=db.query("SELECT id FROM diagnostic_traces WHERE "+column+"=? ORDER BY created_at DESC LIMIT 1",(r,n)->r.getString(1),value);return ids.isEmpty()?null:ids.getFirst();}
-  public void plan(String trace,String plan){db.update("UPDATE diagnostic_traces SET plan_id=? WHERE id=?",plan,trace);}
-  public void run(String trace,String run){db.update("UPDATE diagnostic_traces SET run_id=? WHERE id=?",run,trace);}
+  private String lookup(String column,String value){if(!enabled)return null;var ids=db.query("SELECT id FROM diagnostic_traces WHERE "+column+"=? ORDER BY created_at DESC LIMIT 1",(r,n)->r.getString(1),value);return ids.isEmpty()?null:ids.getFirst();}
+  public void plan(String trace,String plan){if(enabled)db.update("UPDATE diagnostic_traces SET plan_id=? WHERE id=?",plan,trace);}
+  public void run(String trace,String run){if(enabled)db.update("UPDATE diagnostic_traces SET run_id=? WHERE id=?",run,trace);}
   public Object operations(String trace){
+    if(!enabled)return List.of();
     var parents=db.query("SELECT parent_id FROM diagnostic_traces WHERE id=?",(r,n)->r.getString(1),trace);
     if(parents.isEmpty())throw Problem.missing("Diagnostic attempt");
     String parent=parents.getFirst();

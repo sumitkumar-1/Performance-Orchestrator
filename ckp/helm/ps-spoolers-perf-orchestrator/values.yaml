@@ -107,6 +107,8 @@ ingress:
 # Do not put secret values here; use environmentSecret or tokenSecret above.
 application:
   orchestrator:
+    diagnostics:
+      enabled: false
     execution:
       enabled: false
       kube-context: in-cluster

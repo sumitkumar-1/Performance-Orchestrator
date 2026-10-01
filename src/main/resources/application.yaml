@@ -28,6 +28,8 @@ spring:
     multipart:
       enabled: false
 orchestrator:
+  diagnostics:
+    enabled: false # Enable recording and optional run/monitoring diagnostic consoles; restart to apply
   mode: simulation
   execution:
     enabled: false # Opt in after reviewing the target cluster and service Helm settings

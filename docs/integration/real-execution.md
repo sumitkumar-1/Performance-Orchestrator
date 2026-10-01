@@ -241,9 +241,21 @@ Helm 4 removed `helm list --all` and includes all release statuses by default. T
 
 ## Command and API activity
 
-Configure run now creates a diagnostic attempt before Review run and displays **Command & API activity**. Use **View command & API activity** in the sticky progress/error banner, including while preparation is running. The **Recent attempts** selector includes failures that never produced a plan. Real run details show the preparation trace plus that run's submission, execution, cleanup and live-monitoring requests. Diagnostics persist in the application database across restart; existing historical runs have no retrospective traces.
+Diagnostics are disabled by default. Enable them in `application.yaml` and restart:
 
-The panel records start/end timestamps, duration, command exit status and outbound HTTP status. It refreshes every two seconds while open and shows the newest 500 operations. Recording is capped at 5,000 operations per attempt/submission. Command argument values are conservatively replaced with `[redacted]`; HTTP query strings and dynamic path segments are omitted, along with all request/response bodies, headers, environment variables, stdin and raw process output. The application records its own HTTP calls and Git/Helm/kubectl invocations. Calls made inside those executables are represented by the command, not individual HTTP exchanges. Connection discovery/login before Review run is outside the run trace.
+```yaml
+orchestrator:
+  diagnostics:
+    enabled: true
+```
+
+For CKP, set `application.orchestrator.diagnostics.enabled: true` in Helm values. When disabled, new diagnostic activity is not recorded and the diagnostic controls and API results are hidden. Existing database records are retained.
+
+When enabled, **Show diagnostics** on Configure run, run details or monitoring reveals the console; the entire panel is otherwise hidden. Review run creates a diagnostic attempt. **Recent attempts** includes failures that never produced a plan. Real run details and monitoring show the preparation trace plus that run's submission, execution, cleanup and live-monitoring requests. Diagnostics persist across restart; historical runs have no retrospective traces.
+
+Monitoring opens in a separate browser tab from the run toolbar. Its default view shows the time range and results; **Edit panels** reveals configuration. Log entries display their original text without an additional application timestamp.
+
+The console records start/end timestamps, duration, command exit status and outbound HTTP status. Show it when needed; it refreshes every two seconds only while open with Live refresh enabled. Follow latest controls automatic scrolling, and Copy console copies the displayed text. It displays the latest 500 operations in chronological order. Hiding or pausing the console does not disable recording; use the YAML setting to disable recording. Recording is capped at 5,000 operations per attempt/submission. New command records retain executable/subcommand names, context, namespace, release/filter, paths, repository aliases, usernames and other operational arguments. Credential-bearing flags, assignments, URL userinfo and sensitive query parameters are masked with `[redacted]`. HTTP endpoint paths and nonsensitive query parameters remain visible. Bodies, headers, environment variables, stdin and raw process output remain excluded; unknown executables omit arguments. Earlier records keep their original, more conservative redaction. The application records its own HTTP calls and Git/Helm/kubectl invocations. Calls made inside those executables are represented by the command, not individual HTTP exchanges. Connection discovery/login before Review run is outside the run trace.
 
 An unfinished `RUNNING` entry means no completion was recorded; after a crash it does not prove the command is still running. Logging does not change deployment behavior, and a database failure may leave a gap in diagnostics. The database retains diagnostic records; no automatic expiry is applied.
 
@@ -259,3 +271,5 @@ helm --kube-context sandbox-nvan list \
 ```
 
 Use the actual configured namespace. Run from the same terminal as the application and compare PATH/KUBECONFIG. If the helper is missing, install the organization-approved helper or configure its absolute executable path through your approved kubeconfig setup. If the helper exits unsuccessfully, inspect its local diagnostic and renew its organization-specific login. If its ExecCredential API version or interactiveMode is rejected, update the helper/kubeconfig according to the CKP team's supported client configuration. Do not change API-version strings blindly or disable TLS validation.
+
+If the helper is specifically `kubectl` and exits with code 1, the executable was found: investigate its exec arguments/subcommand and local error, rather than assuming kubectl is missing. The app inherits its parent environment but runs external commands without a terminal and closes stdin (except when passing a Helm repository token). Complete any required interactive organization login in the launching terminal first; a helper that still requires interactive input needs the CKP team’s supported noninteractive/cached-login configuration.
