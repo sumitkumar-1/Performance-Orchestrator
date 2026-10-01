@@ -116,7 +116,11 @@ class RealWorkflowTest {
     var plan=planner.prepare(request);var prepared=plan.services().getFirst();
     assertThat(plan.simulated()).isFalse();assertThat(prepared.sourceRevision()).isEqualTo("a".repeat(40));
     assertThat(prepared.effectiveValues()).containsEntry("rate",20).containsEntry("optional",null);
-    assertThat(prepared.effectiveValues().get("imageTag")).isEqualTo("v1@sha256:"+"a".repeat(64));
+    assertThat(prepared.effectiveValues().get("imageTag")).isEqualTo("v1");
+    assertThat(prepared.effectiveValues()).containsEntry("targetPlatform","ckp").containsEntry("clusterSubdomain","cluster")
+        .containsEntry("tags",Map.of("moc",false));
+    assertThat((Map<String,Object>)prepared.effectiveValues().get("global"))
+        .containsEntry("targetPlatform","ckp").containsEntry("clusterSubdomain","cluster").containsEntry("deploymentSuffix","").containsEntry("imageTag","v1");
     String preparedChart=prepared.preparedFiles().get("ckp/helm/load/Chart.yaml");
     assertThat(new String(Base64.getDecoder().decode(preparedChart))).doesNotContain("__REPLACEAPPVERSION__");
     assertThat(prepared.originalHashes().get("ckp/helm/load/Chart.yaml")).isEqualTo(Json.hash(files.get("ckp/helm/load/Chart.yaml")));
@@ -128,9 +132,13 @@ class RealWorkflowTest {
     assertThat(plan.checksum()).isEqualTo(PlanningService.checksum(store.plan(plan.id())));
     var editedRequest=new RealPreparation.Request("Edited values",List.of(),
         new RealPreparation.Deployment("load","main","v1",List.of("ckp/helm/load/values.yaml"),"",
-          Map.of("ckp/helm/load/values.yaml","editedRate: 30\n")),0,10,600,List.of(),List.of());
+          Map.of("ckp/helm/load/values.yaml","editedRate: 30\ntargetPlatform: other\nclusterSubdomain: custom.domain\ntags:\n  moc: true\n  other: false\nglobal:\n  targetPlatform: other\n  deploymentSuffix: '-test'\n  customValue: kept\n")),0,10,600,List.of(),List.of());
     var edited=planner.prepare(editedRequest).services().getFirst().effectiveValues();
     assertThat(edited).containsEntry("editedRate",30).doesNotContainKeys("rate","optional");
+    assertThat(edited).containsEntry("targetPlatform","ckp").containsEntry("clusterSubdomain","custom.domain")
+        .containsEntry("tags",Map.of("moc",true,"other",false));
+    assertThat((Map<String,Object>)edited.get("global")).containsEntry("targetPlatform","ckp")
+        .containsEntry("deploymentSuffix","-test").containsEntry("customValue","kept").containsEntry("clusterSubdomain","cluster");
     var restored=Json.read(Json.write(editedRequest),RealPreparation.Request.class);
     assertThat(restored.loadGenerator().valuesEdits()).isEqualTo(editedRequest.loadGenerator().valuesEdits());
     var invalidEdits=new RealPreparation.Request("Invalid file",List.of(),

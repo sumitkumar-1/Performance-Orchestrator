@@ -81,6 +81,23 @@ class RealExecutionContractsTest {
     verify(runner).run(argThat(args->args.contains("lint") && args.contains("--namespace") && args.contains("target-ns")),eq(temp),any(),any());
     verifyNoMoreInteractions(runner);
   }
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings={"1.16.0","1.11.0.260811-12-4309-05-791d17a0a4bf"})
+  void renderedImageMustUseExactSelectedNameAndTag(String version) {
+    var runner=mock(CommandRunner.class);var helm=new HelmExecution(runner,settings());
+    String expected="receiver:"+version;
+    when(runner.run(any(),any(),any(),any())).thenAnswer(call->{
+      List<String> args=call.getArgument(0);
+      return new CommandRunner.Result(0,args.contains("template")?"apiVersion: v1\nkind: Pod\nspec:\n  containers:\n  - name: receiver\n    image: registry.example:5000/team/"+expected+"\n":"ok");
+    });
+    assertThatCode(()->helm.validate(temp,"ckp/chart","ns","release",expected)).doesNotThrowAnyException();
+    for(String wrong:List.of("receiver:"+version+"-other","sidecar:"+version,"receiver:"+version+"@sha256:abc")) {
+      doReturn(new CommandRunner.Result(0,
+          "apiVersion: v1\nkind: Pod\nspec:\n  containers:\n  - name: receiver\n    image: registry.example/team/"+wrong+"\n")).when(runner).run(any(),any(),any(),any());
+      assertThatThrownBy(()->helm.validate(temp,"ckp/chart","ns","release",expected)).hasMessageContaining("exact version");
+    }
+  }
+
   @Test void helmDiagnosticsDoNotAssumeDependenciesOrExposeRawOutput(){
     var missing=HelmDiagnostics.failure("lint",1,"[ERROR] Chart.yaml: chart metadata is missing these dependencies: private-name",temp,"ckp/chart");
     assertThat(missing.getMessage()).contains("Missing packaged chart dependencies").doesNotContain("private-name");

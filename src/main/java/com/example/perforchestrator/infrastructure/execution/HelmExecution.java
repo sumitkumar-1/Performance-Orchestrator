@@ -87,19 +87,19 @@ public class HelmExecution {
     var args=helm(target); args.addAll(List.of("status", release, "--namespace", namespace, "--output", "json"));
     return Json.read(call(args, settings.workspace, "Helm release status"), Map.class);
   }
-  public void validate(Path folder, String chart, String namespace, String release, String digest) {
+  public void validate(Path folder, String chart, String namespace, String release, String selectedImage) {
     validationCall(List.of("helm", "lint", folder.resolve(chart).toString(), "--namespace", namespace, "--values", folder.resolve("effective-values.json").toString()), folder, chart, "lint");
     // Rendering is intentionally local; never persist rendered manifests containing Secrets.
     String rendered=validationCall(List.of("helm", "template", release, folder.resolve(chart).toString(), "--namespace", namespace,
         "--values", folder.resolve("effective-values.json").toString()), folder, chart, "render");
     var loaderOptions=new org.yaml.snakeyaml.LoaderOptions();
     loaderOptions.setAllowDuplicateKeys(false);loaderOptions.setMaxAliasesForCollections(30);
-    boolean pinned=false;
+    boolean selected=false;
     try {
       for(Object document:new org.yaml.snakeyaml.Yaml(new org.yaml.snakeyaml.constructor.SafeConstructor(loaderOptions)).loadAll(rendered))
-        pinned |= containsPinnedContainer(document,digest);
+        selected |= containsSelectedContainer(document,selectedImage);
     } catch(RuntimeException e) { throw Problem.invalid("chart", "Rendered Helm manifests are invalid YAML"); }
-    if (!pinned) throw Problem.invalid("image", "Rendered chart does not reference the selected image digest. Chart must consume imageTag/global.imageTag as tag@digest");
+    if (!selected) throw Problem.invalid("image", "Rendered chart does not reference the selected image name and exact version. Check imageName, imageTag/global.imageTag and chart image settings");
   }
   public void prepareDependencies(Path folder, String chart) throws java.io.IOException {
     Path directory=folder.resolve(chart);
@@ -166,15 +166,15 @@ public class HelmExecution {
         +"Repository aliases come from orchestrator.execution.helm-repositories. Raw output is withheld because repository errors may contain credentials.");
     } finally { SparseProjects.delete(repositoryHome); }
   }
-  private static boolean containsPinnedContainer(Object node,String digest) {
+  private static boolean containsSelectedContainer(Object node,String selectedImage) {
     boolean found=false;
     if(node instanceof Map<?,?> map) {
       for(var entry:map.entrySet()) {
         if((entry.getKey().equals("containers") || entry.getKey().equals("initContainers")) && entry.getValue() instanceof List<?> containers)
-          for(Object item:containers)if(item instanceof Map<?,?> container && container.get("image") instanceof String image && image.endsWith("@"+digest))found=true;
-        found |= containsPinnedContainer(entry.getValue(),digest);
+          for(Object item:containers)if(item instanceof Map<?,?> container && container.get("image") instanceof String image && (image.equals(selectedImage) || image.endsWith("/"+selectedImage)))found=true;
+        found |= containsSelectedContainer(entry.getValue(),selectedImage);
       }
-    } else if(node instanceof List<?> list) for(Object item:list)found |= containsPinnedContainer(item,digest);
+    } else if(node instanceof List<?> list) for(Object item:list)found |= containsSelectedContainer(item,selectedImage);
     return found;
   }
   public void apply(String runId, Map<String,Object> target, PreparedService service, String chart, boolean load) {

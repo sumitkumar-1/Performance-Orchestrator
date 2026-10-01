@@ -19,7 +19,7 @@ public final class HelmDiagnostics {
     else if(lower.contains("no template") && lower.contains("associated with template"))
       reason="A referenced Helm helper template is unavailable. Check the chart's _helpers.tpl files and shared/library chart dependencies in charts/.";
     else if(lower.contains("schema") && (lower.contains("values") || lower.contains("validation")))
-      reason="Values do not satisfy the chart's JSON schema. Check required fields, types and permitted formats, including support for digest-qualified image tags.";
+      reason="Values do not satisfy the chart's JSON schema. Check required fields, types and permitted formats.";
     else if(lower.contains("nil pointer") || lower.contains("can't evaluate field") || lower.contains("cannot evaluate field"))
       reason="A template references a missing value or an unexpected value type. Check selected values files and required organization-specific --set values.";
     else if(lower.contains("required") || lower.contains("execution error"))

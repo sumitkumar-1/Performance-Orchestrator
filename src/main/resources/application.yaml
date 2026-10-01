@@ -52,6 +52,7 @@ orchestrator:
   # Simulation uses the separate mock catalog selected above.
   catalog-defaults:
     # EXAMPLES: replace cluster identities, namespaces and paths before use.
+    # clusterIdentity is the CKP subdomain (no scheme); defaults both clusterSubdomain Helm values.
     environments:
       sandbox:
         displayName: sandbox (example - configure before use)

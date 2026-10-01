@@ -91,7 +91,7 @@ public class RealPreparation {
     var plan=new Plan(UUID.randomUUID().toString(),"",now.toString(),now.plusSeconds(900).toString(),com.example.perforchestrator.infrastructure.secrets.SecretServerTokens.currentActor(),null,0,profile,
         catalog.hash(),catalog.environment(catalog.boundEnvironment()).clusterIdentity(),load.namespace(),load.sourceRevision(),Map.copyOf(meta),List.copyOf(prepared),
         List.of("REAL: this plan executes Helm in the configured cluster.","Only ckp is checked out; Helm dependencies are resolved during preparation and frozen in the reviewed snapshot.",
-          "Images are pinned using imageTag/global.imageTag = tag@digest; rendered chart must reference the selected digest.",
+          "imageTag/global.imageTag exactly match the selected version; digest is checked again at submission but deployment uses the tag.",
           "Load release must be absent; Stop uninstalls only this run's load release. Service deployments remain.",
           "Helm readiness uses --wait for services. Chart hooks and load-generator behavior are defined by the selected chart.",
           "Load rates and tool duration come from values YAML; orchestrator timing independently bounds the run.",
@@ -135,17 +135,22 @@ public class RealPreparation {
       effective=HelmValues.merge(effective,HelmValues.parse(content));
     }
     var base=new TreeMap<>(effective);
+    String clusterSubdomain=catalog.environment(catalog.boundEnvironment()).clusterIdentity();
+    // Apply CKP defaults below user-selected values so explicit per-service edits survive.
+    effective=HelmValues.merge(Map.of("clusterSubdomain",clusterSubdomain,"tags",Map.of("moc",false),
+        "global",Map.of("clusterSubdomain",clusterSubdomain,"deploymentSuffix","")),effective);
     effective=HelmValues.merge(effective,HelmValues.parse(selection.overlay()));
-    // These defaults match the organization's supplied Helm invocation; overlay can set cluster-specific values.
-    effective.put("imageName",service.containerImage().imageName());effective.put("imageTag",image.version()+"@"+image.digest());
-    effective=HelmValues.merge(effective,Map.of("global",Map.of("imageTag",image.version()+"@"+image.digest(),"environment",catalog.boundEnvironment())));
+    // Platform, environment and selected image are controlled by the orchestrator.
+    effective.put("targetPlatform","ckp");
+    effective.put("imageName",service.containerImage().imageName());effective.put("imageTag",image.version());
+    effective=HelmValues.merge(effective,Map.of("global",Map.of("imageTag",image.version(),"environment",catalog.boundEnvironment(),"targetPlatform","ckp")));
     Path folder=null;
     try {
       folder=Files.createTempDirectory(settings.workspace,"prepare-");SparseProjects.materialize(folder,preparedFiles);
       helm.prepareDependencies(folder,chart);
       preparedFiles=SparseProjects.snapshot(folder);
       Files.writeString(folder.resolve("effective-values.json"),Json.write(effective));
-      helm.validate(folder,chart,destination.namespace(),destination.releaseName(),image.digest());
+      helm.validate(folder,chart,destination.namespace(),destination.releaseName(),service.containerImage().imageName()+":"+image.version());
     } catch(Problem error){
       throw new Problem(error.status(),error.code(),error.field(),"Service "+selection.serviceId()+", chart "+chart
           +", namespace "+destination.namespace()+", values "+String.join(", ",values)+": "+error.getMessage());
