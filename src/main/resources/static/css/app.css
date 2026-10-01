@@ -856,3 +856,6 @@ select {
 .monitor-chart { width: 100%; min-height: 130px; background: #f2f7f4; border: 1px solid var(--border); }
 .monitor-logs { max-height: 360px; overflow: auto; font-size: 12px; }
 .monitor-logs pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.diagnostic-rows { max-height: 460px; overflow: auto; }
+.diagnostic-command { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.diagnostic-panel { scroll-margin-top: 140px; }

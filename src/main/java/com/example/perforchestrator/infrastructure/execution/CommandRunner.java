@@ -17,6 +17,8 @@ public class CommandRunner {
     return runWithInput(args,directory,environment,timeout,new byte[0]);
   }
   public Result runWithInput(List<String> args, Path directory, Map<String,String> environment, Duration timeout, byte[] input) {
+    var diagnostic=com.example.perforchestrator.infrastructure.diagnostics.DiagnosticLog.begin("COMMAND",
+        com.example.perforchestrator.infrastructure.diagnostics.SafeDiagnostics.command(args));
     Process process = null;
     var reader = Executors.newSingleThreadExecutor();
     try {
@@ -36,11 +38,21 @@ public class CommandRunner {
         }
       });
       if (!process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) throw new TimeoutException();
-      return new Result(process.exitValue(), output.get(5, TimeUnit.SECONDS));
+      var result=new Result(process.exitValue(), output.get(5, TimeUnit.SECONDS));
+      String category="";
+      if(result.exit()!=0){String lower=result.output().toLowerCase(Locale.ROOT);
+        if(lower.contains("getting credentials") || lower.contains("exec plugin") || lower.contains("exec: executable"))category=" · CREDENTIAL HELPER FAILURE";
+        else if(lower.contains("unknown flag"))category=" · UNSUPPORTED OPTION";
+        else if(lower.contains("forbidden"))category=" · ACCESS FORBIDDEN";
+        else if(lower.contains("unauthorized"))category=" · AUTHENTICATION REJECTED";
+      }
+      diagnostic.finish("EXIT "+result.exit()+category);return result;
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
+      diagnostic.finish("INTERRUPTED");
       throw new Problem(503, "COMMAND_INTERRUPTED", "execution", "Execution interrupted; verify owned resources before retrying");
     } catch (Exception e) {
+      diagnostic.finish(e instanceof TimeoutException?"TIMED OUT":"COMMAND UNAVAILABLE");
       throw new Problem(503, "COMMAND_UNAVAILABLE", "execution", "Git/Helm/kubectl command failed or timed out; check installed tools, network, trust and permissions");
     } finally {
       if (process != null && process.isAlive()) {

@@ -238,3 +238,24 @@ kubectl --context YOUR_CONTEXT auth can-i list secrets \
 Run these as the same OS user and with the same KUBECONFIG as the application. Preparation, profile-save and run-submission messages now appear in a sticky banner at the top of Configure run, with errors in the same visible area.
 
 Helm 4 removed `helm list --all` and includes all release statuses by default. The application detects the installed Helm major version once per process: it uses `--all` on Helm 3 and omits it on Helm 4. This retains visibility of pending, failed and uninstalling releases. Restart the app if you replace the Helm binary while it is running. For the manual lookup command above, add `--all` when using Helm 3. See [Helm list](https://helm.sh/docs/helm/helm_list/).
+
+## Command and API activity
+
+Configure run now creates a diagnostic attempt before Review run and displays **Command & API activity**. Use **View command & API activity** in the sticky progress/error banner, including while preparation is running. The **Recent attempts** selector includes failures that never produced a plan. Real run details show the preparation trace plus that run's submission, execution, cleanup and live-monitoring requests. Diagnostics persist in the application database across restart; existing historical runs have no retrospective traces.
+
+The panel records start/end timestamps, duration, command exit status and outbound HTTP status. It refreshes every two seconds while open and shows the newest 500 operations. Recording is capped at 5,000 operations per attempt/submission. Command argument values are conservatively replaced with `[redacted]`; HTTP query strings and dynamic path segments are omitted, along with all request/response bodies, headers, environment variables, stdin and raw process output. The application records its own HTTP calls and Git/Helm/kubectl invocations. Calls made inside those executables are represented by the command, not individual HTTP exchanges. Connection discovery/login before Review run is outside the run trace.
+
+An unfinished `RUNNING` entry means no completion was recorded; after a crash it does not prove the command is still running. Logging does not change deployment behavior, and a database failure may leave a gap in diagnostics. The database retains diagnostic records; no automatic expiry is applied.
+
+### Kubeconfig credential helpers
+
+If Helm reports a kubeconfig credential-plugin error, Secret Server or Artifactory login will not fix that Kubernetes authentication step. The updated error can identify a missing helper executable or a helper exit code without exposing raw output. Inspect only the helper command and API version (not the entire raw kubeconfig, which can contain tokens):
+
+```sh
+kubectl --context sandbox-nvan config view --minify \
+  -o 'jsonpath={.users[0].user.exec.command}{"\n"}{.users[0].user.exec.apiVersion}{"\n"}'
+helm --kube-context sandbox-nvan list \
+  --namespace sng-smtp-receiver --output json
+```
+
+Use the actual configured namespace. Run from the same terminal as the application and compare PATH/KUBECONFIG. If the helper is missing, install the organization-approved helper or configure its absolute executable path through your approved kubeconfig setup. If the helper exits unsuccessfully, inspect its local diagnostic and renew its organization-specific login. If its ExecCredential API version or interactiveMode is rejected, update the helper/kubeconfig according to the CKP team's supported client configuration. Do not change API-version strings blindly or disable TLS validation.

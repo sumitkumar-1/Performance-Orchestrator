@@ -295,3 +295,5 @@ Use [the real execution guide](docs/integration/real-execution.md) to configure 
 Runs now offer **Open monitoring** for configurable LogQL log/metric panels with per-service credential defaults, namespace overrides and live range queries. See [authentication and live monitoring](docs/integration/real-execution.md#live-monitoring).
 
 Monitoring panels can be reused independently of run profiles: choose **Monitoring → Save as new set**, then select a saved set and **Load set** on a future run. Sets persist in the application database for the bound environment. See [reusing monitoring panels](docs/integration/real-execution.md#reusing-monitoring-panels).
+
+Real-run **Command & API activity** records safe command/API summaries from preparation through execution, with timings and exit/HTTP statuses. Failed preparation attempts remain inspectable from Configure run. See [diagnostic activity and credential-helper troubleshooting](docs/integration/real-execution.md#command-and-api-activity).

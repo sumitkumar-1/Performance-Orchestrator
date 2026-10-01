@@ -53,6 +53,12 @@ public class ReadOnlyHttp {
   }
 
   private Response send(HttpRequest request) {
+    var diagnostic=com.example.perforchestrator.infrastructure.diagnostics.DiagnosticLog.begin("HTTP",
+        com.example.perforchestrator.infrastructure.diagnostics.SafeDiagnostics.endpoint(request.method(),request.uri()));
+    try {var response=sendRecorded(request);diagnostic.finish("HTTP "+response.status());return response;}
+    catch(RuntimeException error){diagnostic.finish("REQUEST FAILED");throw error;}
+  }
+  private Response sendRecorded(HttpRequest request) {
     CompletableFuture<HttpResponse<byte[]>> future =
         client.sendAsync(request, info -> new LimitedBody(2 * 1024 * 1024));
     try {

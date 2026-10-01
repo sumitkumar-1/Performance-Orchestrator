@@ -18,12 +18,24 @@ public final class ClusterDiagnostics {
     else if(text.contains("x509") || text.contains("certificate"))
       reason="Cluster TLS verification failed. Check the kubeconfig CA and API-server hostname; do not disable certificate verification.";
     else if(text.contains("exec:") || text.contains("executable") || text.contains("exec plugin") || text.contains("getting credentials"))
-      reason="The kubeconfig credential plugin failed or is unavailable. Ensure its executable and login configuration are available to the application process.";
+      reason=pluginHint(output)+" Check kubeconfig users[].user.exec.command and exec.apiVersion; the application must inherit the same PATH, KUBECONFIG and login environment as your working terminal.";
     else if(text.contains("timeout") || text.contains("timed out") || text.contains("connection refused") || text.contains("no such host") || text.contains("network is unreachable"))
       reason="The application cannot reach the Kubernetes API. Check VPN, DNS, network access and the configured API-server URL.";
     else if(text.contains("namespace") && text.contains("not found"))
       reason="The target namespace does not exist or is unavailable to the cluster identity.";
     else reason="Check the same Helm command locally using the application's kube-context, namespace and KUBECONFIG. Verify cluster login, network access and permission to read Helm release records.";
     return new Problem(502,"HELM_CLUSTER_LOOKUP_FAILED","execution",operation+" failed (exit "+exit+"). "+reason+" Raw output is withheld.");
+  }
+  public static String pluginHint(String output) {
+    String text=output==null?"":output;
+    var match=java.util.regex.Pattern.compile("(?i)executable ([A-Za-z0-9_./\\\\:-]{1,250}) (not found|failed with exit code (-?[0-9]{1,3}))").matcher(text);
+    if(match.find()) {
+      String name=match.group(1).replace('\\','/');name=name.substring(name.lastIndexOf('/')+1);
+      if(name.matches("[A-Za-z0-9_.-]{1,80}"))return "Kubeconfig credential helper "+name+(match.group(2).equalsIgnoreCase("not found")?" was not found on the application's PATH.":" exited with code "+match.group(3)+".");
+    }
+    String lower=text.toLowerCase(Locale.ROOT);
+    if(lower.contains("invalid apiversion") || lower.contains("no kind") && lower.contains("execcredential"))return "The kubeconfig credential plugin uses an unsupported ExecCredential API version.";
+    if(lower.contains("interactivemode"))return "The kubeconfig credential plugin's interactiveMode setting is missing or incompatible.";
+    return "The kubeconfig credential plugin failed or is unavailable.";
   }
 }

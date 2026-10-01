@@ -15,6 +15,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class RealRuns {
+  @org.springframework.beans.factory.annotation.Autowired private com.example.perforchestrator.infrastructure.diagnostics.DiagnosticLog diagnostics;
   private final Store store; private final Catalog catalog; private final ConnectionConfig connections;
   private final RealPreparation preparation; private final HelmExecution helm; private final LokiMeasurements metrics;
   private final ArtifactoryImages images; private final TransactionTemplate tx; private final ExecutionSettings settings;
@@ -66,7 +67,7 @@ public class RealRuns {
     if(!catalog.mode().equals("real") || !settings.enabled)return;
     for(var run:store.runs())if(!run.state().terminal()) {
       var plan=store.plan(run.planId()); if(plan.simulated())continue;
-      try {advance(run,plan);}catch(Exception error){
+      try (var scope=diagnostics==null?null:diagnostics.scope(diagnostics.forRun(run.id()))) {advance(run,plan);}catch(Exception error){
         String message=error instanceof Problem?error.getMessage():"Real execution failed; inspect cluster state before retrying";
         // Failed cleanup is never reported as completed and keeps the environment reserved.
         if(run.state()==State.CLEANING_UP || !live.contains(run.id())) {

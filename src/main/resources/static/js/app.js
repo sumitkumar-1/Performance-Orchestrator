@@ -1,5 +1,6 @@
 import { runMonitoring } from "./run-monitoring.js";
 import { realFlow } from "./real-flow.js";
+import { diagnosticsPanel } from "./diagnostics.js";
 import { el, labeled, input, select } from "./dom.js";
 import { secretSignInPrompt } from "./secret-sign-in.js";
 import { operationAuthentication } from "./operation-auth.js";
@@ -625,6 +626,7 @@ async function runDetails(id, generation) {
       ),
     ),
   );
+  if(!plan.simulated){const diagnostics=diagnosticsPanel(api,{runId:id});app.append(diagnostics.node);pageCleanup=()=>diagnostics.dispose();}
   let cursor = 0;
   const update = async () => {
     const [run, events] = await Promise.all([
