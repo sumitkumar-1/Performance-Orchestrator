@@ -9,7 +9,7 @@ export async function runMonitoring(api,id,catalog){
   const start=input(local(config.start),'datetime-local',{step:1}),end=input(local(new Date(new Date(config.start).getTime()+config.windowSeconds*1000)),'datetime-local',{step:1});
   const live=el('input',{type:'checkbox',checked:true});
   const state=el('p',{role:'status',class:'muted'});
-  const editor=monitoringConfig({...catalog,environment:config.environment},connections.credentialReferences,()=>{dirty=true;revision++;clearTimeout(timer);state.textContent='Save panel changes before querying. Live refresh paused.';});editor.set(config.panels);
+  const editor=monitoringConfig({...catalog,environment:config.environment},connections.credentialReferences,()=>{dirty=true;revision++;clearTimeout(timer);state.textContent='Save panel changes before querying. Live refresh paused.';},{api});editor.set(config.panels);
   const save=el('button',{type:'button',onclick:async()=>{save.disabled=true;error.hidden=true;try{await api(`/real/runs/${id}/monitoring`,{method:'PUT',body:{panels:editor.read()}});dirty=false;revision++;await refresh();}catch(reason){fail(reason);}finally{save.disabled=false;}}},'Save monitoring panels');
   function fail(reason){error.hidden=false;error.textContent=reason.message;error.scrollIntoView({block:'center'});}
   function display(panel,data){

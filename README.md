@@ -293,3 +293,5 @@ Spring tests explicitly load `src/test/resources/application-test.yaml` instead 
 Use [the real execution guide](docs/integration/real-execution.md) to configure an explicit kube-context/API server, service repositories and load values. Overview provides profile preparation and a reviewed start action when execution is enabled. Each checkout contains only CKP working-tree files. No office deployment was performed during development; sandbox verification is still required.
 
 Runs now offer **Open monitoring** for configurable LogQL log/metric panels with per-service credential defaults, namespace overrides and live range queries. See [authentication and live monitoring](docs/integration/real-execution.md#live-monitoring).
+
+Monitoring panels can be reused independently of run profiles: choose **Monitoring → Save as new set**, then select a saved set and **Load set** on a future run. Sets persist in the application database for the bound environment. See [reusing monitoring panels](docs/integration/real-execution.md#reusing-monitoring-panels).

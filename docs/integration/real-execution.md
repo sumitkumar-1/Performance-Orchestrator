@@ -162,6 +162,14 @@ Dependencies require those services to be selected and deployed first. The allow
 
 Pass/fail rules live in each metric panel in Configure run. Existing saved threshold rules are restored into those controls. Log panels have no numeric checks. Editing a live dashboard does not change the already-prepared verdict rules. When reopening a service selects a newer Git commit, the dialog calls out the refreshed source; review any retained YAML edits before saving.
 
+## Reusing monitoring panels
+
+In Configure run or a run's monitoring dashboard, use **Monitoring → Save as new set** to give the current panels a reusable name. On a future run, select that name under **Saved monitoring sets** and click **Load set**. **Update saved set** replaces its saved definition; **Delete set** removes only the reusable definition, leaving existing runs/profiles unchanged. Loading a set asks before replacing nonempty current panels.
+
+Sets are stored in the application database, scoped to the instance's target environment, and survive application restarts while that database is retained. They store LogQL, service, namespace, credential references and optional evaluation rules; they do not store resolved credentials. Configure run saves evaluation rules with the set. Live dashboards cannot change final verdict rules; when updating an existing set from a live dashboard, rules for unchanged metric IDs are retained. A new set saved from a live dashboard contains panels only.
+
+Adding or editing a panel updates the current form. **Save profile** also persists panels with the full run profile. **Save monitoring panels** on a live dashboard persists that run's dashboard only; use **Save as new set** as well to reuse it for later runs. Sets are separate from Connections & catalog configuration JSON exports; keep the application database to retain them.
+
 ## Troubleshooting Review run / Helm lint
 
 A lint failure happens during preparation, before this run deploys anything. “Dependencies must be vendored” in older error messages was a general requirement, not evidence that dependencies caused the failure. Updated errors distinguish recognized dependency, schema, missing-value and template/YAML errors without returning raw output. Classification is a hint; it cannot replace the full local Helm diagnostic.

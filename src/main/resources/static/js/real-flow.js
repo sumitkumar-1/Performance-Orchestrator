@@ -23,7 +23,7 @@ export async function realFlow(api, catalog, navigate) {
   let selections = [], load = null, plan = null, savedId = null, savedRevision = null, working = false;
   const invalidate = () => { plan = null; preview.replaceChildren(); };
   const connections = await api("/connections");
-  const monitoring = monitoringConfig(catalog, connections.credentialReferences, invalidate, { evaluation: true });
+  const monitoring = monitoringConfig(catalog, connections.credentialReferences, invalidate, { evaluation: true, api });
   const disposeCurrent=root.dispose;root.dispose=()=>{monitoring.dispose();disposeCurrent();};
   const destination = id => catalog.services[id]?.deploymentByEnvironment?.[catalog.environment] || catalog.services[id]?.deploymentDefaults;
   const button = (text, action, primary = false) => el("button", { type: "button", class: primary ? "primary" : "", onclick: action }, text);

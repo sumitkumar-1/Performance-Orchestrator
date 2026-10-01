@@ -1,6 +1,7 @@
 import {el,input,labeled,select} from './dom.js';
+import {monitoringLibrary} from './monitoring-library.js';
 
-export function monitoringConfig(catalog, credentialRefs, onChange = () => {}, { evaluation = false } = {}) {
+export function monitoringConfig(catalog, credentialRefs, onChange = () => {}, { evaluation = false, api } = {}) {
   let panels=[], rules=[], dialog;
   const list=el('div'), node=el('section',{class:'card'},el('div',{class:'dialog-heading'},el('h2',{},'Monitoring'),
     el('button',{type:'button',onclick:()=>edit()},'Add panel')),el('p',{class:'muted'},'Each panel uses a service’s environment credential by default. Override the Loki namespace or select another configured credential when needed.'),list);
@@ -44,5 +45,8 @@ export function monitoringConfig(catalog, credentialRefs, onChange = () => {}, {
       if(old)panels[index]=panel;else panels.push(panel);render();onChange();dialog.close();});
     dialog=el('dialog',{class:'deployment-dialog run-service-dialog','aria-label':'Monitoring panel'},form);const current=dialog;dialog.addEventListener('close',()=>current.remove());document.body.append(dialog);dialog.showModal();title.focus();
   }
-  render();return {node,read:()=>structuredClone(panels),readThresholds:()=>structuredClone(rules),set:(value,thresholds=[])=>{panels=structuredClone(value||[]);rules=structuredClone(thresholds);render();},dispose:()=>{dialog?.close();dialog?.remove();}};
+  const editor={node,read:()=>structuredClone(panels),readThresholds:()=>structuredClone(rules),set:(value,thresholds=[])=>{panels=structuredClone(value||[]);rules=structuredClone(thresholds);render();},dispose:()=>{library?.dispose();dialog?.close();dialog?.remove();}};
+  const library=api?monitoringLibrary(api,editor,onChange,{evaluation}):null;
+  if(library)node.insertBefore(library.node,list);
+  render();return editor;
 }
