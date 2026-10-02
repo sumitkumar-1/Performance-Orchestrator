@@ -288,7 +288,7 @@ public class Catalog {
                 safeRelative(service.projectPath());
                 if (!candidate.services().keySet().containsAll(service.dependencies())
                     || service.dependencies().contains(id)
-                    || service.allowedOverridePaths() == null
+                    || (mode.equals("simulation") && service.allowedOverridePaths() == null)
                     || (service.deploymentByEnvironment().isEmpty() && service.deploymentDefaults() == null))
                   throw new IllegalArgumentException();
                 if (mode.equals("real")) {
