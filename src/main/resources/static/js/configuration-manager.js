@@ -167,11 +167,7 @@ export function configurationManager(active, { api, mode, onSaved, onSignIn, onC
           readers.push(() => { if (credential.value) credentials[environment] = credential.value; else delete credentials[environment]; });
         }
       }
-      if (real) value.dependencies = [];
-      else {
-        bind("Deploy these services first (one service ID per line)", "dependencies", { multiline: true });
-        note("Dependencies determine deployment order. Include those services in the run; leave empty when there is no ordering requirement.");
-      }
+      value.dependencies = [];
       if (mode === "simulation") bind("Allowed values override paths (simulation only, one per line)", "allowedOverridePaths", { multiline: true });
       value.deploymentByEnvironment ||= {};
       const targets = real ? Object.keys(active.catalog.environments) : Object.keys(value.deploymentByEnvironment);

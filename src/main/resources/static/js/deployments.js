@@ -36,7 +36,7 @@ export function deploymentEditor({ catalog, api, environment, selections }) {
         el(
           "p",
           { class: "muted" },
-          "Add only the services needed for this run. Each keeps its own source and version.",
+          "Deploys from top to bottom. Drag the handle or use the arrows to reorder services.",
         ),
       ),
       add,
@@ -57,6 +57,14 @@ export function deploymentEditor({ catalog, api, environment, selections }) {
       ? `${target} · namespace ${mapping.namespace} · release ${mapping.releaseName}`
       : `No deployment mapping for ${target}. Remove this service or select another environment.`;
   };
+  let draggedService = null;
+  function move(from, to) {
+    const entries = [...chosen.entries()];
+    if (from < 0 || to < 0 || from >= entries.length || to >= entries.length || from === to) return;
+    const [entry] = entries.splice(from, 1); entries.splice(to, 0, entry);
+    chosen.clear(); entries.forEach(([id, value]) => chosen.set(id, value));
+    render(); list.children[to]?.querySelector('.service-drag-handle')?.focus();
+  }
   function render() {
     count.textContent = `${chosen.size} ${chosen.size === 1 ? "service" : "services"} selected`;
     add.disabled = available().length === 0;
@@ -77,7 +85,16 @@ export function deploymentEditor({ catalog, api, environment, selections }) {
           ),
         ),
       );
-    for (const value of chosen.values()) {
+    for (const [index, value] of [...chosen.values()].entries()) {
+      const handle = el('button', { type: 'button', class: 'service-drag-handle', draggable: 'true',
+        'aria-label': `Reorder ${value.serviceId}, position ${index + 1}`,
+        ondragstart: event => { draggedService = value.serviceId; event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', value.serviceId); },
+        ondragend: () => { draggedService = null; list.querySelectorAll('.service-drop-target').forEach(node => node.classList.remove('service-drop-target')); }
+      }, '⠿');
+      const up = button('↑', () => move(index, index - 1)); up.disabled = index === 0;
+      up.setAttribute('aria-label', `Move ${value.serviceId} up`);
+      const down = button('↓', () => move(index, index + 1)); down.disabled = index === chosen.size - 1;
+      down.setAttribute('aria-label', `Move ${value.serviceId} down`);
       const edit = button("Edit", () => openDialog(value.serviceId));
       edit.setAttribute("aria-label", `Edit ${value.serviceId}`);
       const remove = button(
@@ -93,11 +110,15 @@ export function deploymentEditor({ catalog, api, environment, selections }) {
       list.append(
         el(
           "article",
-          { class: "deployment-row", "aria-label": value.serviceId },
+          { class: "deployment-row", "aria-label": value.serviceId,
+            ondragover: event => { if (draggedService && draggedService !== value.serviceId) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; event.currentTarget.classList.add('service-drop-target'); } },
+            ondragleave: event => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.classList.remove('service-drop-target'); },
+            ondrop: event => { event.preventDefault(); event.currentTarget.classList.remove('service-drop-target'); if (draggedService) move([...chosen.keys()].indexOf(draggedService), index); draggedService = null; }
+          },
           el(
             "div",
             { class: "deployment-summary" },
-            el("h3", {}, value.serviceId),
+            el("h3", {}, `${index + 1}. ${value.serviceId}`),
             el(
               "div",
               { class: "service-chips" },
@@ -119,7 +140,7 @@ export function deploymentEditor({ catalog, api, environment, selections }) {
               describeTarget(value.serviceId),
             ),
           ),
-          el("div", { class: "deployment-actions" }, edit, remove),
+          el("div", { class: "deployment-actions" }, handle, up, down, edit, remove),
         ),
       );
     }

@@ -286,9 +286,7 @@ public class Catalog {
                 identifier(id);
                 field[0] += "." + id;
                 safeRelative(service.projectPath());
-                if ((mode.equals("simulation") && (!candidate.services().keySet().containsAll(service.dependencies())
-                    || service.dependencies().contains(id)))
-                    || (mode.equals("simulation") && service.allowedOverridePaths() == null)
+                if ((mode.equals("simulation") && service.allowedOverridePaths() == null)
                     || (service.deploymentByEnvironment().isEmpty() && service.deploymentDefaults() == null))
                   throw new IllegalArgumentException();
                 if (mode.equals("real")) {
@@ -333,9 +331,6 @@ public class Catalog {
                           destination.valuesFiles().forEach(file -> read(service, file));
                         });
               });
-      field[0] = "catalog.services.dependencies";
-      for (String id : mode.equals("simulation") ? candidate.services().keySet() : Set.<String>of())
-        cycle(candidate, id, new HashSet<>(), new HashSet<>());
       candidate
           .scenarios()
           .forEach(
@@ -354,15 +349,6 @@ public class Catalog {
           "Invalid catalog at " + field[0]
               + ": check required fields, paths, references and (for simulation) limits/project files");
     }
-  }
-
-  private static void cycle(Data data, String id, Set<String> visiting, Set<String> done) {
-    if (done.contains(id)) return;
-    if (!visiting.add(id)) throw new IllegalArgumentException();
-    for (String dependency : data.services().get(id).dependencies())
-      cycle(data, dependency, visiting, done);
-    visiting.remove(id);
-    done.add(id);
   }
 
   private static void identifier(String id) {

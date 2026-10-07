@@ -876,4 +876,4 @@ select {
 
 .service-drag-handle { cursor: grab; touch-action: auto; }
 .service-drag-handle:active { cursor: grabbing; }
-.run-selection.service-drop-target { outline: 2px solid #176d56; outline-offset: 3px; }
+.run-selection.service-drop-target, .deployment-row.service-drop-target { outline: 2px solid #176d56; outline-offset: 3px; }

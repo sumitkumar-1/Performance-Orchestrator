@@ -54,7 +54,6 @@ public class PlanningService {
       YamlValues.allowed(
           YamlValues.parse(s.valuesOverlay()), Set.copyOf(svc.allowedOverridePaths()), "");
     }
-    order(p);
     var l = p.loadGenerator();
     if (l == null || !catalog.data().scenarios().containsKey(l.templateRef()))
       throw Problem.invalid("loadGenerator.templateRef", "Choose a registered scenario");
@@ -95,32 +94,6 @@ public class PlanningService {
             "Thresholds must use unique supported metrics and finite nonnegative maxima");
   }
 
-  private List<Selection> order(Profile p) {
-    Map<String, Selection> selected = new LinkedHashMap<>();
-    p.services().forEach(s -> selected.put(s.serviceId(), s));
-    List<Selection> result = new ArrayList<>();
-    Set<String> done = new HashSet<>(), visiting = new HashSet<>();
-    for (String id : selected.keySet()) visit(id, selected, done, visiting, result);
-    return result;
-  }
-
-  private void visit(
-      String id,
-      Map<String, Selection> selected,
-      Set<String> done,
-      Set<String> visiting,
-      List<Selection> result) {
-    if (done.contains(id)) return;
-    if (!visiting.add(id)) throw Problem.invalid("services", "Dependency cycle detected");
-    if (!selected.containsKey(id))
-      throw Problem.invalid("services", "Required dependency must be selected: " + id);
-    for (String dependency : catalog.service(id).dependencies())
-      visit(dependency, selected, done, visiting, result);
-    visiting.remove(id);
-    done.add(id);
-    result.add(selected.get(id));
-  }
-
   @Transactional
   public SavedProfile save(String id, Integer revision, Profile profile) {
     validate(profile);
@@ -144,7 +117,7 @@ public class PlanningService {
     validate(profile);
     var env = catalog.environment(profile.targetEnvironment());
     List<PreparedService> prepared = new ArrayList<>();
-    for (var selection : order(profile)) prepared.add(prepare(profile, selection));
+    for (var selection : profile.services()) prepared.add(prepare(profile, selection));
     var scenario = catalog.data().scenarios().get(profile.loadGenerator().templateRef());
     var effectiveLoad =
         YamlValues.merge(
