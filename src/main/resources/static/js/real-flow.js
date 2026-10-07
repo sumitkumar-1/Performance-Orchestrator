@@ -1,5 +1,6 @@
 import { monitoringConfig } from "./monitoring-config.js";
 import { diagnosticsPanel } from "./diagnostics.js";
+import { reviewProgress } from "./review-progress.js";
 import { sortImageVersions } from "./image-versions.js";
 import { el, input, labeled, select } from "./dom.js";
 
@@ -29,8 +30,9 @@ export async function realFlow(api, catalog, navigate) {
   errorObserver.observe(status, { childList: true, characterData: true, subtree: true });
   const disposeBase=root.dispose; root.dispose=()=>{errorObserver.disconnect();disposeBase();};
   const diagnostics=diagnosticsPanel(api);
+  const progress=reviewProgress(api);
 
-  const disposeDiagnostics=root.dispose;root.dispose=()=>{diagnostics.dispose();disposeDiagnostics();};
+  const disposeDiagnostics=root.dispose;root.dispose=()=>{progress.dispose();diagnostics.dispose();disposeDiagnostics();};
   let selections = [], load = null, plan = null, savedId = null, savedRevision = null, working = false;
   const invalidate = () => { plan = null; preview.replaceChildren(); status.textContent=""; };
   const connections = await api("/connections");
@@ -259,8 +261,8 @@ export async function realFlow(api, catalog, navigate) {
     if (working) return; working = true; error.textContent = ""; invalidate();
     const controls = [...root.querySelectorAll("input,select,textarea,button:not([data-during-preparation])")]; controls.forEach(node => node.disabled = true); status.textContent = "Preparing charts and checking the cluster…";
     try {
-      const profile=readProfile();const trace=await diagnostics.start();
-      plan = await api("/real/plans", { method: "POST", headers:trace?{"X-Diagnostic-ID":trace}:{}, body: profile }); if (disposed) return;
+      const profile=readProfile();const trace=await diagnostics.start();const reviewId=progress.start(profile);
+      plan = await api("/real/plans", { method: "POST", headers:{...(trace?{"X-Diagnostic-ID":trace}:{}),"X-Review-ID":reviewId}, body: profile }); if (disposed) return;
       const prepared = plan, confirmed = el("input", { type: "checkbox" }), key = crypto.randomUUID();
       const run = button("Start run", async () => {
         if (plan !== prepared || !confirmed.checked) { error.textContent = "Review and confirm this plan before starting."; return; }
@@ -275,9 +277,9 @@ export async function realFlow(api, catalog, navigate) {
         labeled("I reviewed the target, services and values. Start this deployment and load test.", confirmed), run);
       status.textContent = "Plan ready for review. Nothing has been deployed yet.";
     } catch (reason) { error.textContent = reason.message; status.textContent = ""; }
-    finally { working = false; controls.forEach(node => node.disabled = false); renderSelections(); }
+    finally { await progress.finish(!!plan); working = false; controls.forEach(node => node.disabled = false); renderSelections(); }
   }, true);
-  root.append(notices, el("section", { class: "card" }, el("div", { class: "form-grid" }, labeled("Saved profile", savedSelect), labeled("Run name", name)),
+  root.append(notices, progress.node, el("section", { class: "card" }, el("div", { class: "form-grid" }, labeled("Saved profile", savedSelect), labeled("Run name", name)),
       el("p", { class: "muted" }, `Environment: ${catalog.environment} · Context: ${settings.kubeContext}`)),
     el("section", { class: "card" }, el("div", { class: "dialog-heading" }, el("h2", {}, "Services"), add), el("p", { class: "muted" }, "Deploys from top to bottom. Drag the handle or use the arrows to reorder. The load generator starts after all services are ready."), rows),
     el("section", { class: "card" }, el("div", { class: "dialog-heading" }, el("h2", {}, "Load generator"), chooseLoad), loadSummary),

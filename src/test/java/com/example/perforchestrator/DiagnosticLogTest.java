@@ -46,6 +46,16 @@ class DiagnosticLogTest {
     assertThat(Json.write(log.operations(a))).contains("outer").doesNotContain("inner","unrelated");
     assertThat(Json.write(log.operations(b))).contains("inner").doesNotContain("outer");
   }
+  @Test void parallelScopeIsPropagatedAndClearedAfterWork() throws Exception {
+    String id=log.create(null);
+    try(var pool=java.util.concurrent.Executors.newSingleThreadExecutor()) {
+      try(var scope=log.scope(id)) {
+        pool.submit(DiagnosticLog.propagate(()->{DiagnosticLog.begin("COMMAND","parallel").finish("EXIT 0");return null;})).get();
+      }
+      pool.submit(()->DiagnosticLog.begin("COMMAND","unrelated").finish("EXIT 0")).get();
+    }
+    assertThat(Json.write(log.operations(id))).contains("parallel").doesNotContain("unrelated");
+  }
   @Test void disabledDiagnosticsDoNotCreateTracesOrRecordActivity(){
     var jdbc=new JdbcTemplate(db);var disabled=new DiagnosticLog(jdbc,false);
     assertThat(disabled.enabled()).isFalse();assertThat(disabled.create(null)).isNull();

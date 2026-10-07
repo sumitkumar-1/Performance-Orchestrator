@@ -101,6 +101,40 @@ class RealWorkflowTest {
     var plan=plan();var run=worker.enqueue("drift-key",plan.id());worker.tick();when(helm.baseline(any(),any(),any())).thenReturn("CHANGED");worker.tick();
     assertThat(store.run(run.id()).state()).isEqualTo(State.CLEANING_UP);verify(helm,never()).apply(any(),any(),any(),any(),anyBoolean());
   }
+  @Test void parallelPreparationPreservesOrderAndSessionContext() throws Exception {
+    var source=mock(SparseProjects.class);
+    when(catalog.boundEnvironment()).thenReturn("sandbox");
+    when(catalog.environment("sandbox")).thenReturn(new Catalog.Environment("Sandbox","cluster",null,null,null,null,null,null));
+    when(helm.target()).thenReturn(Map.of("context","sandbox","server","https://cluster.invalid"));
+    var bothStarted=new java.util.concurrent.CountDownLatch(2);
+    var requestAttributes=new org.springframework.web.context.request.ServletRequestAttributes(new org.springframework.mock.web.MockHttpServletRequest());
+    var requests=new ArrayList<RealPreparation.Deployment>();
+    for(String id:List.of("first","second","load")) {
+      var destination=new Catalog.Destination("ns",id,List.of("ckp/chart/values.yaml"));
+      when(catalog.service(id)).thenReturn(new Catalog.Service("projects/"+id,List.of("ignored"),Map.of(),null,List.of(),destination,
+          new Catalog.ContainerImage("registry","dev","team",id),new Catalog.SourceProject("stash","SP",id,"main","ckp/chart"),Map.of()));
+      requests.add(new RealPreparation.Deployment(id,"main","v1",null,""));
+    }
+    when(source.checkout(any(),any())).thenAnswer(call->{
+      assertThat(org.springframework.web.context.request.RequestContextHolder.getRequestAttributes()).isSameAs(requestAttributes);
+      Catalog.SourceProject project=call.getArgument(0);
+      if(!project.repository().equals("load")){bothStarted.countDown();assertThat(bothStarted.await(5,java.util.concurrent.TimeUnit.SECONDS)).isTrue();}
+      return new SparseProjects.Checkout("a".repeat(40),Map.of("ckp/chart/Chart.yaml",Base64.getEncoder().encodeToString("version: 1.0.0\n".getBytes()),
+          "ckp/chart/values.yaml",Base64.getEncoder().encodeToString("rate: 1\n".getBytes())));
+    });
+    when(images.resolve(any(),any(),any(),any())).thenReturn(new Image("service:test","","repo/test","v1","sha256:"+"a".repeat(64)));
+    var planner=new RealPreparation(catalog,source,helm,images,store,settings,connections);
+    var request=new RealPreparation.Request("Parallel",requests.subList(0,2),requests.get(2),0,10,600,List.of(),List.of());
+    var progress=new ReviewProgress("review",request);
+    org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(requestAttributes);
+    try {
+      var plan=planner.prepare(request,progress::step);
+      assertThat(plan.services()).extracting(PreparedService::serviceId).containsExactly("first","second","load");
+      assertThat(Json.write(progress.snapshot())).contains("Ready").doesNotContain("Queued");
+      assertThat(org.springframework.web.context.request.RequestContextHolder.getRequestAttributes()).isSameAs(requestAttributes);
+    } finally {org.springframework.web.context.request.RequestContextHolder.resetRequestAttributes();}
+  }
+
   @Test void preparationSnapshotsCkpCommitDigestAndEditableValues() throws Exception {
     var destination=new Catalog.Destination("load-ns","load-release",List.of("ckp/helm/load/values.yaml"));
     var service=new Catalog.Service("projects/load",List.of(),Map.of(),null,List.of(),destination,

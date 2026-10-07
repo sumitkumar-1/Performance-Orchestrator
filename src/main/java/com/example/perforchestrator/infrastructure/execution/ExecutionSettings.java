@@ -15,6 +15,7 @@ public class ExecutionSettings {
   public final String context, expectedServer;
   public final Path workspace;
   public final int timeoutSeconds;
+  public final int preparationConcurrency;
   public final int defaultRunDurationSeconds, maxRunDurationSeconds;
   public final Map<String,String> helmRepositories;
   public final String helmRepositoryConnection,helmRepositoryUsername;
@@ -24,6 +25,8 @@ public class ExecutionSettings {
     expectedServer = env.getProperty("orchestrator.execution.expected-api-server", "");
     workspace = Path.of(env.getProperty("orchestrator.execution.workspace", "data/real/workspaces")).toAbsolutePath().normalize();
     timeoutSeconds = env.getProperty("orchestrator.execution.command-timeout-seconds", Integer.class, 300);
+    preparationConcurrency=env.getProperty("orchestrator.execution.preparation-concurrency",Integer.class,3);
+    if(preparationConcurrency<1 || preparationConcurrency>8)throw new IllegalArgumentException("Preparation concurrency must be between 1 and 8");
     if (timeoutSeconds < 10 || timeoutSeconds > 1800) throw new IllegalArgumentException("Execution command timeout must be 10–1800 seconds");
     maxRunDurationSeconds = env.getProperty("orchestrator.execution.max-run-duration-seconds", Integer.class, 28800);
     defaultRunDurationSeconds = env.getProperty("orchestrator.execution.default-run-duration-seconds", Integer.class, 900);

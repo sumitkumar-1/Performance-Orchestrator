@@ -114,6 +114,7 @@ application:
       kube-context: in-cluster
       expected-api-server: https://kubernetes.default.svc
       workspace: /app/data/real/workspaces
+      preparation-concurrency: 3 # Parallel service reviews (1–8); deployment order is unchanged
       command-timeout-seconds: 300 # Per Helm operation; 10–1800 seconds
       default-run-duration-seconds: 900 # Initial overall timeout for new run profiles
       max-run-duration-seconds: 28800 # Maximum overall timeout selectable per run

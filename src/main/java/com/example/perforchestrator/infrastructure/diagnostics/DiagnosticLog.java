@@ -10,6 +10,11 @@ import org.springframework.stereotype.Component;
 public class DiagnosticLog {
   private record Context(DiagnosticLog log,String id) {}
   private static final ThreadLocal<Context> CURRENT=new ThreadLocal<>();
+  public static <T> java.util.concurrent.Callable<T> propagate(java.util.concurrent.Callable<T> work) {
+    var captured=CURRENT.get();
+    return ()->{var previous=CURRENT.get();try{if(captured==null)CURRENT.remove();else CURRENT.set(captured);return work.call();}
+      finally{if(previous==null)CURRENT.remove();else CURRENT.set(previous);}};
+  }
   private final JdbcTemplate db;
   private final boolean enabled;
   public DiagnosticLog(JdbcTemplate db){this(db,true);}

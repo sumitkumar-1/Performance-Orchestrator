@@ -135,6 +135,18 @@ class RealModeIntegrationTest {
   }
 
   @Test
+  void reviewProgressIsAvailableOnlyInTheOwningSession() throws Exception {
+    var session=new org.springframework.mock.web.MockHttpSession();
+    mvc.perform(post("/api/v1/real/plans").session(session).header("Host","localhost").header("X-Review-ID","review-one").with(csrf())
+        .contentType("application/json").content("{\"services\":[],\"warmupSeconds\":0,\"measurementSeconds\":60,\"maxRunDurationSeconds\":900}"))
+        .andExpect(status().isConflict());
+    mvc.perform(get("/api/v1/real/preparations/review-one").session(session).header("Host","localhost"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.state").value("FAILED"));
+    mvc.perform(get("/api/v1/real/preparations/review-one").header("Host","localhost"))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
   void runtimeCannotSwitchInstanceEnvironmentOrCluster() {
     var original = configuration.current();
     assertThat(catalog.boundEnvironment()).isEqualTo("sandbox");
