@@ -448,11 +448,27 @@ textarea {
   color: var(--muted);
   margin: 0;
 }
-.deployment-progress-list { display: grid; gap: 12px; margin-top: 12px; }
-.deployment-progress-row { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; }
-.deployment-progress-row p { overflow-wrap: anywhere; }
-.deployment-progress-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; margin-top: 3px; }
-.deployment-indicator { font-weight: 700; text-align: center; line-height: 22px; border-radius: 50%; height: 22px; }
+.deployment-group-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; margin-top: 5px; }
+.deployment-group-summary { font-size: 12px; }
+.deployment-progress-list { display: grid; gap: 12px; margin-top: 14px; }
+.deployment-progress-row { padding: 14px 16px; border: 1px solid #dde6e0; border-radius: 10px; background: #fff; min-width: 0; }
+.deployment-progress-row[data-state="deploying"] { border-color: #a8c7b7; background: #f7fbf8; }
+.deployment-progress-row[data-state="failed"] { border-color: #e9b8b8; }
+.deployment-service-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.deployment-service-identity { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
+.timeline .deployment-service-identity strong { margin: 2px 0; font-size: 14px; overflow-wrap: anywhere; }
+.deployment-position { color: var(--muted); font-size: 11px; white-space: nowrap; padding-top: 4px; }
+.deployment-service-fields { display: grid; gap: 8px; margin: 12px 0; }
+.deployment-service-fields > div { display: grid; grid-template-columns: 90px minmax(0,1fr); gap: 10px; }
+.deployment-service-fields dt { color: var(--muted); font-size: 11px; }
+.deployment-service-fields dd { margin: 0; font-size: 12px; overflow-wrap: anywhere; line-height: 1.45; }
+.deployment-service-fields > div:first-child dd { font-family: ui-monospace, monospace; }
+.deployment-progress-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; padding-top: 9px; border-top: 1px solid #edf1ee; }
+.deployment-status-label { font-weight: 600; }
+.deployment-progress-row[data-state="ready"] .deployment-status-label { color: #176d56; }
+.deployment-progress-row[data-state="failed"] .deployment-status-label { color: #a52a2a; }
+@media (max-width: 500px) { .deployment-service-fields > div { grid-template-columns: 1fr; gap: 2px; } }
+.deployment-indicator { font-weight: 700; text-align: center; line-height: 22px; border-radius: 50%; height: 22px; flex: 0 0 22px; }
 .deployment-indicator.ready { color: #176d56; background: #e3f2e9; }
 .deployment-indicator.deploying { color: #7a5700; background: #fff1c9; }
 .deployment-indicator.failed { color: #a52a2a; background: #fce8e8; }

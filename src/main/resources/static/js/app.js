@@ -630,13 +630,17 @@ async function runDetails(id, generation) {
   );
   if(diagnostics){app.append(diagnostics.node);pageCleanup=()=>diagnostics.dispose();}
   let activeDeployment = null, timelineElapsed = null;
-  let deploymentGroup = null, deploymentList = null, pendingService = null;
+  let deploymentGroup = null, deploymentList = null, pendingService = null, deploymentSummary = null, deploymentTotal = 0;
   const deploymentRows = new Map();
   function serviceState(row, state, detail) {
     row.icon.textContent = state === "ready" ? "✓" : state === "failed" ? "✕" : state === "deploying" ? "◌" : "–";
     row.icon.className = `deployment-indicator ${state}`;
     row.icon.setAttribute("aria-label", state === "ready" ? "Deployment succeeded" : state);
     row.detail.textContent = detail;
+    row.state = state; row.node.setAttribute("data-state", state);
+    const states = [...deploymentRows.values()].map(item => item.state);
+    if (deploymentSummary) deploymentSummary.textContent = `${states.filter(value => value === "ready").length} of ${deploymentTotal} ready`
+      + (states.includes("deploying") ? " · Deployment in progress" : states.includes("failed") ? " · Deployment failed" : "");
   }
   function appendTimelineEvent(event) {
     if (timelineElapsed) timelineElapsed.textContent = "";
@@ -644,7 +648,8 @@ async function runDetails(id, generation) {
     if (event.state === "DEPLOYING") {
       if (!deploymentGroup) {
         deploymentList = el("div", { class: "deployment-progress-list" });
-        deploymentGroup = el("li", {}, el("time", {}, time(event.time)), el("strong", {}, "DEPLOYING"), deploymentList);
+        deploymentSummary = el("span", { class: "muted deployment-group-summary" });
+        deploymentGroup = el("li", {}, el("time", {}, time(event.time)), el("div", { class: "deployment-group-heading" }, el("strong", {}, "DEPLOYING"), deploymentSummary), deploymentList);
         timeline.append(deploymentGroup);
       }
       const completed = / ready in (\d+)s$/.exec(event.message);
@@ -657,13 +662,23 @@ async function runDetails(id, generation) {
       let row = deploymentRows.get(context);
       if (!row) {
         if (!deploymentRows.size) deploymentList.replaceChildren();
-        row = { icon: el("span", { role: "img" }), detail: el("span", { class: "muted" }), timer: el("span", { class: "muted" }) };
-        deploymentList.append(el("div", { class: "deployment-progress-row" }, row.icon,
-          el("div", {}, el("p", {}, context), el("div", { class: "deployment-progress-meta" }, row.detail, row.timer))));
+        const parts = /^Service (\d+)\/(\d+): (.*?) · (?:image version (.*?) · )?namespace (.*?) · release (.*)$/.exec(context);
+        const service = parts ? plan.services.find(item => item.serviceId === parts[3]) : null;
+        deploymentTotal = parts ? Number(parts[2]) : Math.max(deploymentTotal, deploymentRows.size + 1);
+        row = { icon: el("span", { role: "img" }), detail: el("span", { class: "deployment-status-label" }), timer: el("span", { class: "muted" }), duration: el("span", { class: "muted" }) };
+        const field = (label, value) => el("div", {}, el("dt", {}, label), el("dd", {}, value));
+        row.node = el("div", { class: "deployment-progress-row" },
+          el("div", { class: "deployment-service-heading" }, el("div", { class: "deployment-service-identity" }, row.icon,
+            el("strong", {}, parts ? parts[3] : context)), parts ? el("span", { class: "deployment-position" }, `${parts[1]} / ${parts[2]}`) : null),
+          parts ? el("dl", { class: "deployment-service-fields" }, field("Image version", parts[4] || service?.image?.version || "Not recorded"), field("Namespace", parts[5]), field("Helm release", parts[6])) : null,
+          el("div", { class: "deployment-progress-meta" }, row.detail, row.timer, row.duration));
+        deploymentList.append(row.node);
         deploymentRows.set(context, row);
       }
       if (completed) {
-        serviceState(row, "ready", `Ready in ${completed[1]}s`);
+        const seconds = Number(completed[1]);
+        row.duration.textContent = `Duration: ${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+        serviceState(row, "ready", "Ready");
         if (pendingService === row) pendingService = null;
       } else {
         if (pendingService && pendingService !== row) serviceState(pendingService, "stopped", "No completion recorded");
