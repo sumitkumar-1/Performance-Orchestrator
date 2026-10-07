@@ -25,7 +25,7 @@ export function reviewProgress(api) {
   }
   return {node,start(profile){clearTimeout(timer);epoch++;id=crypto.randomUUID();started=Date.now();
       latest={stage:'Checking cluster connection',services:[...profile.services,profile.loadGenerator].map(service=>({serviceId:service.serviceId,stage:'Queued'}))};
-      node.hidden=false;render();timer=setTimeout(()=>poll(epoch),500);return id;
+      node.hidden=false;render();node.scrollIntoView({block:'nearest',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});timer=setTimeout(()=>poll(epoch),500);return id;
     },async finish(success){if(!id||closed)return;clearTimeout(timer);const ticket=++epoch;
       try{const value=await api(`/real/preparations/${id}`);if(!closed&&ticket===epoch)latest=value;}catch{}
       if(!closed&&ticket===epoch){if(latest)latest.stage=success?'Charts prepared; nothing deployed':'See the error above for details';render(success?'READY':'FAILED');}

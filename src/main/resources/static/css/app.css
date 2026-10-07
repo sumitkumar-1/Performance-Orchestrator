@@ -903,6 +903,11 @@ select {
 .service-drag-handle:active { cursor: grabbing; }
 .run-selection.service-drop-target, .deployment-row.service-drop-target { outline: 2px solid #176d56; outline-offset: 3px; }
 .review-progress-rows { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 12px; }
+.review-progress.is-preparing { position: sticky; top: 12px; z-index: 5; box-shadow: 0 6px 24px #18382b20; }
+.review-progress.is-preparing .review-progress-rows { max-height: 35vh; overflow-y: auto; overscroll-behavior: contain; }
+/* The progress card replaces the generic preparing notice while work is active. */
+.run-builder:has(.review-progress.is-preparing) > .run-notices:not(:has(.run-error:not([hidden]))) { display: none; }
+.run-builder:has(.run-error:not([hidden])) > .review-progress.is-preparing { position: static; }
 .review-progress-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px; background: #f5f8f6; border-radius: 8px; overflow-wrap: anywhere; }
 .review-progress-row p { margin: 4px 0 0; font-size: 12px; }
 .review-stage-icon { display: inline-block; flex: 0 0 20px; text-align: center; }
