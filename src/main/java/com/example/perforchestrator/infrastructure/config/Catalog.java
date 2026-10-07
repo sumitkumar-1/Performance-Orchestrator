@@ -86,7 +86,7 @@ public class Catalog {
     @org.springframework.boot.context.properties.bind.ConstructorBinding
     public Service {
       monitoringCredentials = ImmutableConfiguration.map(monitoringCredentials == null ? Map.of() : monitoringCredentials);
-      dependencies = ImmutableConfiguration.list(dependencies);
+      dependencies = ImmutableConfiguration.list(dependencies == null ? List.of() : dependencies);
       deploymentByEnvironment = ImmutableConfiguration.map(deploymentByEnvironment == null ? Map.of() : deploymentByEnvironment);
       allowedOverridePaths = ImmutableConfiguration.list(allowedOverridePaths);
     }
@@ -286,8 +286,8 @@ public class Catalog {
                 identifier(id);
                 field[0] += "." + id;
                 safeRelative(service.projectPath());
-                if (!candidate.services().keySet().containsAll(service.dependencies())
-                    || service.dependencies().contains(id)
+                if ((mode.equals("simulation") && (!candidate.services().keySet().containsAll(service.dependencies())
+                    || service.dependencies().contains(id)))
                     || (mode.equals("simulation") && service.allowedOverridePaths() == null)
                     || (service.deploymentByEnvironment().isEmpty() && service.deploymentDefaults() == null))
                   throw new IllegalArgumentException();
@@ -334,7 +334,7 @@ public class Catalog {
                         });
               });
       field[0] = "catalog.services.dependencies";
-      for (String id : candidate.services().keySet())
+      for (String id : mode.equals("simulation") ? candidate.services().keySet() : Set.<String>of())
         cycle(candidate, id, new HashSet<>(), new HashSet<>());
       candidate
           .scenarios()

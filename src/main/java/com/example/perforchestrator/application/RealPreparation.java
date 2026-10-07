@@ -60,13 +60,9 @@ public class RealPreparation {
     var selections=new LinkedHashMap<String,Deployment>();
     for(var selection:request.services()) if(selection==null || selections.put(selection.serviceId(),selection)!=null) throw Problem.invalid("services","Duplicate service");
     if(selections.containsKey(request.loadGenerator().serviceId())) throw Problem.invalid("loadGenerator","Load generator must be separate from deployed services");
-    var ordered=new ArrayList<Deployment>(); var done=new HashSet<String>();
-    for(String id:selections.keySet()) order(id,selections,new HashSet<>(),done,ordered);
     List<PreparedService> prepared=new ArrayList<>(); Map<String,String> charts=new TreeMap<>();
     Set<String> destinations=new HashSet<>();
-    for(var selection:ordered) prepared.add(prepareService(selection,target,charts,destinations));
-    for(String dependency:catalog.service(request.loadGenerator().serviceId()).dependencies())
-      if(!selections.containsKey(dependency)) throw Problem.invalid("services","Select load-generator dependency: "+dependency);
+    for(var selection:selections.values()) prepared.add(prepareService(selection,target,charts,destinations));
     var load=prepareService(request.loadGenerator(),target,charts,destinations);
     if(!load.baselineDigest().equals("ABSENT")) throw Problem.conflict("Load-generator release already exists; use a dedicated uninstalled release before preparing a run");
     prepared.add(load);
@@ -98,12 +94,6 @@ public class RealPreparation {
           metrics.isEmpty()?"Metrics not configured: performance verdict will be INCONCLUSIVE.":"Metrics use supplied LogQL; confirm event counts correspond to messages."),false);
     plan=new Plan(plan.id(),PlanningService.checksum(plan),plan.createdAt(),plan.expiresAt(),plan.actor(),null,0,plan.profile(),plan.catalogHash(),plan.clusterIdentity(),plan.loadNamespace(),plan.scenarioRevision(),plan.effectiveLoadConfiguration(),plan.services(),plan.warnings(),false);
     store.plan(plan); return plan;
-  }
-  private void order(String id,Map<String,Deployment> selected,Set<String> visiting,Set<String> done,List<Deployment> out) {
-    if(done.contains(id))return;
-    if(!visiting.add(id) || !selected.containsKey(id))throw Problem.invalid("services","Select all dependencies; dependency cycles are not allowed");
-    for(String dep:catalog.service(id).dependencies())order(dep,selected,visiting,done,out);
-    visiting.remove(id);done.add(id);out.add(selected.get(id));
   }
   private PreparedService prepareService(Deployment selection,Map<String,Object> target,Map<String,String> charts,Set<String> destinations) {
     var service=catalog.service(selection.serviceId());

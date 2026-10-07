@@ -39,14 +39,37 @@ export async function realFlow(api, catalog, navigate) {
   const destination = id => catalog.services[id]?.deploymentByEnvironment?.[catalog.environment] || catalog.services[id]?.deploymentDefaults;
   const button = (text, action, primary = false) => el("button", { type: "button", class: primary ? "primary" : "", onclick: action }, text);
 
+  let draggedService = null;
+  function moveService(from, to, focus = false) {
+    if (working || from < 0 || to < 0 || from >= selections.length || to >= selections.length || from === to) return;
+    const [service] = selections.splice(from, 1);
+    selections.splice(to, 0, service);
+    invalidate(); renderSelections();
+    status.textContent = `${service.serviceId} moved to position ${to + 1}.`;
+    if (focus) rows.children[to]?.querySelector('.service-drag-handle')?.focus();
+  }
   function summary(data, isLoad, index) {
     const dest = destination(data.serviceId);
-    return el("article", { class: "run-selection" },
-      el("div", {}, el("strong", {}, data.serviceId),
+    const orderControls = isLoad ? null : el("div", { class: "deployment-actions" },
+      el("button", { type: "button", class: "service-drag-handle", draggable: "true", title: "Drag to reorder, or use Move up/down",
+        "aria-label": `Reorder ${data.serviceId}, position ${index + 1}`,
+        ondragstart: event => { if (working) { event.preventDefault(); return; } draggedService = data.serviceId; event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", data.serviceId); },
+        ondragend: () => { draggedService = null; rows.querySelectorAll('.service-drop-target').forEach(node => node.classList.remove('service-drop-target')); }
+      }, "⠿"),
+      el("button", { type: "button", disabled: index === 0, "aria-label": `Move ${data.serviceId} up`, onclick: () => moveService(index, index - 1, true) }, "↑"),
+      el("button", { type: "button", disabled: index === selections.length - 1, "aria-label": `Move ${data.serviceId} down`, onclick: () => moveService(index, index + 1, true) }, "↓"));
+    const row = el("article", { class: "run-selection" },
+      el("div", {}, el("strong", {}, isLoad ? data.serviceId : `${index + 1}. ${data.serviceId}`),
         el("p", { class: "muted" }, `Image ${data.imageVersion} · Git ${data.gitReference || "prepared revision"}`),
         el("p", { class: "muted" }, `${dest?.namespace || "Unconfigured namespace"} · ${data.valuesFiles.length} values file(s)${Object.keys(data.valuesEdits || {}).length || data.overlay ? " · edited" : ""}`)),
-      el("div", { class: "deployment-actions" }, button("Edit", () => editDeployment(isLoad, index)),
+      el("div", { class: "deployment-actions" }, orderControls, button("Edit", () => editDeployment(isLoad, index)),
         button("Remove", () => { if (isLoad) load = null; else selections.splice(index, 1); invalidate(); renderSelections(); })));
+    if (!isLoad) {
+      row.addEventListener('dragover', event => { if (!working && draggedService && draggedService !== data.serviceId) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; row.classList.add('service-drop-target'); } });
+      row.addEventListener('dragleave', event => { if (!row.contains(event.relatedTarget)) row.classList.remove('service-drop-target'); });
+      row.addEventListener('drop', event => { event.preventDefault(); row.classList.remove('service-drop-target'); if (draggedService) moveService(selections.findIndex(service => service.serviceId === draggedService), index, true); draggedService = null; });
+    }
+    return row;
   }
   function renderSelections() {
     rows.replaceChildren(...(selections.length ? selections.map((data, index) => summary(data, false, index))
@@ -252,11 +275,11 @@ export async function realFlow(api, catalog, navigate) {
         labeled("I reviewed the target, services and values. Start this deployment and load test.", confirmed), run);
       status.textContent = "Plan ready for review. Nothing has been deployed yet.";
     } catch (reason) { error.textContent = reason.message; status.textContent = ""; }
-    finally { working = false; controls.forEach(node => node.disabled = false); }
+    finally { working = false; controls.forEach(node => node.disabled = false); renderSelections(); }
   }, true);
   root.append(notices, el("section", { class: "card" }, el("div", { class: "form-grid" }, labeled("Saved profile", savedSelect), labeled("Run name", name)),
       el("p", { class: "muted" }, `Environment: ${catalog.environment} · Context: ${settings.kubeContext}`)),
-    el("section", { class: "card" }, el("div", { class: "dialog-heading" }, el("h2", {}, "Services"), add), rows),
+    el("section", { class: "card" }, el("div", { class: "dialog-heading" }, el("h2", {}, "Services"), add), el("p", { class: "muted" }, "Deploys from top to bottom. Drag the handle or use the arrows to reorder. The load generator starts after all services are ready."), rows),
     el("section", { class: "card" }, el("div", { class: "dialog-heading" }, el("h2", {}, "Load generator"), chooseLoad), loadSummary),
     el("section", { class: "card" }, el("h2", {}, "Test duration"), labeled("Measurement duration (seconds)", duration),
       el("p", { class: "muted" }, "How long to observe traffic after warmup. Results use this window; when it ends, the orchestrator collects metrics and stops its load generator. Traffic rate and the tool’s own duration come from its values YAML."),
