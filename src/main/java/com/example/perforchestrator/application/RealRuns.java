@@ -95,16 +95,18 @@ public class RealRuns {
         write(run,State.DEPLOYING,run.verdict(),"Preflight passed; applying prepared services",run.metrics(),null,null,null,null);
       }
       case DEPLOYING -> {
-        for(var service:plan.services())if(!service.serviceId().equals(load.serviceId())) {
+        var services=plan.services().stream().filter(service->!service.serviceId().equals(load.serviceId())).toList();
+        for(int index=0;index<services.size();index++) {
+          var service=services.get(index);
           if(store.run(run.id()).state()==State.CANCEL_REQUESTED)return;
           if(Instant.now().isAfter(Instant.parse(run.createdAt()).plusSeconds(plan.profile().maxRunDurationSeconds())))throw Problem.invalid("duration","Run deadline reached during deployment");
-          helm.apply(run.id(),target(plan),service,chart(plan,service),false);
+          deploy(run,plan,service,false,"Service "+(index+1)+"/"+services.size());
         }
         write(run,State.STARTING_LOAD,run.verdict(),"Service Helm readiness passed; starting load generator",run.metrics(),null,null,null,null);
       }
       case STARTING_LOAD -> {
         if(!helm.baseline(target(plan),load.namespace(),load.releaseName()).equals("ABSENT"))throw Problem.conflict("Load release appeared after preparation; refusing to replace it");
-        helm.apply(run.id(),target(plan),load,chart(plan,load),true);
+        deploy(run,plan,load,true,"Load generator");
         write(run,State.RUNNING_LOAD,run.verdict(),"Load chart installed; generation is controlled by selected YAML",run.metrics(),null,
             run.id(),Instant.now().plusSeconds(plan.profile().loadGenerator().warmupSeconds()).toString(),null);
       }
@@ -125,6 +127,20 @@ public class RealRuns {
         store.releaseEnvironment(run.id());metrics.detach(run.id());live.remove(run.id());
       }
       default -> throw Problem.conflict("Unsupported real run state; verify cleanup");
+    }
+  }
+  private void deploy(Run run,Plan plan,PreparedService service,boolean load,String position) {
+    String context=position+": "+service.serviceId()+" · image version "+service.image().version()+" · namespace "+service.namespace()+" · release "+service.releaseName();
+    write(run,run.state(),run.verdict(),"Deploying "+context,run.metrics(),null,null,null,null);
+    if(store.run(run.id()).state()==State.CANCEL_REQUESTED)return;
+    long started=System.nanoTime();
+    try {
+      helm.apply(run.id(),target(plan),service,chart(plan,service),load);
+      long seconds=java.time.Duration.ofNanos(System.nanoTime()-started).toSeconds();
+      write(run,run.state(),run.verdict(),context+(load?" installed in ":" ready in ")+seconds+"s",run.metrics(),null,null,null,null);
+    } catch(Problem error) {
+      long seconds=java.time.Duration.ofNanos(System.nanoTime()-started).toSeconds();
+      throw new Problem(error.status(),error.code(),error.field(),context+" failed after "+seconds+"s. "+error.getMessage());
     }
   }
   private void write(Run run,State state,Verdict verdict,String message,Map<String,Double> values,String desired,String operation,String start,String end) {

@@ -73,6 +73,8 @@ Use Kubernetes Secret references in values. Prepared chart snapshots and values 
 
 ## 4. Execution and stop behavior
 
+Run status and the execution timeline identify each service as deployment starts, including its position, namespace and release. The current deployment shows a live elapsed timer; completion events retain the time until Helm readiness, and load-generator installation is tracked separately. These events persist independently of optional command diagnostics.
+
 Services use `helm upgrade --install --wait`. The application does not uninstall existing service releases before deployment: that can delete release-managed resources and disrupt persistent workloads. Helm updates chart-managed ConfigMaps during upgrade; application reload or pod restart behavior depends on the chart (for example, configuration checksum annotations). Only the run-owned load release is uninstalled during cleanup.
 
 - Service charts run `helm upgrade --install --wait`. Service releases remain after the run; there is no automatic rollback.

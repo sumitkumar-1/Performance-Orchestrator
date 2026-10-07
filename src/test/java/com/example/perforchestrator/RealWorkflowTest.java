@@ -52,6 +52,33 @@ class RealWorkflowTest {
     assertThat(store.run(run.id()).state()).isEqualTo(State.SUCCEEDED);assertThat(store.run(run.id()).verdict()).isEqualTo(Verdict.INCONCLUSIVE);
     verify(helm).stop(eq(run.id()),any(),any());assertThat(store.environmentAvailable("cluster/sandbox")).isTrue();verify(metrics).detach(run.id());
   }
+  @Test void deploymentPublishesServiceProgressBeforeHelmAndRecordsCompletion(){
+    var original=plan();
+    var tree=(com.fasterxml.jackson.databind.node.ObjectNode)Json.MAPPER.valueToTree(original);
+    tree.put("id",UUID.randomUUID().toString());
+    var services=tree.putArray("services");
+    for(String name:List.of("receiver","router","load")) {
+      var service=(com.fasterxml.jackson.databind.node.ObjectNode)Json.MAPPER.valueToTree(original.services().getFirst());
+      service.put("serviceId",name).put("releaseName",name+"-release");services.add(service);
+      ((com.fasterxml.jackson.databind.node.ObjectNode)tree.path("effectiveLoadConfiguration").path("charts")).put(name,"ckp/helm/"+name);
+    }
+    var prepared=Json.read(Json.write(tree),Plan.class);tree.put("checksum",PlanningService.checksum(prepared));
+    prepared=Json.read(Json.write(tree),Plan.class);store.plan(prepared);
+    var run=worker.enqueue("progress-key",prepared.id());
+    var order=new ArrayList<String>();
+    doAnswer(call->{
+      PreparedService service=call.getArgument(2);order.add(service.serviceId());
+      assertThat(store.run(run.id()).message()).startsWith("Deploying ").contains(service.serviceId(),"image version "+service.image().version(),service.namespace(),service.releaseName());
+      assertThat(store.events(run.id(),0)).last().satisfies(event->assertThat(event.message()).isEqualTo(store.run(run.id()).message()));
+      return null;
+    }).when(helm).apply(eq(run.id()),any(),any(),any(),anyBoolean());
+    worker.tick();worker.tick();worker.tick();worker.tick();
+    assertThat(order).containsExactly("receiver","router","load");
+    assertThat(store.events(run.id(),0)).extracting(Event::message).anyMatch(message->message.contains("Service 1/2: receiver") && message.contains("ready in"))
+        .anyMatch(message->message.contains("Service 2/2: router") && message.contains("ready in"))
+        .anyMatch(message->message.contains("Load generator: load") && message.contains("installed in"));
+  }
+
   @Test void cancellationAndRestartNeverRedeployAndCleanupFailureKeepsReservation(){
     var plan=plan();var run=worker.enqueue("cancel-key",plan.id());
     var cancelled=new RunService(store,null,catalog).cancel(run.id());worker.tick();worker.tick();

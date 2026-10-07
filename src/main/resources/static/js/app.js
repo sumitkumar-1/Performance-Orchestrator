@@ -629,6 +629,18 @@ async function runDetails(id, generation) {
     ),
   );
   if(diagnostics){app.append(diagnostics.node);pageCleanup=()=>diagnostics.dispose();}
+  let activeDeployment = null, timelineElapsed = null;
+  const elapsed = el("p", { class: "muted", hidden: true });
+  const updateElapsed = () => {
+    const active = activeDeployment && ["DEPLOYING", "STARTING_LOAD"].includes(activeDeployment.state) && activeDeployment.message.startsWith("Deploying ");
+    elapsed.hidden = !active;
+    const seconds = active ? Math.max(0, Math.floor((Date.now() - Date.parse(activeDeployment.updatedAt)) / 1000)) : 0;
+    const label = active ? `Elapsed: ${Math.floor(seconds / 60)}m ${seconds % 60}s` : "";
+    elapsed.textContent = label;
+    if(timelineElapsed) timelineElapsed.textContent = label;
+  };
+  const elapsedTimer = setInterval(updateElapsed, 1000), previousCleanup = pageCleanup;
+  pageCleanup = () => { clearInterval(elapsedTimer); previousCleanup?.(); };
   let cursor = 0;
   const update = async () => {
     const [run, events] = await Promise.all([
@@ -636,6 +648,7 @@ async function runDetails(id, generation) {
       api(`/runs/${id}/events?after=${cursor}`),
     ]);
     if (generation !== routeGeneration) return;
+    activeDeployment = run;
     status.replaceChildren(
       el(
         "div",
@@ -645,7 +658,10 @@ async function runDetails(id, generation) {
         el("span", { class: "muted" }, run.message),
       ),
     );
+    status.append(elapsed);
     for (const event of events) {
+      if(timelineElapsed) timelineElapsed.textContent = "";
+      timelineElapsed = el("span", { class: "muted" });
       timeline.append(
         el(
           "li",
@@ -653,10 +669,12 @@ async function runDetails(id, generation) {
           el("time", {}, time(event.time)),
           el("strong", {}, event.state.replaceAll("_", " ")),
           el("p", {}, event.message),
+          timelineElapsed,
         ),
       );
       cursor = event.id;
     }
+    updateElapsed();
     const units = {
       request_count: "requests",
       throughput_rps: "requests / second",
