@@ -630,6 +630,56 @@ async function runDetails(id, generation) {
   );
   if(diagnostics){app.append(diagnostics.node);pageCleanup=()=>diagnostics.dispose();}
   let activeDeployment = null, timelineElapsed = null;
+  let deploymentGroup = null, deploymentList = null, pendingService = null;
+  const deploymentRows = new Map();
+  function serviceState(row, state, detail) {
+    row.icon.textContent = state === "ready" ? "✓" : state === "failed" ? "✕" : state === "deploying" ? "◌" : "–";
+    row.icon.className = `deployment-indicator ${state}`;
+    row.icon.setAttribute("aria-label", state === "ready" ? "Deployment succeeded" : state);
+    row.detail.textContent = detail;
+  }
+  function appendTimelineEvent(event) {
+    if (timelineElapsed) timelineElapsed.textContent = "";
+    timelineElapsed = null;
+    if (event.state === "DEPLOYING") {
+      if (!deploymentGroup) {
+        deploymentList = el("div", { class: "deployment-progress-list" });
+        deploymentGroup = el("li", {}, el("time", {}, time(event.time)), el("strong", {}, "DEPLOYING"), deploymentList);
+        timeline.append(deploymentGroup);
+      }
+      const completed = / ready in (\d+)s$/.exec(event.message);
+      const context = event.message.replace(/^Deploying /, "").replace(/ ready in \d+s$/, "");
+      if (!/^Service \d+\/\d+: /.test(context)) {
+        // Older runs have only a stage-level message and no per-service events.
+        if (!deploymentRows.size) deploymentList.replaceChildren(el("p", { class: "muted" }, event.message));
+        return;
+      }
+      let row = deploymentRows.get(context);
+      if (!row) {
+        if (!deploymentRows.size) deploymentList.replaceChildren();
+        row = { icon: el("span", { role: "img" }), detail: el("span", { class: "muted" }), timer: el("span", { class: "muted" }) };
+        deploymentList.append(el("div", { class: "deployment-progress-row" }, row.icon,
+          el("div", {}, el("p", {}, context), el("div", { class: "deployment-progress-meta" }, row.detail, row.timer))));
+        deploymentRows.set(context, row);
+      }
+      if (completed) {
+        serviceState(row, "ready", `Ready in ${completed[1]}s`);
+        if (pendingService === row) pendingService = null;
+      } else {
+        if (pendingService && pendingService !== row) serviceState(pendingService, "stopped", "No completion recorded");
+        serviceState(row, "deploying", "Deploying"); pendingService = row; timelineElapsed = row.timer;
+      }
+      return;
+    }
+    if (pendingService) {
+      const failed = /failed|failure/i.test(event.message);
+      serviceState(pendingService, failed ? "failed" : "stopped", failed ? "Failed — see details below" : "Interrupted / completion not recorded");
+      pendingService = null;
+    }
+    timelineElapsed = el("span", { class: "muted" });
+    timeline.append(el("li", {}, el("time", {}, time(event.time)), el("strong", {}, event.state.replaceAll("_", " ")),
+      el("p", {}, event.message), timelineElapsed));
+  }
   const elapsed = el("p", { class: "muted", hidden: true });
   const updateElapsed = () => {
     const active = activeDeployment && ["DEPLOYING", "STARTING_LOAD"].includes(activeDeployment.state) && activeDeployment.message.startsWith("Deploying ");
@@ -660,18 +710,7 @@ async function runDetails(id, generation) {
     );
     status.append(elapsed);
     for (const event of events) {
-      if(timelineElapsed) timelineElapsed.textContent = "";
-      timelineElapsed = el("span", { class: "muted" });
-      timeline.append(
-        el(
-          "li",
-          {},
-          el("time", {}, time(event.time)),
-          el("strong", {}, event.state.replaceAll("_", " ")),
-          el("p", {}, event.message),
-          timelineElapsed,
-        ),
-      );
+      appendTimelineEvent(event);
       cursor = event.id;
     }
     updateElapsed();

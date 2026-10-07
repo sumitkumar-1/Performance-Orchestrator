@@ -448,6 +448,15 @@ textarea {
   color: var(--muted);
   margin: 0;
 }
+.deployment-progress-list { display: grid; gap: 12px; margin-top: 12px; }
+.deployment-progress-row { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; }
+.deployment-progress-row p { overflow-wrap: anywhere; }
+.deployment-progress-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; margin-top: 3px; }
+.deployment-indicator { font-weight: 700; text-align: center; line-height: 22px; border-radius: 50%; height: 22px; }
+.deployment-indicator.ready { color: #176d56; background: #e3f2e9; }
+.deployment-indicator.deploying { color: #7a5700; background: #fff1c9; }
+.deployment-indicator.failed { color: #a52a2a; background: #fce8e8; }
+.deployment-indicator.stopped { color: #596963; background: #edf1ee; }
 .detail-grid {
   display: grid;
   grid-template-columns: 1.5fr 1fr;
