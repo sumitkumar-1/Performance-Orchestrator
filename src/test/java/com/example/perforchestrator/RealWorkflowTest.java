@@ -31,7 +31,7 @@ class RealWorkflowTest {
     metrics=mock(LokiMeasurements.class);when(metrics.collect(any(),any())).thenReturn(Map.of());images=mock(ArtifactoryImages.class);preparation=mock(RealPreparation.class);
     settings=new ExecutionSettings(new MockEnvironment().withProperty("orchestrator.execution.enabled","true").withProperty("orchestrator.execution.workspace", directory.toString()));worker=worker();
   }
-  RealRuns worker(){return new RealRuns(store,catalog,connections,preparation,helm,metrics,images,tx,settings);}
+  RealRuns worker(){return new RealRuns(store,catalog,connections,preparation,helm,metrics,images,tx,settings,new AdditionalLoads(store,preparation,catalog,connections,images,helm,tx));}
   @AfterEach void cleanup(){db.close();}
   Plan plan(){
     var image=new Image("service:load","","repo/load","v1","sha256:"+"a".repeat(64));when(images.resolve(any(),any(),any(),any())).thenReturn(image);
@@ -41,6 +41,80 @@ class RealWorkflowTest {
         Map.of("target",Map.of("context","sandbox","server","https://cluster.invalid"),"loadService","load","charts",Map.of("load","ckp/helm/load"),"metrics",List.of(),"connectionHash",Json.hash(Json.write(connections.data()))),List.of(prepared),List.of(),false);
     p=new Plan(p.id(),PlanningService.checksum(p),p.createdAt(),p.expiresAt(),p.actor(),null,0,p.profile(),p.catalogHash(),p.clusterIdentity(),p.loadNamespace(),p.scenarioRevision(),p.effectiveLoadConfiguration(),p.services(),p.warnings(),false);store.plan(p);return p;
   }
+  AdditionalLoads additions(){return new AdditionalLoads(store,preparation,catalog,connections,images,helm,tx);}
+  Run running(){
+    var run=worker.enqueue("extra-"+UUID.randomUUID(),plan().id());
+    worker.tick();worker.tick();worker.tick();worker.tick();
+    var current=store.run(run.id());
+    // Leave time for independent requests without relying on sleeps.
+    store.update(new Run(current.id(),current.planId(),current.environment(),current.state(),current.verdict(),current.createdAt(),current.updatedAt(),current.startedAt(),Instant.now().plusSeconds(120).toString(),null,current.message(),current.cleanupOutcome(),current.metrics(),current.desiredOutcome(),current.loadOperationId()));
+    return store.run(run.id());
+  }
+  com.example.perforchestrator.domain.AdditionalLoad reviewExtra(Run run){
+    var original=store.plan(run.planId()).services().getFirst();
+    when(preparation.prepareAdditional(any(),any(),any())).thenAnswer(call->{
+      var service=new PreparedService(original.serviceId(),original.action(),original.namespace(),call.getArgument(2),original.image(),"ABSENT",original.sourceRevision(),original.originalHashes(),original.preparedFiles(),original.preparedHashes(),Map.of("rate",200),Map.of(),List.of());
+      return new RealPreparation.AdditionalPreparation(service,"ckp/helm/load");
+    });
+    return additions().prepare(run.id(),new RealPreparation.Deployment("load","master","v1",List.of(),""));
+  }
+  @Test void additionalLoadsInstallIndependentlyAndRepeatedSubmitIsIdempotent(){
+    var run=running();var first=reviewExtra(run);var second=reviewExtra(run);
+    assertThat(first.service().releaseName()).isNotEqualTo(second.service().releaseName()).hasSizeLessThanOrEqualTo(53);
+    assertThat(first.service().releaseName()).isNotEqualTo("load-release");
+    additions().enqueue(run.id(),first.id());additions().enqueue(run.id(),first.id());additions().enqueue(run.id(),second.id());
+    worker.tick();worker.tick();
+    assertThat(store.additionalLoads(run.id())).extracting(com.example.perforchestrator.domain.AdditionalLoad::state).containsExactly("RUNNING","RUNNING");
+    verify(helm,times(1)).apply(eq(first.id()),any(),eq(first.service()),eq(first.chart()),eq(true));
+    verify(helm,times(1)).apply(eq(second.id()),any(),eq(second.service()),eq(second.chart()),eq(true));
+    verify(helm,never()).stop(any(),any(),any());
+    new RunService(store,null,catalog).cancel(run.id());worker.tick();worker.tick();
+    assertThat(store.run(run.id()).state()).isEqualTo(State.CANCELLED);
+    verify(helm).stop(eq(run.id()),any(),any());verify(helm).stop(eq(first.id()),any(),eq(first.service()));verify(helm).stop(eq(second.id()),any(),eq(second.service()));
+  }
+  @Test void failedExtraInstallationCleansOnlyItsOwnReleaseAndKeepsBaselineRunning(){
+    var run=running();var extra=reviewExtra(run);additions().enqueue(run.id(),extra.id());
+    doThrow(com.example.perforchestrator.domain.Problem.conflict("Chart resource names conflict")).when(helm).apply(eq(extra.id()),any(),any(),any(),eq(true));
+    worker.tick();
+    assertThat(store.run(run.id()).state()).isEqualTo(State.RUNNING_LOAD);
+    assertThat(store.additionalLoad(extra.id()).state()).isEqualTo("FAILED_STOPPED");
+    verify(helm).stop(eq(extra.id()),any(),any());verify(helm,never()).stop(eq(run.id()),any(),any());
+  }
+  @Test void extraCleanupFailureDoesNotStopBaselineAndIsRetriedAtParentCleanup(){
+    var run=running();var extra=reviewExtra(run);additions().enqueue(run.id(),extra.id());
+    doThrow(com.example.perforchestrator.domain.Problem.conflict("Install failed")).when(helm).apply(eq(extra.id()),any(),any(),any(),eq(true));
+    when(helm.stop(eq(extra.id()),any(),any())).thenReturn(false);
+    worker.tick();
+    assertThat(store.run(run.id()).state()).isEqualTo(State.RUNNING_LOAD);
+    assertThat(store.additionalLoad(extra.id()).state()).isEqualTo("CLEANUP_FAILED");
+    verify(helm,never()).stop(eq(run.id()),any(),any());
+    when(helm.stop(eq(extra.id()),any(),any())).thenReturn(true);
+    new RunService(store,null,catalog).cancel(run.id());worker.tick();worker.tick();
+    assertThat(store.additionalLoad(extra.id()).state()).isEqualTo("STOPPED");
+    assertThat(store.run(run.id()).state()).isEqualTo(State.CANCELLED);
+  }
+  @Test void restartCleansPersistedAdditionalLoadsAndStillAttemptsBaselineIfExtraCleanupFails(){
+    var run=running();var first=reviewExtra(run);var second=reviewExtra(run);
+    additions().enqueue(run.id(),first.id());additions().enqueue(run.id(),second.id());worker.tick();worker.tick();
+    when(helm.stop(eq(first.id()),any(),any())).thenThrow(com.example.perforchestrator.domain.Problem.conflict("Ownership differs"));
+    worker=worker();worker.tick();
+    assertThat(store.run(run.id()).state()).isEqualTo(State.NEEDS_ATTENTION);
+    verify(helm).stop(eq(second.id()),any(),any());verify(helm).stop(eq(run.id()),any(),any());
+    assertThat(store.environmentAvailable("cluster/sandbox")).isFalse();
+    when(helm.stop(eq(first.id()),any(),any())).thenReturn(true);worker.recover(run.id());
+    assertThat(store.additionalLoads(run.id())).extracting(com.example.perforchestrator.domain.AdditionalLoad::state).containsOnly("STOPPED");
+    assertThat(store.environmentAvailable("cluster/sandbox")).isTrue();
+  }
+  @Test void cancellationBeforeInstallSkipsQueuedExtraAndDisallowsNewSubmissions(){
+    var run=running();var extra=reviewExtra(run);var pending=reviewExtra(run);
+    additions().enqueue(run.id(),extra.id());new RunService(store,null,catalog).cancel(run.id());
+    assertThatThrownBy(()->additions().enqueue(run.id(),pending.id())).hasMessageContaining("only while");
+    worker.tick();worker.tick();
+    verify(helm,never()).apply(eq(extra.id()),any(),any(),any(),anyBoolean());
+    assertThat(store.additionalLoad(extra.id()).state()).isEqualTo("NOT_STARTED");
+    assertThatThrownBy(()->reviewExtra(run)).hasMessageContaining("only while");
+  }
+
   @Test void queuesOnceExecutesAndCleansOwnedLoadWithoutSyntheticPass(){
     var plan=plan();var run=worker.enqueue("request-key",plan.id());assertThat(worker.enqueue("request-key",plan.id()).id()).isEqualTo(run.id());
     worker.tick();worker.tick();worker.tick();worker.tick();
@@ -206,6 +280,10 @@ class RealWorkflowTest {
         new RealPreparation.Deployment("load","main","v1",List.of("ckp/helm/load/values.yaml"),"",
           Map.of("ckp/unselected.yaml","rate: 1")),0,10,600,List.of(),List.of());
     assertThatThrownBy(()->planner.prepare(invalidEdits)).hasMessageContaining("selected values files");
+    var extra=planner.prepareAdditional(request.loadGenerator(),helm.target(),"load-independent");
+    assertThat(extra.service().releaseName()).isEqualTo("load-independent");
+    assertThat(extra.service().effectiveValues()).containsEntry("rate",20).containsEntry("imageTag","v1");
+    verify(helm).validate(any(),eq("ckp/helm/load"),eq("load-ns"),eq("load-independent"),eq("load:v1"));
     when(helm.baseline(any(),any(),any())).thenReturn("EXISTS");
     assertThatThrownBy(()->planner.prepare(request)).hasMessageContaining("already exists");
     clearInvocations(source);

@@ -19,9 +19,10 @@ public class RealRuns {
   private final Store store; private final Catalog catalog; private final ConnectionConfig connections;
   private final RealPreparation preparation; private final HelmExecution helm; private final LokiMeasurements metrics;
   private final ArtifactoryImages images; private final TransactionTemplate tx; private final ExecutionSettings settings;
+  private final AdditionalLoads additionalLoads;
   private final Set<String> live=ConcurrentHashMap.newKeySet();
-  public RealRuns(Store store,Catalog catalog,ConnectionConfig connections,RealPreparation preparation,HelmExecution helm,LokiMeasurements metrics,ArtifactoryImages images,TransactionTemplate tx,ExecutionSettings settings){
-    this.store=store;this.catalog=catalog;this.connections=connections;this.preparation=preparation;this.helm=helm;this.metrics=metrics;this.images=images;this.tx=tx;this.settings=settings;
+  public RealRuns(Store store,Catalog catalog,ConnectionConfig connections,RealPreparation preparation,HelmExecution helm,LokiMeasurements metrics,ArtifactoryImages images,TransactionTemplate tx,ExecutionSettings settings,AdditionalLoads additionalLoads){
+    this.additionalLoads=additionalLoads;this.store=store;this.catalog=catalog;this.connections=connections;this.preparation=preparation;this.helm=helm;this.metrics=metrics;this.images=images;this.tx=tx;this.settings=settings;
   }
   public Run enqueue(String key,String planId) {
     preparation.enabled();
@@ -81,7 +82,7 @@ public class RealRuns {
     var load=load(plan); var now=Instant.now();
     if(!live.contains(run.id())) {
       // Restart cannot safely resume a partially applied chart or recover in-memory monitoring credentials.
-      if(!helm.stop(run.id(),target(plan),load))throw Problem.conflict("Restart cleanup could not confirm load stopped");
+      cleanupOwnedLoads(run,plan);
       write(run,State.FAILED,Verdict.INCONCLUSIVE,"Server restarted; owned load stopped, services retained. Prepare a new run.",run.metrics(),"FAILED",null,null,now.toString());
       store.releaseEnvironment(run.id());return;
     }
@@ -112,7 +113,7 @@ public class RealRuns {
       }
       case RUNNING_LOAD -> {
         var start=Instant.parse(run.measurementStartedAt());
-        if(now.isBefore(start.plusSeconds(plan.profile().loadGenerator().measurementSeconds())))return;
+        if(now.isBefore(start.plusSeconds(plan.profile().loadGenerator().measurementSeconds()))) {additionalLoads.advance(run,plan);return;}
         write(run,State.COLLECTING,run.verdict(),"Measurement window ended; collecting configured LogQL metrics",run.metrics(),null,null,null,now.toString());
       }
       case COLLECTING -> {
@@ -121,9 +122,9 @@ public class RealRuns {
         write(run,State.CLEANING_UP,verdict,"Performance verdict: "+verdict+"; missing or unconfigured metrics remain unavailable",values,null,null,null,null);
       }
       case CLEANING_UP -> {
-        if(!helm.stop(run.id(),target(plan),load))throw Problem.conflict("Cannot confirm owned load cleanup");
+        cleanupOwnedLoads(run,plan);
         var state=State.valueOf(run.desiredOutcome());
-        write(run,state,run.verdict(),run.message()+" Cleanup confirmed the load release is absent; service releases retained.",run.metrics(),null,null,null,null);
+        write(run,state,run.verdict(),run.message()+" Cleanup confirmed all run-owned load releases are absent; service releases retained.",run.metrics(),null,null,null,null);
         store.releaseEnvironment(run.id());metrics.detach(run.id());live.remove(run.id());
       }
       default -> throw Problem.conflict("Unsupported real run state; verify cleanup");
@@ -158,10 +159,17 @@ public class RealRuns {
           nextState==State.NEEDS_ATTENTION?"FAILED":nextState.terminal()?"STOPPED_OWNED_LOAD_SERVICES_KEPT":"PENDING",values,nextDesired,operation==null?run.loadOperationId():operation));
     });
   }
+  private void cleanupOwnedLoads(Run run,Plan plan) {
+    RuntimeException failure=null;
+    try {additionalLoads.cleanup(run,plan);} catch(RuntimeException error){failure=error;}
+    try {if(!helm.stop(run.id(),target(plan),load(plan)))throw Problem.conflict("Cannot confirm baseline load cleanup");}
+    catch(RuntimeException error){if(failure==null)failure=error;else failure.addSuppressed(error);}
+    if(failure!=null)throw failure;
+  }
   public synchronized Run recover(String id) {
     preparation.enabled();var run=store.run(id);var plan=store.plan(run.planId());
     if(plan.simulated() || run.state()!=State.NEEDS_ATTENTION)throw Problem.conflict("Select a real run needing attention");
-    if(!helm.stop(id,target(plan),load(plan)))throw Problem.conflict("Load cleanup remains unconfirmed");
+    cleanupOwnedLoads(run,plan);
     write(run,State.FAILED,run.verdict(),"Manual recovery verified owned load cleanup",run.metrics(),"FAILED",null,null,null);
     store.releaseEnvironment(id);metrics.detach(id);live.remove(id);return store.run(id);
   }

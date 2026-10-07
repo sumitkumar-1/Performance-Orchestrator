@@ -320,3 +320,16 @@ helm --kube-context sandbox-nvan list \
 Use the actual configured namespace. Run from the same terminal as the application and compare PATH/KUBECONFIG. If the helper is missing, install the organization-approved helper or configure its absolute executable path through your approved kubeconfig setup. If the helper exits unsuccessfully, inspect its local diagnostic and renew its organization-specific login. If its ExecCredential API version or interactiveMode is rejected, update the helper/kubeconfig according to the CKP team's supported client configuration. Do not change API-version strings blindly or disable TLS validation.
 
 If the helper is specifically `kubectl` and exits with code 1, the executable was found: investigate its exec arguments/subcommand and local error, rather than assuming kubectl is missing. The app inherits its parent environment but runs external commands without a terminal and closes stdin (except when passing a Helm repository token). Complete any required interactive organization login in the launching terminal first; a helper that still requires interactive input needs the CKP team’s supported noninteractive/cached-login configuration.
+
+
+## Add traffic to an active run
+
+In real mode, open the run and use **Load installations → Add load** while the baseline is running. Select a configured load-generator service, Git reference, image version and values files. Edit its YAML for the new traffic pattern, choose **Review additional load**, check the generated release name and effective values, then choose **Install additional load**.
+
+Each addition gets a unique `load-<UUID>` Helm release in the service's configured namespace. The same load-generator service can be added multiple times with different values. Preparation checks out CKP, replaces chart version placeholders, resolves dependencies and validates the chart using that new release name. Existing baseline load and services are not upgraded or uninstalled by adding traffic. Repeated installation submissions do not create duplicate releases.
+
+The chart must support simultaneous releases: Kubernetes resource names and selectors must be release-specific. If its values force fixed names (`fullnameOverride`, deployment suffixes, or custom name fields), adjust those in the YAML for the added load. The orchestrator cannot infer arbitrary chart naming conventions and will not take ownership of conflicting resources.
+
+The run page records each addition's image, namespace, release, actor and installation/cleanup status; command activity is attached to the same run. An installation error attempts cleanup of only that additional release, leaving baseline traffic running. If that cleanup fails, the addition is marked CLEANUP_FAILED and cleanup is retried when the parent ends. “RUNNING” means Helm installation completed; use monitoring to verify actual traffic.
+
+Additional loads share the parent's remaining measurement window and overall deadline; they do not extend either. Choose a long enough window when configuring the baseline. Completion, cancellation and restart recovery clean up **all** load releases owned by the run, retaining service deployments. Cleanup failures retain the environment reservation and require recovery. This addition workflow is available in real mode; simulation retains its original single-load workflow.

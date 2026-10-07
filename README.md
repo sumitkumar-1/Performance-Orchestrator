@@ -299,3 +299,6 @@ Monitoring panels can be reused independently of run profiles: choose **Monitori
 Optional real-run diagnostics are disabled by default. Set `orchestrator.diagnostics.enabled: true` in `application.yaml` (CKP: `application.orchestrator.diagnostics.enabled` in Helm values) and restart to enable recording and **Show diagnostics** buttons. The console stays hidden until opened. It records safe command/API summaries from preparation through execution, with timings and exit/HTTP statuses. Failed preparation attempts remain inspectable from Configure run. See [diagnostic activity and credential-helper troubleshooting](docs/integration/real-execution.md#command-and-api-activity).
 
 Run service order is configured with drag handles or up/down buttons in Configure run, including when loading saved profiles. Both simulation and real execution follow the displayed order. Legacy service dependency lists are ignored.
+
+
+While a real run is generating load, use **Load installations → Add load** on its run page to review and install another traffic pattern as an independent Helm release. Existing load and service deployments remain untouched. Additional loads share the parent run's time limits and are cleaned up when it ends. See [additional-load operation and chart requirements](docs/integration/real-execution.md#add-traffic-to-an-active-run).

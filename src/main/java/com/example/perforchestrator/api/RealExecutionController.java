@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/real")
 public class RealExecutionController {
   @org.springframework.beans.factory.annotation.Autowired private com.example.perforchestrator.infrastructure.diagnostics.DiagnosticLog diagnostics;
+  @org.springframework.beans.factory.annotation.Autowired private AdditionalLoads additionalLoads;
   private final RealPreparation preparation;private final RealRuns runs;private final ExecutionSettings settings;private final RealProfiles profiles;
   public RealExecutionController(RealPreparation preparation,RealRuns runs,ExecutionSettings settings,RealProfiles profiles){this.profiles=profiles;this.preparation=preparation;this.runs=runs;this.settings=settings;}
   @GetMapping("/execution") public Object settings(){return Map.of("enabled",settings.enabled,"kubeContext",settings.context,"expectedApiServer",settings.expectedServer,"commandTimeoutSeconds",settings.timeoutSeconds,"defaultRunDurationSeconds",settings.defaultRunDurationSeconds,"maxRunDurationSeconds",settings.maxRunDurationSeconds);}
@@ -31,6 +32,22 @@ public class RealExecutionController {
     if(trace==null)trace=diagnostics.create(null);
     try(var scope=diagnostics.scope(trace)){var plan=preparation.prepare(request,progress::step);diagnostics.plan(trace,plan.id());progress.finish(true);return plan;}
     catch(RuntimeException error){progress.finish(false);throw error;}
+  }
+  @GetMapping("/runs/{id}/loads") public Object loads(@PathVariable String id){return additionalLoads.list(id).stream().map(load->loadView(load,false)).toList();}
+  @PostMapping("/runs/{id}/loads/review") public Object reviewLoad(@PathVariable String id,@RequestBody RealPreparation.Deployment request){
+    try(var scope=diagnostics.scope(diagnostics.forRun(id))){return loadView(additionalLoads.prepare(id,request),true);}
+  }
+  @PostMapping("/runs/{id}/loads/{loadId}/start") public Object startLoad(@PathVariable String id,@PathVariable String loadId){
+    try(var scope=diagnostics.scope(diagnostics.forRun(id))){return loadView(additionalLoads.enqueue(id,loadId),false);}
+  }
+  private Object loadView(com.example.perforchestrator.domain.AdditionalLoad load,boolean includeValues) {
+    var service=load.service();
+    var details=new java.util.LinkedHashMap<String,Object>();
+    details.put("serviceId",service.serviceId());details.put("namespace",service.namespace());details.put("releaseName",service.releaseName());
+    details.put("image",service.image());details.put("sourceRevision",service.sourceRevision());
+    if(includeValues)details.put("effectiveValues",service.effectiveValues());
+    return Map.of("id",load.id(),"actor",load.actor(),"createdAt",load.createdAt(),"updatedAt",load.updatedAt(),
+        "state",load.state(),"message",load.message(),"service",details);
   }
   public record Submit(String planId){}
   @PostMapping("/runs") public Object run(@RequestHeader("Idempotency-Key")String key,@RequestBody Submit request){

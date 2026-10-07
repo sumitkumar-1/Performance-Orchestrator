@@ -1,4 +1,5 @@
 import { runMonitoring } from "./run-monitoring.js";
+import { additionalLoads } from "./additional-loads.js";
 import { realFlow } from "./real-flow.js";
 import { diagnosticsPanel } from "./diagnostics.js";
 import { el, labeled, input, select } from "./dom.js";
@@ -569,6 +570,7 @@ async function runDetails(id, generation) {
   const initial = await api("/runs/" + id),
     plan = await api("/plans/" + initial.planId);
   const diagnostics=plan.simulated?null:diagnosticsPanel(api,{runId:id});
+  const loads=plan.simulated?null:additionalLoads(api,{services:catalog.services,environment:initial.environment},id,plan);
   const status = el("div",{class:"card run-status-card"}),
     timeline = el("ol", { class: "timeline" }),
     metrics = el("div", { class: "metrics" }),
@@ -584,6 +586,7 @@ async function runDetails(id, generation) {
       plan.simulated?null:el("a",{href:"#monitor/"+id,target:"_blank",rel:"noopener",class:"button primary"},"Open monitoring ↗"),
       diagnostics?.toggle,actions),
     status,
+    loads?.node,
     el(
       "div",
       { class: "detail-grid spacer" },
@@ -628,7 +631,7 @@ async function runDetails(id, generation) {
       ),
     ),
   );
-  if(diagnostics){app.append(diagnostics.node);pageCleanup=()=>diagnostics.dispose();}
+  if(diagnostics){app.append(diagnostics.node);pageCleanup=()=>{diagnostics.dispose();loads?.dispose();};}
   let activeDeployment = null, timelineElapsed = null;
   let deploymentGroup = null, deploymentList = null, pendingService = null, deploymentSummary = null, deploymentTotal = 0;
   const deploymentRows = new Map();
@@ -775,6 +778,8 @@ async function runDetails(id, generation) {
     const dashboard = catalog.env[run.environment]?.configuration.dashboardUrl;
     if (dashboard && /^https:\/\//.test(dashboard))
       actions.append(link("Open Grafana", dashboard, "button"));
+    await loads?.update(run);
+    if (generation !== routeGeneration) return;
     if (!terminal.has(run.state)) poll = setTimeout(refresh, 1500);
   };
   const refresh = async () => {

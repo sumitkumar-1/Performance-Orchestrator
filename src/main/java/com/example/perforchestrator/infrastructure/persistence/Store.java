@@ -126,6 +126,25 @@ public class Store {
     return one("SELECT body FROM runs WHERE id=?", id, Run.class, "Run");
   }
 
+  public List<AdditionalLoad> additionalLoads(String runId) {
+    return db.query("SELECT body FROM additional_loads WHERE run_id=?",(r,n)->Json.read(r.getString(1),AdditionalLoad.class),runId)
+        .stream().sorted(Comparator.comparing(AdditionalLoad::createdAt)).toList();
+  }
+
+  public AdditionalLoad additionalLoad(String id) {
+    return one("SELECT body FROM additional_loads WHERE id=?",id,AdditionalLoad.class,"Additional load");
+  }
+
+  public void insertAdditionalLoad(AdditionalLoad load) {
+    db.update("INSERT INTO additional_loads VALUES (?,?,?)",load.id(),load.runId(),Json.write(load));
+  }
+
+  public void updateAdditionalLoad(AdditionalLoad load) {
+    db.update("UPDATE additional_loads SET body=? WHERE id=?",Json.write(load),load.id());
+    db.update("INSERT INTO events(run_id,event_time,state,message) VALUES (?,?,?,?)",load.runId(),load.updatedAt(),
+        "ADDITIONAL_LOAD",load.service().releaseName()+": "+load.message());
+  }
+
   private <T> T one(String query, String id, Class<T> type, String label) {
     return db.query(query, (r, n) -> Json.read(r.getString(1), type), id).stream()
         .findFirst()

@@ -125,11 +125,25 @@ public class RealPreparation {
     plan=new Plan(plan.id(),PlanningService.checksum(plan),plan.createdAt(),plan.expiresAt(),plan.actor(),null,0,plan.profile(),plan.catalogHash(),plan.clusterIdentity(),plan.loadNamespace(),plan.scenarioRevision(),plan.effectiveLoadConfiguration(),plan.services(),plan.warnings(),false);
     store.plan(plan); return plan;
   }
+  public record AdditionalPreparation(PreparedService service,String chart) {}
+  public AdditionalPreparation prepareAdditional(Deployment selection,Map<String,Object> target,String releaseName) {
+    enabled();
+    if(selection==null || selection.serviceId()==null)throw Problem.invalid("loadGenerator","Choose a load generator");
+    if(!helm.target().equals(target))throw Problem.conflict("Cluster target changed since this run started");
+    var charts=new HashMap<String,String>();
+    var service=prepareService(selection,target,charts,new HashSet<>(),(id,stage)->{},releaseName);
+    if(!"ABSENT".equals(service.baselineDigest()))throw Problem.conflict("Additional load release already exists; prepare again");
+    return new AdditionalPreparation(service,charts.get(service.serviceId()));
+  }
   private PreparedService prepareService(Deployment selection,Map<String,Object> target,Map<String,String> charts,Set<String> destinations,java.util.function.BiConsumer<String,String> progress) {
+    return prepareService(selection,target,charts,destinations,progress,null);
+  }
+  private PreparedService prepareService(Deployment selection,Map<String,Object> target,Map<String,String> charts,Set<String> destinations,java.util.function.BiConsumer<String,String> progress,String releaseName) {
     var service=catalog.service(selection.serviceId());
     var destination=service.deploymentByEnvironment().getOrDefault(catalog.boundEnvironment(),service.deploymentDefaults());
     if(destination==null || !destination.namespace().matches("[a-z0-9][a-z0-9-]{0,62}") || !destination.releaseName().matches("[a-z0-9][a-z0-9-]{0,52}"))
       throw Problem.invalid("deployment","Configure a valid namespace and Helm release");
+    if(releaseName!=null)destination=new Catalog.Destination(destination.namespace(),releaseName,destination.valuesFiles());
     if(!destinations.add(destination.namespace()+"/"+destination.releaseName()))throw Problem.invalid("deployment","Two services cannot share a Helm release");
     if(service.sourceProject()==null || service.containerImage()==null)throw Problem.invalid("service","Configure Git and container image mappings");
     String chart=service.sourceProject().chartPath();ConnectionConfigSafe(chart);
