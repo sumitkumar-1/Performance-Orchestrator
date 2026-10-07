@@ -53,9 +53,9 @@ public class RealPreparation {
     if(request==null || request.name()==null || request.name().isBlank() || request.name().length()>100 || request.loadGenerator()==null)
       throw Problem.invalid("profile","Name and load-generator service are required");
     if(request.services()==null || request.services().size()>30 || request.warmupSeconds()<0 || request.measurementSeconds()<1
-        || request.maxRunDurationSeconds()<60 || request.maxRunDurationSeconds()>28800
+        || request.maxRunDurationSeconds()<60 || request.maxRunDurationSeconds()>settings.maxRunDurationSeconds
         || (long)request.warmupSeconds()+request.measurementSeconds()>=request.maxRunDurationSeconds())
-      throw Problem.invalid("duration","Use a 1–480 minute run limit with room for preparation, warmup, measurement and cleanup");
+      throw Problem.invalid("duration","Use a run limit between 60 and "+settings.maxRunDurationSeconds+" seconds with room for deployment, warmup and measurement");
     var target=helm.target();
     var selections=new LinkedHashMap<String,Deployment>();
     for(var selection:request.services()) if(selection==null || selections.put(selection.serviceId(),selection)!=null) throw Problem.invalid("services","Duplicate service");

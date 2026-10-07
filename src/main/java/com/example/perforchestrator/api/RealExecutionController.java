@@ -11,7 +11,7 @@ public class RealExecutionController {
   @org.springframework.beans.factory.annotation.Autowired private com.example.perforchestrator.infrastructure.diagnostics.DiagnosticLog diagnostics;
   private final RealPreparation preparation;private final RealRuns runs;private final ExecutionSettings settings;private final RealProfiles profiles;
   public RealExecutionController(RealPreparation preparation,RealRuns runs,ExecutionSettings settings,RealProfiles profiles){this.profiles=profiles;this.preparation=preparation;this.runs=runs;this.settings=settings;}
-  @GetMapping("/execution") public Object settings(){return Map.of("enabled",settings.enabled,"kubeContext",settings.context,"expectedApiServer",settings.expectedServer,"commandTimeoutSeconds",settings.timeoutSeconds);}
+  @GetMapping("/execution") public Object settings(){return Map.of("enabled",settings.enabled,"kubeContext",settings.context,"expectedApiServer",settings.expectedServer,"commandTimeoutSeconds",settings.timeoutSeconds,"defaultRunDurationSeconds",settings.defaultRunDurationSeconds,"maxRunDurationSeconds",settings.maxRunDurationSeconds);}
   @GetMapping("/profiles") public Object profiles(){return profiles.list();}
   public record ProfileInput(String id,Integer revision,RealPreparation.Request profile){}
   @PostMapping("/profiles") public Object save(@RequestBody ProfileInput input){return profiles.save(input.id(),input.revision(),input.profile());}

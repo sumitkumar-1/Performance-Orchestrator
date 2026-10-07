@@ -73,6 +73,20 @@ Use Kubernetes Secret references in values. Prepared chart snapshots and values 
 
 ## 4. Execution and stop behavior
 
+Timeouts are configured at startup in `application.yaml`:
+
+```yaml
+orchestrator:
+  execution:
+    command-timeout-seconds: 600
+    default-run-duration-seconds: 7200
+    max-run-duration-seconds: 28800
+```
+
+`command-timeout-seconds` controls each Helm operation (10–1800 seconds); subprocesses have an additional 15-second allowance. `default-run-duration-seconds` initializes new run profiles. `max-run-duration-seconds` caps the overall timeout accepted at review. The overall timeout must be at least 60 seconds, and the default must fit within the configured maximum. Under Helm values, put these settings under `application.orchestrator.execution`. Restart after changing them.
+
+Saved profiles retain their previous overall timeout: edit **Advanced timing → Overall timeout (seconds)**, save and review again. Seven deployments at up to 600 seconds each can consume 4,200 seconds before load installation, warmup or measurement, so budget the whole run accordingly. The overall deadline is checked between operations; it does not forcibly interrupt an in-progress Helm command, and cleanup can extend past it.
+
 Run status and the execution timeline identify each service as deployment starts, including its position, namespace and release. The current deployment shows a live elapsed timer; completion events retain the time until Helm readiness, and load-generator installation is tracked separately. These events persist independently of optional command diagnostics.
 
 Services use `helm upgrade --install --wait`. The application does not uninstall existing service releases before deployment: that can delete release-managed resources and disrupt persistent workloads. Helm updates chart-managed ConfigMaps during upgrade; application reload or pod restart behavior depends on the chart (for example, configuration checksum annotations). Only the run-owned load release is uninstalled during cleanup.

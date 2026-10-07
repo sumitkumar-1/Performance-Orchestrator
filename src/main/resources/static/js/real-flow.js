@@ -15,7 +15,7 @@ export async function realFlow(api, catalog, navigate) {
   const ids = Object.keys(catalog.services).filter(id => catalog.services[id].sourceProject && catalog.services[id].containerImage).sort();
   if (!ids.length) { root.append(el("p", { class: "card" }, "Add service Git, image and Helm settings in Connections & catalog first.")); return root; }
   const name = input("Performance test"), duration = input("60", "number", { min: 1 });
-  const warmup = input("0", "number", { min: 0 }), deadline = input("900", "number", { min: 60, max: 28800 });
+  const warmup = input("0", "number", { min: 0 }), deadline = input(String(settings.defaultRunDurationSeconds ?? 900), "number", { min: 60, max: settings.maxRunDurationSeconds ?? 28800 });
   const rows = el("div", { class: "run-selections" }), loadSummary = el("div"), preview = el("section");
   const status = el("p", { role: "status", class: "run-status", "aria-live": "polite", hidden: true }), error = el("p", { role: "alert", class: "error run-error", tabindex: "-1", hidden: true });
   const notices = el("div", {class:"run-notices",hidden:true},error,status);
@@ -240,7 +240,7 @@ export async function realFlow(api, catalog, navigate) {
   savedSelect.addEventListener("change", () => {
     const saved = savedProfiles.find(p => p.id === savedSelect.value); savedId = saved?.id || null; savedRevision = saved?.revision || null; invalidate();
     const p = saved?.profile;
-    name.value = p?.name || "Performance test"; warmup.value = p?.warmupSeconds ?? 0; duration.value = p?.measurementSeconds ?? 60; deadline.value = p?.maxRunDurationSeconds ?? 900;
+    name.value = p?.name || "Performance test"; warmup.value = p?.warmupSeconds ?? 0; duration.value = p?.measurementSeconds ?? 60; deadline.value = p?.maxRunDurationSeconds ?? settings.defaultRunDurationSeconds ?? 900;
     selections = structuredClone(p?.services || []); load = p?.loadGenerator ? structuredClone(p.loadGenerator) : null;
     monitoring.set(p?.metrics || [], p?.thresholds || []); renderSelections();
   });
@@ -284,7 +284,7 @@ export async function realFlow(api, catalog, navigate) {
     el("section", { class: "card" }, el("h2", {}, "Test duration"), labeled("Measurement duration (seconds)", duration),
       el("p", { class: "muted" }, "How long to observe traffic after warmup. Results use this window; when it ends, the orchestrator collects metrics and stops its load generator. Traffic rate and the tool’s own duration come from its values YAML."),
       el("details", {}, el("summary", {}, "Advanced timing"), el("div", { class: "form-grid spacer" }, labeled("Warmup (seconds)", warmup), labeled("Overall timeout (seconds)", deadline)),
-        el("p", { class: "muted" }, "Warmup is excluded from measurements. The overall timeout includes deployment, warmup and measurement. On timeout, cleanup starts; an in-progress Helm command and cleanup can take additional time. Allow enough time for deployment, and set the load YAML duration to cover warmup plus measurement."))),
+        el("p", { class: "muted" }, `Warmup is excluded from measurements. The overall timeout includes deployment, warmup and measurement. Each Helm operation has a ${settings.commandTimeoutSeconds ?? 300}s timeout. Services deploy sequentially; allow time for all services plus load installation and measurement. Cleanup and an in-progress command can extend past the overall deadline. Set the load YAML duration to cover warmup plus measurement.`))),
     monitoring.node,
     el("div", {}, el("p", { class: "muted" }, "Services remain deployed. Only this run’s load-generator release is uninstalled after completion or cancellation."), el("div", { class: "card-actions" }, saveProfile, prepare, diagnostics.toggle)), preview,diagnostics.node);
   for (const field of [name, warmup, duration, deadline]) field.addEventListener("input", invalidate);

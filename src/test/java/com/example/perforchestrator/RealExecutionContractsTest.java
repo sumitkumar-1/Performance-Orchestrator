@@ -26,6 +26,17 @@ class RealExecutionContractsTest {
     assertThat(result.output()).isEqualTo("$(touch should-not-exist); a b");assertThat(temp.resolve("should-not-exist")).doesNotExist();
     assertThatThrownBy(()->runner.run(List.of("/bin/sleep","2"),temp,Map.of(),Duration.ofMillis(30))).hasMessageContaining("timed out");
   }
+  @Test void executionTimeoutsAreConfigurableAndValidateDefaultAgainstMaximum() {
+    var env=new MockEnvironment().withProperty("orchestrator.execution.command-timeout-seconds","600")
+        .withProperty("orchestrator.execution.default-run-duration-seconds","7200")
+        .withProperty("orchestrator.execution.max-run-duration-seconds","259200");
+    var configured=new ExecutionSettings(env);
+    assertThat(configured.timeoutSeconds).isEqualTo(600);
+    assertThat(configured.defaultRunDurationSeconds).isEqualTo(7200);
+    assertThat(configured.maxRunDurationSeconds).isEqualTo(259200);
+    env.setProperty("orchestrator.execution.max-run-duration-seconds","3600");
+    assertThatThrownBy(()->new ExecutionSettings(env)).hasMessageContaining("default run duration");
+  }
   @Test void discoversCloneUrlAndChecksOutOnlyCkpWithTokenOffCommandLine() throws Exception {
     var config=new ConnectionConfig(new ConnectionConfig.Data(Map.of(),Map.of(),Map.of(),Map.of(),
         Map.of("stash",new ConnectionConfig.Bitbucket("https://stash.invalid/rest/api",null,"token"))));
