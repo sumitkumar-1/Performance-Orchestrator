@@ -74,11 +74,22 @@ class PreparationValidationTest {
   }
 
   @Test
-  void dependencyCycleBlocksPlanning() throws Exception {
+  void runOrderTakesPrecedenceOverLegacyDependencies() throws Exception {
     ((ObjectNode) tree.path("services").path("auth-service"))
         .putArray("dependencies")
-        .add("auth-service");
-    assertThatThrownBy(this::planner).hasMessageContaining("Invalid catalog");
+        .add("auth-service").add("key-service").add("removed-service");
+    var planner = planner();
+    var original = profile();
+    for (var ids : List.of(List.of("auth-service", "key-service"), List.of("key-service", "auth-service"))) {
+      var ordered = new Profile(original.name(), original.targetEnvironment(),
+          ids.stream().map(id -> new Selection(id, Action.DEPLOY, new Build("dev", "", "build-103"), "")).toList(),
+          original.loadGenerator(), original.maxRunDurationSeconds(), original.thresholds(), original.simulationCase());
+      assertThat(planner.create(null, null, ordered).services()).extracting(PreparedService::serviceId)
+          .containsExactlyElementsOf(ids);
+    }
+    // Legacy references must not implicitly add services to a run either.
+    assertThat(planner.create(null, null, original).services()).extracting(PreparedService::serviceId)
+        .containsExactly("auth-service");
   }
 
   @Test
