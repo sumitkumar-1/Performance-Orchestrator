@@ -255,8 +255,26 @@ public class HelmExecution {
         new org.yaml.snakeyaml.constructor.SafeConstructor(loaderOptions)
       ).loadAll(rendered))
         selected |= containsSelectedContainer(document, selectedImage);
-    } catch (final RuntimeException e) {
-      throw Problem.invalid("chart", "Rendered Helm manifests are invalid YAML");
+    } catch (final org.yaml.snakeyaml.error.YAMLException e) {
+      final String reason =
+        e instanceof org.yaml.snakeyaml.constructor.DuplicateKeyException
+          ? "duplicate mapping key"
+          : "YAML syntax, structure, or parser limit rejected";
+      final String location =
+        e instanceof final org.yaml.snakeyaml.error.MarkedYAMLException marked &&
+        marked.getProblemMark() != null
+          ? " at rendered line " +
+            (marked.getProblemMark().getLine() + 1) +
+            ", column " +
+            (marked.getProblemMark().getColumn() + 1)
+          : "";
+      throw Problem.invalid(
+        "chart",
+        "Rendered Helm manifests are invalid YAML: " +
+          reason +
+          location +
+          ". Helm template exited successfully; this is the application's YAML validation. Manifest values are withheld."
+      );
     }
     if (!selected) throw Problem.invalid(
       "image",

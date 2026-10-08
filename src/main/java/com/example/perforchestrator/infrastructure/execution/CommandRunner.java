@@ -46,18 +46,30 @@ public class CommandRunner {
         (executable.equals("kubectl") && args.contains("--context")));
     final var credentials =
       clusterCommand && input.length == 0 ? AdSessionCredentials.open() : null;
+    // A successful template command returns machine-readable YAML on stdout only.
+    final boolean template =
+      executable.equals("helm") && args.size() > 1 && args.get(1).equals("template");
     Process process = null;
-    final var reader = Executors.newSingleThreadExecutor();
+    final var reader = Executors.newFixedThreadPool(template ? 2 : 1);
     try {
       final var builder = new ProcessBuilder(args)
         .directory(directory.toFile())
-        .redirectErrorStream(true);
+        .redirectErrorStream(!template);
       builder.environment().putAll(environment);
       process = builder.start();
       if (credentials == null) try (var stdin = process.getOutputStream()) {
         stdin.write(input);
       }
       final Process running = process;
+      final Future<byte[]> errors = template
+        ? reader.submit(() -> {
+            try (final var stream = running.getErrorStream()) {
+              final byte[] bytes = stream.readNBytes(4 * 1024 * 1024 + 1);
+              if (bytes.length > 4 * 1024 * 1024) throw new IOException("Output limit exceeded");
+              return bytes;
+            }
+          })
+        : null;
       final var output = reader.submit(() -> {
         try (var stream = running.getInputStream(); var bytes = new ByteArrayOutputStream()) {
           final var prompts = new LoginPrompts(credentials, running.getOutputStream());
@@ -73,7 +85,13 @@ public class CommandRunner {
         }
       });
       if (!process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) throw new TimeoutException();
-      final var result = new Result(process.exitValue(), output.get(5, TimeUnit.SECONDS));
+      final String stdout = output.get(5, TimeUnit.SECONDS);
+      final String stderr =
+        errors == null ? "" : new String(errors.get(5, TimeUnit.SECONDS), StandardCharsets.UTF_8);
+      final var result = new Result(
+        process.exitValue(),
+        stdout + (process.exitValue() == 0 ? "" : "\n" + stderr)
+      );
       String category = "";
       if (result.exit() != 0) {
         final String lower = result.output().toLowerCase(Locale.ROOT);
@@ -86,7 +104,14 @@ public class CommandRunner {
         else if (lower.contains("forbidden")) category = " · ACCESS FORBIDDEN";
         else if (lower.contains("unauthorized")) category = " · AUTHENTICATION REJECTED";
       }
-      diagnostic.finish("EXIT " + result.exit() + category);
+      diagnostic.finish(
+        "EXIT " +
+          result.exit() +
+          category +
+          (template && result.exit() == 0 && !stderr.isBlank()
+            ? " · STDERR PRESENT (excluded from rendered YAML)"
+            : "")
+      );
       return result;
     } catch (final InterruptedException e) {
       Thread.currentThread().interrupt();
