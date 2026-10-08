@@ -54,24 +54,4 @@ class YamlValuesTest {
     ))
       assertThatThrownBy(() -> YamlValues.parse(yaml)).isInstanceOf(RuntimeException.class);
   }
-
-  /**
-   * <b>Scenario:</b> Cannot Delete Managed Parent
-   * <pre>
-   * GIVEN ... an overlay allowed to change only a nested resource field
-   * WHEN ... the overlay tries to delete the entire resources map
-   * THEN ... validation rejects deletion of the managed parent
-   * </pre>
-   */
-  @Test
-  @DisplayName("Cannot Delete Managed Parent")
-  void cannotDeleteManagedParent() {
-    assertThatThrownBy(() ->
-      YamlValues.allowed(
-        YamlValues.parse("resources: {$delete: true}"),
-        Set.of("resources.requests.cpu"),
-        ""
-      )
-    ).hasMessageContaining("managed");
-  }
 }

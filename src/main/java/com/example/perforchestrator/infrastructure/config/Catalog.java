@@ -129,16 +129,10 @@ public class Catalog {
     }
   }
 
-  public record Scenario(
-    String displayName,
-    String revision,
-    List<String> allowedOverridePaths,
-    Map<String, Object> defaults
-  ) {
+  // Read older saved configurations without retaining or exporting this retired field.
+  @com.fasterxml.jackson.annotation.JsonIgnoreProperties("allowedOverridePaths")
+  public record Scenario(String displayName, String revision, Map<String, Object> defaults) {
     public Scenario {
-      allowedOverridePaths = ImmutableConfiguration.list(
-        allowedOverridePaths == null ? List.of() : allowedOverridePaths
-      );
       defaults = ImmutableConfiguration.values(defaults);
     }
   }
@@ -290,9 +284,7 @@ public class Catalog {
         field[0] += "." + id;
         required(scenario.displayName());
         required(scenario.revision());
-        if (
-          scenario.allowedOverridePaths() == null || scenario.defaults() == null
-        ) throw new IllegalArgumentException();
+        if (scenario.defaults() == null) throw new IllegalArgumentException();
       });
     } catch (final RuntimeException error) {
       throw Problem.invalid(

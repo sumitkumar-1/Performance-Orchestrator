@@ -65,7 +65,7 @@ class ConfigurationDesignTest {
     nested.put("rate", 10);
     final List<Object> steps = new ArrayList<>(List.of(nested));
     final Map<String, Object> defaults = new LinkedHashMap<>(Map.of("steps", steps));
-    final var scenario = new Catalog.Scenario("scenario", "1", new ArrayList<>(), defaults);
+    final var scenario = new Catalog.Scenario("scenario", "1", defaults);
     nested.put("rate", 99);
     steps.clear();
     defaults.clear();
@@ -169,5 +169,26 @@ class ConfigurationDesignTest {
     } finally {
       executor.shutdownNow();
     }
+  }
+
+  /**
+   * <b>Scenario:</b> Load a saved scenario containing the retired override allowlist
+   * <pre>
+   * GIVEN ... an older scenario export containing allowedOverridePaths
+   * WHEN ... the scenario is loaded and exported again
+   * THEN ... its defaults are preserved and the retired field is discarded
+   * </pre>
+   */
+  @Test
+  @DisplayName("Legacy scenario allowlists are discarded without losing defaults")
+  void legacyScenarioAllowlistIsDiscarded() {
+    final var scenario = Json.read(
+      """
+      {"displayName":"Baseline","revision":"1","allowedOverridePaths":["rate"],"defaults":{"rate":10}}
+      """,
+      Catalog.Scenario.class
+    );
+    assertThat(scenario.defaults()).containsEntry("rate", 10);
+    assertThat(Json.write(scenario)).doesNotContain("allowedOverridePaths");
   }
 }

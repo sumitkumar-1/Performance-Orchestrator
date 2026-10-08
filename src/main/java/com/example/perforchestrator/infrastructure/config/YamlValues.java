@@ -95,23 +95,6 @@ public final class YamlValues {
     return result;
   }
 
-  public static void allowed(
-    final Map<String, Object> map,
-    final Set<String> paths,
-    final String prefix
-  ) {
-    for (final var entry : map.entrySet()) {
-      final String path = prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey();
-      if (entry.getValue() instanceof final Map<?, ?> child && !child.containsKey("$delete")) {
-        final @SuppressWarnings("unchecked") var children = (Map<String, Object>) child;
-        allowed(children, paths, path);
-      } else if (!paths.contains(path)) throw Problem.invalid(
-        "overlay." + path,
-        "Field is managed or not an approved override path"
-      );
-    }
-  }
-
   public static Map<String, Object> diff(
     final Map<String, Object> before,
     final Map<String, Object> after

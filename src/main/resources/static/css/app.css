@@ -1110,6 +1110,8 @@ select {
 }
 .run-service-dialog > label {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 8px;
 }
 .run-service-dialog .muted {
@@ -1151,6 +1153,16 @@ select {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
   tab-size: 2;
+}
+.yaml-code-editor,
+.yaml-code-editor .cm-editor {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.yaml-code-editor .cm-scroller {
+  min-width: 0;
+  max-width: 100%;
 }
 @media (max-width: 700px) {
   .run-selection,

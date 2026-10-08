@@ -36,9 +36,6 @@
     "smoke": {
       "displayName": "HTTP smoke \u00b7 synthetic results",
       "revision": "test-v1",
-      "allowedOverridePaths": [
-        "scenario.name"
-      ],
       "defaults": {
         "scenario": {
           "name": "smoke"

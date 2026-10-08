@@ -641,13 +641,6 @@ export function configurationManager(
         el("h3", {}, scenario.displayName || id),
         el("p", { class: "muted" }, `${id} · Revision ${scenario.revision}`),
         renderValue(scenario.defaults),
-        el(
-          "p",
-          { class: "muted" },
-          scenario.allowedOverridePaths?.length
-            ? `Editable fields: ${scenario.allowedOverridePaths.join(", ")}`
-            : "No template override fields configured.",
-        ),
       ),
     ),
   );
