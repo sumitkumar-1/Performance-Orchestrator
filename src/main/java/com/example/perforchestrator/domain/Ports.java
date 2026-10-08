@@ -6,39 +6,40 @@ import java.util.List;
 import java.util.Map;
 
 public final class Ports {
+
   private Ports() {}
 
   /** Complete in-memory image catalogs; paginated registries expose their own page contract. */
   public interface ImageDiscovery {
-    List<Image> discover(String service, String source, String username);
+    List<Image> discover(final String service, final String source, final String username);
   }
 
   /** Resolves one selected version to an immutable image identity. */
   public interface ImageResolver {
-    Image resolve(String service, Build build);
+    Image resolve(final String service, final Build build);
   }
 
   public interface DeploymentGateway {
-    String baseline(String cluster, String namespace, String service);
+    String baseline(final String cluster, final String namespace, final String service);
 
-    void deploy(String runId, Plan plan, PreparedService service);
+    void deploy(final String runId, final Plan plan, final PreparedService service);
 
-    boolean ready(Plan plan, PreparedService service);
+    boolean ready(final Plan plan, final PreparedService service);
   }
 
   public interface LoadGeneratorGateway {
-    String start(String runId, Plan plan);
+    String start(final String runId, final Plan plan);
 
-    void stop(String runId);
+    void stop(final String runId);
 
-    boolean stopped(String runId);
+    boolean stopped(final String runId);
 
-    Map<String, Double> collect(String runId, Plan plan);
+    Map<String, Double> collect(final String runId, final Plan plan);
   }
 
   public interface ArtifactStore {
-    void write(String runId, String name, String content);
+    void write(final String runId, final String name, final String content);
 
-    String read(String runId, String name);
+    String read(final String runId, final String name);
   }
 }

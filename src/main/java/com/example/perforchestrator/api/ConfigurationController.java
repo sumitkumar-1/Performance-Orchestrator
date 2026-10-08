@@ -6,11 +6,16 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/configuration")
 public class ConfigurationController {
+
   private final RuntimeConfiguration configuration;
 
   private final com.example.perforchestrator.infrastructure.persistence.Store store;
-  public ConfigurationController(RuntimeConfiguration configuration, com.example.perforchestrator.infrastructure.persistence.Store store) {
-    this.store=store;
+
+  public ConfigurationController(
+    final RuntimeConfiguration configuration,
+    final com.example.perforchestrator.infrastructure.persistence.Store store
+  ) {
+    this.store = store;
     this.configuration = configuration;
   }
 
@@ -20,10 +25,11 @@ public class ConfigurationController {
   }
 
   @PutMapping
-  public Object update(@RequestBody RuntimeConfiguration.Document document) {
-    String actor=com.example.perforchestrator.infrastructure.secrets.SecretServerTokens.currentActor();
-    var result=configuration.update(document);
-    store.audit(actor,"CONFIGURATION_UPDATED",result.revision());
+  public Object update(final @RequestBody RuntimeConfiguration.Document document) {
+    final String actor =
+      com.example.perforchestrator.infrastructure.secrets.SecretServerTokens.currentActor();
+    final var result = configuration.update(document);
+    store.audit(actor, "CONFIGURATION_UPDATED", result.revision());
     return result;
   }
 

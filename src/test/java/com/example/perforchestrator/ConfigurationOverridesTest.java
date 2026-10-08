@@ -1,67 +1,144 @@
 package com.example.perforchestrator;
 
 import static org.assertj.core.api.Assertions.*;
+
 import com.example.perforchestrator.infrastructure.config.*;
 import com.example.perforchestrator.infrastructure.registry.ConnectionConfig;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.nio.file.*;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class ConfigurationOverridesTest {
-  @TempDir Path directory;
 
+  @TempDir
+  Path directory;
+
+  /**
+   * <b>Scenario:</b> Saved Fields Survive While Untouched Defaults Upgrade And Reset Removes Overrides
+   * <pre>
+   * GIVEN ... saved dashboard overrides and newer startup defaults
+   * WHEN ... configuration restarts and is then reset to startup settings
+   * THEN ... edited fields survive restart, untouched defaults upgrade, and reset removes overrides
+   * </pre>
+   */
   @Test
+  @DisplayName("Saved Fields Survive While Untouched Defaults Upgrade And Reset Removes Overrides")
   void savedFieldsSurviveWhileUntouchedDefaultsUpgradeAndResetRemovesOverrides() throws Exception {
-    var factory = new RuntimeConfigurationTest();
-    var initial = new RuntimeConfiguration(factory.catalog(), new ConnectionConfig(""), directory.resolve("settings.json").toString());
+    final var factory = new RuntimeConfigurationTest();
+    final var initial = new RuntimeConfiguration(
+      factory.catalog(),
+      new ConnectionConfig(""),
+      directory.resolve("settings.json").toString()
+    );
     initial.update(factory.edited(initial.current(), "Dashboard name"));
-    var changed = factory.catalog();
-    ObjectNode defaults = Json.MAPPER.valueToTree(changed.data());
+    final var changed = factory.catalog();
+    final ObjectNode defaults = Json.MAPPER.valueToTree(changed.data());
     ((ObjectNode) defaults.path("environments").path("sandbox"))
-        .put("dashboardUrl", "https://new.example.invalid/dashboard").put("displayName", "New default name");
+      .put("dashboardUrl", "https://new.example.invalid/dashboard")
+      .put("displayName", "New default name");
     changed.replace(Json.read(Json.write(defaults), Catalog.Data.class));
-    var restarted = new RuntimeConfiguration(changed, new ConnectionConfig(""), directory.resolve("settings.json").toString());
+    final var restarted = new RuntimeConfiguration(
+      changed,
+      new ConnectionConfig(""),
+      directory.resolve("settings.json").toString()
+    );
     assertThat(changed.environment("sandbox").displayName()).isEqualTo("Dashboard name");
-    assertThat(changed.environment("sandbox").dashboardUrl()).isEqualTo("https://new.example.invalid/dashboard");
-    assertThat(Files.readString(directory.resolve("settings.json"))).contains("schemaVersion").doesNotContain("dashboardUrl");
+    assertThat(changed.environment("sandbox").dashboardUrl()).isEqualTo(
+      "https://new.example.invalid/dashboard"
+    );
+    assertThat(Files.readString(directory.resolve("settings.json")))
+      .contains("schemaVersion")
+      .doesNotContain("dashboardUrl");
     restarted.update(restarted.startup().configuration());
     assertThat(restarted.startup().runtimeOverride()).isFalse();
     assertThat(changed.environment("sandbox").displayName()).isEqualTo("New default name");
-    var again = new RuntimeConfiguration(factory.catalog(), new ConnectionConfig(""), directory.resolve("settings.json").toString());
+    final var again = new RuntimeConfiguration(
+      factory.catalog(),
+      new ConnectionConfig(""),
+      directory.resolve("settings.json").toString()
+    );
     assertThat(again.startup().runtimeOverride()).isFalse();
   }
 
+  /**
+   * <b>Scenario:</b> Removals Nulls Arrays And New Defaults Remain Distinct
+   * <pre>
+   * GIVEN ... configuration edits containing deletion, explicit null, and array replacement
+   * WHEN ... the edits are applied over defaults containing a new field
+   * THEN ... each edit keeps its meaning and the new default is retained
+   * </pre>
+   */
   @Test
+  @DisplayName("Removals Nulls Arrays And New Defaults Remain Distinct")
   void removalsNullsArraysAndNewDefaultsRemainDistinct() throws Exception {
-    var before = Json.MAPPER.readTree("{\"catalog\":{\"remove\":1,\"nullable\":2,\"list\":[1]},\"connections\":{}}");
-    var after = Json.MAPPER.readTree("{\"catalog\":{\"nullable\":null,\"list\":[2]},\"connections\":{}}");
-    var changes = ConfigurationOverrides.diff(before, after);
+    final var before = Json.MAPPER.readTree(
+      "{\"catalog\":{\"remove\":1,\"nullable\":2,\"list\":[1]},\"connections\":{}}"
+    );
+    final var after = Json.MAPPER.readTree(
+      "{\"catalog\":{\"nullable\":null,\"list\":[2]},\"connections\":{}}"
+    );
+    final var changes = ConfigurationOverrides.diff(before, after);
     ((ObjectNode) before.get("catalog")).put("newDefault", 3);
-    var applied = ConfigurationOverrides.apply(before, changes);
+    final var applied = ConfigurationOverrides.apply(before, changes);
     assertThat(applied.path("catalog").has("remove")).isFalse();
     assertThat(applied.path("catalog").get("nullable").isNull()).isTrue();
     assertThat(applied.path("catalog").path("list").get(0).asInt()).isEqualTo(2);
     assertThat(applied.path("catalog").path("newDefault").asInt()).isEqualTo(3);
   }
 
+  /**
+   * <b>Scenario:</b> Removal Does Not Resurrect An Entry Removed From New Defaults
+   * <pre>
+   * GIVEN ... a saved field deletion whose parent was removed from newer defaults
+   * WHEN ... the override is applied to those defaults
+   * THEN ... the removed parent is not recreated
+   * </pre>
+   */
   @Test
+  @DisplayName("Removal Does Not Resurrect An Entry Removed From New Defaults")
   void removalDoesNotResurrectAnEntryRemovedFromNewDefaults() throws Exception {
-    var before = Json.MAPPER.readTree("{\"catalog\":{\"old\":{\"field\":1}},\"connections\":{}}");
-    var after = Json.MAPPER.readTree("{\"catalog\":{\"old\":{}},\"connections\":{}}");
-    var newer = Json.MAPPER.readTree("{\"catalog\":{},\"connections\":{}}");
-    assertThat(ConfigurationOverrides.apply(newer, ConfigurationOverrides.diff(before, after))).isEqualTo(newer);
+    final var before = Json.MAPPER.readTree(
+      "{\"catalog\":{\"old\":{\"field\":1}},\"connections\":{}}"
+    );
+    final var after = Json.MAPPER.readTree("{\"catalog\":{\"old\":{}},\"connections\":{}}");
+    final var newer = Json.MAPPER.readTree("{\"catalog\":{},\"connections\":{}}");
+    assertThat(
+      ConfigurationOverrides.apply(newer, ConfigurationOverrides.diff(before, after))
+    ).isEqualTo(newer);
   }
 
+  /**
+   * <b>Scenario:</b> Legacy Export Loads And Migrates On Next Save
+   * <pre>
+   * GIVEN ... a legacy full-configuration export
+   * WHEN ... the export is loaded and saved
+   * THEN ... its settings are restored and saved in the current override schema
+   * </pre>
+   */
   @Test
+  @DisplayName("Legacy Export Loads And Migrates On Next Save")
   void legacyExportLoadsAndMigratesOnNextSave() throws Exception {
-    var factory = new RuntimeConfigurationTest();
-    var old = new RuntimeConfiguration(factory.catalog(), new ConnectionConfig(""), directory.resolve("unused.json").toString());
-    Path path = directory.resolve("legacy.json");
+    final var factory = new RuntimeConfigurationTest();
+    final var old = new RuntimeConfiguration(
+      factory.catalog(),
+      new ConnectionConfig(""),
+      directory.resolve("unused.json").toString()
+    );
+    final Path path = directory.resolve("legacy.json");
     Files.writeString(path, Json.write(factory.edited(old.current(), "Imported name")));
-    var loaded = new RuntimeConfiguration(factory.catalog(), new ConnectionConfig(""), path.toString());
-    assertThat(loaded.current().catalog().environments().get("sandbox").displayName()).isEqualTo("Imported name");
+    final var loaded = new RuntimeConfiguration(
+      factory.catalog(),
+      new ConnectionConfig(""),
+      path.toString()
+    );
+    assertThat(loaded.current().catalog().environments().get("sandbox").displayName()).isEqualTo(
+      "Imported name"
+    );
     loaded.update(loaded.current());
-    assertThat(Json.MAPPER.readTree(Files.readString(path)).path("schemaVersion").asInt()).isEqualTo(2);
+    assertThat(
+      Json.MAPPER.readTree(Files.readString(path)).path("schemaVersion").asInt()
+    ).isEqualTo(2);
   }
 }

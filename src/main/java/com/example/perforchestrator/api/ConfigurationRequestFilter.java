@@ -11,18 +11,22 @@ import org.springframework.web.filter.OncePerRequestFilter;
 /** Keeps a request on one configuration revision, including when hosted under a context path. */
 @Component
 public final class ConfigurationRequestFilter extends OncePerRequestFilter {
+
   private final ConfigurationAccess access;
 
-  public ConfigurationRequestFilter(ConfigurationAccess access) {
+  public ConfigurationRequestFilter(final ConfigurationAccess access) {
     this.access = access;
   }
 
   @Override
   protected void doFilterInternal(
-      HttpServletRequest request, HttpServletResponse response, FilterChain chain)
-      throws ServletException, IOException {
-    String path = request.getRequestURI().substring(request.getContextPath().length());
-    boolean update = path.equals("/api/v1/configuration") && request.getMethod().equals("PUT");
+    final HttpServletRequest request,
+    final HttpServletResponse response,
+    final FilterChain chain
+  ) throws ServletException, IOException {
+    final String path = request.getRequestURI().substring(request.getContextPath().length());
+    final boolean update =
+      path.equals("/api/v1/configuration") && request.getMethod().equals("PUT");
     try (var scope = update ? access.write() : access.read()) {
       chain.doFilter(request, response);
     }

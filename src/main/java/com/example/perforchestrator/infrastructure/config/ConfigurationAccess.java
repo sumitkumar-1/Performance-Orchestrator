@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 /** Coordinates whole operations; independent of HTTP and configuration storage. */
 @Component
 public final class ConfigurationAccess {
+
   private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
 
   public interface Scope extends AutoCloseable {
@@ -22,7 +23,7 @@ public final class ConfigurationAccess {
     return acquire(lock.writeLock());
   }
 
-  private Scope acquire(Lock selected) {
+  private Scope acquire(final Lock selected) {
     selected.lock();
     return selected::unlock;
   }

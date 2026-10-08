@@ -1,0 +1,19 @@
+{
+  "name": "performance-orchestrator-ui-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:editor": "node scripts/build-editor.mjs",
+    "format": "prettier --write 'src/**/*.java' 'src/main/resources/static/js/*.js' 'src/main/resources/static/css/*.css' 'ui/**/*.js' 'scripts/*.mjs' 'src/main/resources/static/*.html'",
+    "format:check": "prettier --check 'src/**/*.java' 'src/main/resources/static/js/*.js' 'src/main/resources/static/css/*.css' 'ui/**/*.js' 'scripts/*.mjs' 'src/main/resources/static/*.html'"
+  },
+  "devDependencies": {
+    "@codemirror/lang-yaml": "6.1.2",
+    "@codemirror/lint": "6.8.5",
+    "codemirror": "6.0.2",
+    "esbuild": "0.25.12",
+    "prettier": "3.9.9",
+    "prettier-plugin-java": "2.11.0",
+    "yaml": "2.9.1"
+  }
+}

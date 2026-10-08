@@ -1,6 +1,6 @@
 # Local real-mode quick start: ./scripts/run-local.sh build-run --mode real
-# Real-mode configuration sections below contain examples. Only the selected
-# target-environment is shown. Replace example URLs, secret IDs and repository paths.
+# Real-mode configuration sections below contain examples for every environment.
+# target-environment selects the initial/default environment. Replace example URLs, secret IDs and repository paths.
 # Existing dashboard overrides may hide defaults: load startup defaults and save to reset.
 # Empty optional exception/override lists are intentional; simulation-only imageSources
 # are supplied by mocks. Real image mappings are configured per service.
@@ -35,6 +35,27 @@ orchestrator:
     enabled: false # Opt in after reviewing the target cluster and service Helm settings
     kube-context: '' # Explicit local context, or in-cluster on CKP
     expected-api-server: '' # Exact HTTPS server URL; prevents use of an unintended context
+    # Per-environment targets. Replace API hosts with `kubectl config view` values.
+    # Legacy kube-context/expected-api-server above override the default environment only.
+    targets:
+      sandbox:
+        kube-context: sandbox-nvan
+        expected-api-server: https://api.ckp-sandbox-region.domain:6443
+      dev:
+        kube-context: dev-nvan
+        expected-api-server: https://api.ckp-dev-region.domain:6443
+      qa:
+        kube-context: qa-nvan
+        expected-api-server: https://api.ckp-qa-region.domain:6443
+      stable:
+        kube-context: stable-nvan
+        expected-api-server: https://api.ckp-stable-region.domain:6443
+      perf:
+        kube-context: perf-nvan
+        expected-api-server: https://api.ckp-perf-region.domain:6443
+      perf3:
+        kube-context: perf3-nvan
+        expected-api-server: https://api.ckp-perf3-region.domain:6443
     workspace: data/real/workspaces
     preparation-concurrency: 3 # Parallel service reviews (1–8); deployment order is unchanged
     command-timeout-seconds: 300 # Per Helm operation; 10–1800 seconds
@@ -48,7 +69,7 @@ orchestrator:
       helm-qa-virtual: https://artifactory.domain/artifactory/helm-qa-virtual
       helm-stable-virtual: https://artifactory.domain/artifactory/helm-stable-virtual
       helm-release-virtual: https://artifactory.domain/artifactory/helm-release-virtual
-  target-environment: sandbox # Real-mode instance binding; fixed until restart
+  target-environment: sandbox # Default selection; each run chooses and pins its own target
   catalog: classpath:mocks/catalog.yaml
   connections: '' # External bootstrap file overrides connection-defaults below
   # Real catalog sections; supply organization mappings here or via external Spring YAML.

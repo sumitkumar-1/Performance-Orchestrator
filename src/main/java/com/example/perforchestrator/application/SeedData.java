@@ -9,32 +9,40 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
 @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
-    name = "orchestrator.mode",
-    havingValue = "simulation",
-    matchIfMissing = true)
+  name = "orchestrator.mode",
+  havingValue = "simulation",
+  matchIfMissing = true
+)
 @Component
 public class SeedData implements ApplicationRunner {
+
   private final Store store;
   private final PlanningService planning;
 
-  public SeedData(Store store, PlanningService planning, RuntimeConfiguration configuration) {
+  public SeedData(
+    final Store store,
+    final PlanningService planning,
+    final RuntimeConfiguration configuration
+  ) {
     this.store = store;
     this.planning = planning;
   }
 
-  public void run(ApplicationArguments args) {
+  public void run(final ApplicationArguments args) {
     if (!store.profiles().isEmpty()) return;
     try {
-      Profile profile =
-          Json.read(ConfigurationResources.read("classpath:mocks/profile.json"), Profile.class);
+      final Profile profile = Json.read(
+        ConfigurationResources.read("classpath:mocks/profile.json"),
+        Profile.class
+      );
       // A customized catalog may intentionally remove the bundled example services.
       try {
         planning.validate(profile);
-      } catch (com.example.perforchestrator.domain.Problem ignored) {
+      } catch (final com.example.perforchestrator.domain.Problem ignored) {
         return;
       }
       planning.save(null, null, profile);
-    } catch (java.io.IOException e) {
+    } catch (final java.io.IOException e) {
       throw new IllegalStateException("Missing mock profile resource", e);
     }
   }

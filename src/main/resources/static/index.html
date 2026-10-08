@@ -4,21 +4,19 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Performance Orchestrator</title>
+    <link rel="icon" type="image/png" href="/images/global-relay-icon.png" />
     <link rel="stylesheet" href="/css/app.css" />
     <script type="module" src="/js/app.js"></script>
   </head>
   <body>
     <aside class="sidebar">
-      <a class="brand" href="#dashboard"
-        ><span class="brand-icon">P</span
-        ><span
-          >Performance<br /><small>Environment orchestrator</small></span
-        ></a
-      >
+      <a class="brand" href="#dashboard">
+        <img class="brand-icon global-relay-icon" src="/images/global-relay-icon.png" alt="" />
+        <span>Global Relay<br /><small>Performance orchestrator</small></span>
+      </a>
       <nav aria-label="Main navigation">
         <a href="#dashboard">Overview</a><a href="#configure">Configure a run</a
-        ><a href="#history">Run history</a
-        ><a href="#settings">Connections & catalog</a>
+        ><a href="#history">Run history</a><a href="#settings">Connections & catalog</a>
       </nav>
       <div class="sidebar-bottom">
         <span class="dot"></span> Local workspace
@@ -27,8 +25,7 @@
     </aside>
     <div class="workspace">
       <header class="topbar">
-        <span>Engineering / Performance</span
-        ><span class="pill" id="mode-badge">LOADING</span>
+        <span>Engineering / Performance</span><span class="pill" id="mode-badge">LOADING</span>
       </header>
       <main id="app" tabindex="-1"></main>
       <div id="notice" role="status" aria-live="polite"></div>

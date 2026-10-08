@@ -6,10 +6,35 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/real/monitoring-sets")
 public class MonitoringSetsController {
+
   private final MonitoringSets sets;
-  public MonitoringSetsController(MonitoringSets sets){this.sets=sets;}
-  @GetMapping public Object list(){return sets.list();}
-  public record Input(String id,Integer revision,MonitoringSets.Definition definition){}
-  @PostMapping public Object save(@RequestBody Input input){return sets.save(input.id(),input.revision(),input.definition());}
-  @DeleteMapping("/{id}") public Object delete(@PathVariable String id,@RequestParam int revision){sets.delete(id,revision);return java.util.Map.of("deleted",true);}
+
+  public MonitoringSetsController(final MonitoringSets sets) {
+    this.sets = sets;
+  }
+
+  @GetMapping
+  public Object list(final @RequestParam(required = false) String environment) {
+    return sets.list(environment);
+  }
+
+  public record Input(String id, Integer revision, MonitoringSets.Definition definition) {}
+
+  @PostMapping
+  public Object save(
+    final @RequestBody Input input,
+    final @RequestParam(required = false) String environment
+  ) {
+    return sets.save(input.id(), input.revision(), input.definition(), environment);
+  }
+
+  @DeleteMapping("/{id}")
+  public Object delete(
+    final @PathVariable String id,
+    final @RequestParam int revision,
+    final @RequestParam(required = false) String environment
+  ) {
+    sets.delete(id, revision, environment);
+    return java.util.Map.of("deleted", true);
+  }
 }

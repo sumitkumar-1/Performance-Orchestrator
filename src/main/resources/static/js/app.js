@@ -9,12 +9,7 @@ import { connectionDiagnostics } from "./connection-diagnostics.js";
 import { configurationManager } from "./configuration-manager.js";
 import { deploymentEditor } from "./deployments.js";
 const app = document.querySelector("#app");
-const terminal = new Set([
-  "SUCCEEDED",
-  "FAILED",
-  "CANCELLED",
-  "NEEDS_ATTENTION",
-]);
+const terminal = new Set(["SUCCEEDED", "FAILED", "CANCELLED", "NEEDS_ATTENTION"]);
 let vaultPrompt;
 let session,
   catalog,
@@ -35,8 +30,7 @@ const pill = (text) =>
     text.replaceAll("_", " "),
   );
 const pretty = (value) => JSON.stringify(value, null, 2);
-const time = (value) =>
-  value ? new Date(value).toLocaleString() : "Unavailable";
+const time = (value) => (value ? new Date(value).toLocaleString() : "Unavailable");
 function toast(message) {
   $("#notice").textContent = message;
   setTimeout(() => {
@@ -117,9 +111,7 @@ function stat(title, value, foot) {
 }
 async function loadCatalog() {
   const [env, services, sources, scenarios] = await Promise.all(
-    ["/environments", "/services", "/image-sources", "/scenarios"].map((p) =>
-      api(p),
-    ),
+    ["/environments", "/services", "/image-sources", "/scenarios"].map((p) => api(p)),
   );
   catalog = { env, services, sources, scenarios };
   profiles = await api("/profiles");
@@ -143,9 +135,7 @@ function runTable(runs) {
         el(
           "tr",
           {},
-          ["RUN", "ENVIRONMENT", "STATUS", "PERFORMANCE", "STARTED"].map((t) =>
-            el("th", {}, t),
-          ),
+          ["RUN", "ENVIRONMENT", "STATUS", "PERFORMANCE", "STARTED"].map((t) => el("th", {}, t)),
         ),
       ),
       el(
@@ -192,21 +182,13 @@ async function dashboard() {
     el(
       "div",
       { class: "stats" },
-      stat(
-        "Active runs",
-        active,
-        "Persistent execution, independent of your browser",
-      ),
+      stat("Active runs", active, "Persistent execution, independent of your browser"),
       stat(
         "Available environments",
         Object.values(catalog.env).filter((e) => e.available).length,
         "One mutating run per environment",
       ),
-      stat(
-        "Saved profiles",
-        profiles.length,
-        "Repeatable configurations, ready to run",
-      ),
+      stat("Saved profiles", profiles.length, "Repeatable configurations, ready to run"),
     ),
   );
   app.append(
@@ -249,11 +231,7 @@ async function dashboard() {
             "div",
             { class: "service-chips" },
             saved.profile.services.map((s) =>
-              el(
-                "span",
-                { class: "chip" },
-                `${s.serviceId} / ${s.build.sourceRef}`,
-              ),
+              el("span", { class: "chip" }, `${s.serviceId} / ${s.build.sourceRef}`),
             ),
           ),
           el(
@@ -278,11 +256,7 @@ async function dashboard() {
       link("View history", "#history"),
     ),
     runTable(runs.slice(0, 6)),
-    el(
-      "div",
-      { class: "section-heading" },
-      el("h2", {}, "Environment availability"),
-    ),
+    el("div", { class: "section-heading" }, el("h2", {}, "Environment availability")),
     el(
       "div",
       { class: "environment-list" },
@@ -367,11 +341,7 @@ async function configure(id) {
         "div",
         { class: "service-chips" },
         el("span", { class: "chip" }, `Cluster: ${config.clusterIdentity}`),
-        el(
-          "span",
-          { class: "chip" },
-          `Load generator: ${config.loadGeneratorNamespace}`,
-        ),
+        el("span", { class: "chip" }, `Load generator: ${config.loadGeneratorNamespace}`),
       ),
     );
   };
@@ -489,17 +459,8 @@ async function planScreen(id) {
         el(
           "section",
           { class: "card" },
-          el(
-            "div",
-            { class: "card-head" },
-            el("h2", {}, s.serviceId),
-            pill(s.action),
-          ),
-          el(
-            "p",
-            { class: "muted" },
-            `${s.image.sourceRef} / ${s.image.version} → ${s.namespace}`,
-          ),
+          el("div", { class: "card-head" }, el("h2", {}, s.serviceId), pill(s.action)),
+          el("p", { class: "muted" }, `${s.image.sourceRef} / ${s.image.version} → ${s.namespace}`),
           detail("Before / after configuration", s.changes),
           detail("Pinned image & prepared inputs", s),
         ),
@@ -528,19 +489,13 @@ async function history() {
     ),
   );
   const env = select(
-      [
-        ["", "All environments"],
-        ...Object.keys(catalog.env).map((x) => [x, x]),
-      ],
+      [["", "All environments"], ...Object.keys(catalog.env).map((x) => [x, x])],
       "",
     ),
     state = select(
       [
         ["", "All outcomes"],
-        ...["SUCCEEDED", "FAILED", "CANCELLED", "NEEDS_ATTENTION"].map((x) => [
-          x,
-          x,
-        ]),
+        ...["SUCCEEDED", "FAILED", "CANCELLED", "NEEDS_ATTENTION"].map((x) => [x, x]),
       ],
       "",
     ),
@@ -569,9 +524,16 @@ async function history() {
 async function runDetails(id, generation) {
   const initial = await api("/runs/" + id),
     plan = await api("/plans/" + initial.planId);
-  const diagnostics=plan.simulated?null:diagnosticsPanel(api,{runId:id});
-  const loads=plan.simulated?null:additionalLoads(api,{services:catalog.services,environment:initial.environment},id,plan);
-  const status = el("div",{class:"card run-status-card"}),
+  const diagnostics = plan.simulated ? null : diagnosticsPanel(api, { runId: id });
+  const loads = plan.simulated
+    ? null
+    : additionalLoads(
+        api,
+        { services: catalog.services, environment: initial.environment },
+        id,
+        plan,
+      );
+  const status = el("div", { class: "card run-status-card" }),
     timeline = el("ol", { class: "timeline" }),
     metrics = el("div", { class: "metrics" }),
     actions = el("div", { class: "card-actions" }),
@@ -582,20 +544,25 @@ async function runDetails(id, generation) {
       plan.profile.name,
       `${plan.profile.targetEnvironment} · ${id} · Prepared by ${plan.actor}`,
     ),
-    el("div",{class:"run-toolbar"},
-      plan.simulated?null:el("a",{href:"#monitor/"+id,target:"_blank",rel:"noopener",class:"button primary"},"Open monitoring ↗"),
-      diagnostics?.toggle,actions),
+    el(
+      "div",
+      { class: "run-toolbar" },
+      plan.simulated
+        ? null
+        : el(
+            "a",
+            { href: "#monitor/" + id, target: "_blank", rel: "noopener", class: "button primary" },
+            "Open monitoring ↗",
+          ),
+      diagnostics?.toggle,
+      actions,
+    ),
     status,
     loads?.node,
     el(
       "div",
       { class: "detail-grid spacer" },
-      el(
-        "details",
-        { class: "card" },
-        el("summary", {}, "Execution timeline"),
-        timeline,
-      ),
+      el("details", { class: "card" }, el("summary", {}, "Execution timeline"), timeline),
       el(
         "div",
         {},
@@ -621,29 +588,48 @@ async function runDetails(id, generation) {
               namespace: s.namespace,
             })),
           ),
-          plan.simulated ? button("Rerun original pinned plan", () => launch({ planId: plan.id })) : link("Prepare a new real run", "#configure", "button"),
+          plan.simulated
+            ? button("Rerun original pinned plan", () => launch({ planId: plan.id }))
+            : link("Prepare a new real run", "#configure", "button"),
           plan.profileId
-            ? button("Run current saved profile", () =>
-                launch({ profileId: plan.profileId }),
-              )
+            ? button("Run current saved profile", () => launch({ profileId: plan.profileId }))
             : null,
         ),
       ),
     ),
   );
-  if(diagnostics){app.append(diagnostics.node);pageCleanup=()=>{diagnostics.dispose();loads?.dispose();};}
-  let activeDeployment = null, timelineElapsed = null;
-  let deploymentGroup = null, deploymentList = null, pendingService = null, deploymentSummary = null, deploymentTotal = 0;
+  if (diagnostics) {
+    app.append(diagnostics.node);
+    pageCleanup = () => {
+      diagnostics.dispose();
+      loads?.dispose();
+    };
+  }
+  let activeDeployment = null,
+    timelineElapsed = null;
+  let deploymentGroup = null,
+    deploymentList = null,
+    pendingService = null,
+    deploymentSummary = null,
+    deploymentTotal = 0;
   const deploymentRows = new Map();
   function serviceState(row, state, detail) {
-    row.icon.textContent = state === "ready" ? "✓" : state === "failed" ? "✕" : state === "deploying" ? "◌" : "–";
+    row.icon.textContent =
+      state === "ready" ? "✓" : state === "failed" ? "✕" : state === "deploying" ? "◌" : "–";
     row.icon.className = `deployment-indicator ${state}`;
     row.icon.setAttribute("aria-label", state === "ready" ? "Deployment succeeded" : state);
     row.detail.textContent = detail;
-    row.state = state; row.node.setAttribute("data-state", state);
-    const states = [...deploymentRows.values()].map(item => item.state);
-    if (deploymentSummary) deploymentSummary.textContent = `${states.filter(value => value === "ready").length} of ${deploymentTotal} ready`
-      + (states.includes("deploying") ? " · Deployment in progress" : states.includes("failed") ? " · Deployment failed" : "");
+    row.state = state;
+    row.node.setAttribute("data-state", state);
+    const states = [...deploymentRows.values()].map((item) => item.state);
+    if (deploymentSummary)
+      deploymentSummary.textContent =
+        `${states.filter((value) => value === "ready").length} of ${deploymentTotal} ready` +
+        (states.includes("deploying")
+          ? " · Deployment in progress"
+          : states.includes("failed")
+            ? " · Deployment failed"
+            : "");
   }
   function appendTimelineEvent(event) {
     if (timelineElapsed) timelineElapsed.textContent = "";
@@ -652,29 +638,73 @@ async function runDetails(id, generation) {
       if (!deploymentGroup) {
         deploymentList = el("div", { class: "deployment-progress-list" });
         deploymentSummary = el("span", { class: "muted deployment-group-summary" });
-        deploymentGroup = el("li", {}, el("time", {}, time(event.time)), el("div", { class: "deployment-group-heading" }, el("strong", {}, "DEPLOYING"), deploymentSummary), deploymentList);
+        deploymentGroup = el(
+          "li",
+          {},
+          el("time", {}, time(event.time)),
+          el(
+            "div",
+            { class: "deployment-group-heading" },
+            el("strong", {}, "DEPLOYING"),
+            deploymentSummary,
+          ),
+          deploymentList,
+        );
         timeline.append(deploymentGroup);
       }
       const completed = / ready in (\d+)s$/.exec(event.message);
       const context = event.message.replace(/^Deploying /, "").replace(/ ready in \d+s$/, "");
       if (!/^Service \d+\/\d+: /.test(context)) {
         // Older runs have only a stage-level message and no per-service events.
-        if (!deploymentRows.size) deploymentList.replaceChildren(el("p", { class: "muted" }, event.message));
+        if (!deploymentRows.size)
+          deploymentList.replaceChildren(el("p", { class: "muted" }, event.message));
         return;
       }
       let row = deploymentRows.get(context);
       if (!row) {
         if (!deploymentRows.size) deploymentList.replaceChildren();
-        const parts = /^Service (\d+)\/(\d+): (.*?) · (?:image version (.*?) · )?namespace (.*?) · release (.*)$/.exec(context);
-        const service = parts ? plan.services.find(item => item.serviceId === parts[3]) : null;
-        deploymentTotal = parts ? Number(parts[2]) : Math.max(deploymentTotal, deploymentRows.size + 1);
-        row = { icon: el("span", { role: "img" }), detail: el("span", { class: "deployment-status-label" }), timer: el("span", { class: "muted" }), duration: el("span", { class: "muted" }) };
+        const parts =
+          /^Service (\d+)\/(\d+): (.*?) · (?:image version (.*?) · )?namespace (.*?) · release (.*)$/.exec(
+            context,
+          );
+        const service = parts ? plan.services.find((item) => item.serviceId === parts[3]) : null;
+        deploymentTotal = parts
+          ? Number(parts[2])
+          : Math.max(deploymentTotal, deploymentRows.size + 1);
+        row = {
+          icon: el("span", { role: "img" }),
+          detail: el("span", { class: "deployment-status-label" }),
+          timer: el("span", { class: "muted" }),
+          duration: el("span", { class: "muted" }),
+        };
         const field = (label, value) => el("div", {}, el("dt", {}, label), el("dd", {}, value));
-        row.node = el("div", { class: "deployment-progress-row" },
-          el("div", { class: "deployment-service-heading" }, el("div", { class: "deployment-service-identity" }, row.icon,
-            el("strong", {}, parts ? parts[3] : context)), parts ? el("span", { class: "deployment-position" }, `${parts[1]} / ${parts[2]}`) : null),
-          parts ? el("dl", { class: "deployment-service-fields" }, field("Image version", parts[4] || service?.image?.version || "Not recorded"), field("Namespace", parts[5]), field("Helm release", parts[6])) : null,
-          el("div", { class: "deployment-progress-meta" }, row.detail, row.timer, row.duration));
+        row.node = el(
+          "div",
+          { class: "deployment-progress-row" },
+          el(
+            "div",
+            { class: "deployment-service-heading" },
+            el(
+              "div",
+              { class: "deployment-service-identity" },
+              row.icon,
+              el("strong", {}, parts ? parts[3] : context),
+            ),
+            parts
+              ? el("span", { class: "deployment-position" }, `${parts[1]} / ${parts[2]}`)
+              : null,
+          ),
+          parts
+            ? el(
+                "dl",
+                { class: "deployment-service-fields" },
+                field("Image version", parts[4] || service?.image?.version || "Not recorded"),
+                field("Namespace", parts[5]),
+                field("Helm release", parts[6]),
+              )
+            : null,
+          el("div", { class: "deployment-progress-meta" }, row.detail, row.timer, row.duration),
+        );
         deploymentList.append(row.node);
         deploymentRows.set(context, row);
       }
@@ -684,31 +714,55 @@ async function runDetails(id, generation) {
         serviceState(row, "ready", "Ready");
         if (pendingService === row) pendingService = null;
       } else {
-        if (pendingService && pendingService !== row) serviceState(pendingService, "stopped", "No completion recorded");
-        serviceState(row, "deploying", "Deploying"); pendingService = row; timelineElapsed = row.timer;
+        if (pendingService && pendingService !== row)
+          serviceState(pendingService, "stopped", "No completion recorded");
+        serviceState(row, "deploying", "Deploying");
+        pendingService = row;
+        timelineElapsed = row.timer;
       }
       return;
     }
     if (pendingService) {
       const failed = /failed|failure/i.test(event.message);
-      serviceState(pendingService, failed ? "failed" : "stopped", failed ? "Failed — see details below" : "Interrupted / completion not recorded");
+      serviceState(
+        pendingService,
+        failed ? "failed" : "stopped",
+        failed ? "Failed — see details below" : "Interrupted / completion not recorded",
+      );
       pendingService = null;
     }
     timelineElapsed = el("span", { class: "muted" });
-    timeline.append(el("li", {}, el("time", {}, time(event.time)), el("strong", {}, event.state.replaceAll("_", " ")),
-      el("p", {}, event.message), timelineElapsed));
+    timeline.append(
+      el(
+        "li",
+        {},
+        el("time", {}, time(event.time)),
+        el("strong", {}, event.state.replaceAll("_", " ")),
+        el("p", {}, event.message),
+        timelineElapsed,
+      ),
+    );
   }
   const elapsed = el("p", { class: "muted", hidden: true });
   const updateElapsed = () => {
-    const active = activeDeployment && ["DEPLOYING", "STARTING_LOAD"].includes(activeDeployment.state) && activeDeployment.message.startsWith("Deploying ");
+    const active =
+      activeDeployment &&
+      ["DEPLOYING", "STARTING_LOAD"].includes(activeDeployment.state) &&
+      activeDeployment.message.startsWith("Deploying ");
     elapsed.hidden = !active;
-    const seconds = active ? Math.max(0, Math.floor((Date.now() - Date.parse(activeDeployment.updatedAt)) / 1000)) : 0;
+    const seconds = active
+      ? Math.max(0, Math.floor((Date.now() - Date.parse(activeDeployment.updatedAt)) / 1000))
+      : 0;
     const label = active ? `Elapsed: ${Math.floor(seconds / 60)}m ${seconds % 60}s` : "";
     elapsed.textContent = label;
-    if(timelineElapsed) timelineElapsed.textContent = label;
+    if (timelineElapsed) timelineElapsed.textContent = label;
   };
-  const elapsedTimer = setInterval(updateElapsed, 1000), previousCleanup = pageCleanup;
-  pageCleanup = () => { clearInterval(elapsedTimer); previousCleanup?.(); };
+  const elapsedTimer = setInterval(updateElapsed, 1000),
+    previousCleanup = pageCleanup;
+  pageCleanup = () => {
+    clearInterval(elapsedTimer);
+    previousCleanup?.();
+  };
   let cursor = 0;
   const update = async () => {
     const [run, events] = await Promise.all([
@@ -748,29 +802,25 @@ async function runDetails(id, generation) {
         ),
       ),
     );
-    monitoring.textContent = plan.simulated ? `Synthetic data · updated ${time(run.updatedAt)}. CPU, memory and logs unavailable.` : `Real LogQL measurements · updated ${time(run.updatedAt)}. Missing measurements are unavailable, not zero.`;
+    monitoring.textContent = plan.simulated
+      ? `Synthetic data · updated ${time(run.updatedAt)}. CPU, memory and logs unavailable.`
+      : `Real LogQL measurements · updated ${time(run.updatedAt)}. Missing measurements are unavailable, not zero.`;
     actions.replaceChildren();
     if (!terminal.has(run.state))
       actions.append(
-        button(
-          "Cancel run",
-          () => api("/runs/" + id + "/cancel", { method: "POST" }),
-          "danger",
-        ),
+        button("Cancel run", () => api("/runs/" + id + "/cancel", { method: "POST" }), "danger"),
       );
     else {
       actions.append(
         link("View report", `/api/v1/runs/${id}/report`, "button"),
-        link(
-          "JSON summary",
-          `/api/v1/runs/${id}/artifacts/summary.json`,
-          "button",
-        ),
+        link("JSON summary", `/api/v1/runs/${id}/artifacts/summary.json`, "button"),
       );
       if (run.state === "NEEDS_ATTENTION")
         actions.append(
           button("Verify cleanup & release", async () => {
-            await api((plan.simulated ? "/runs/" : "/real/runs/") + id + "/recover", { method: "POST" });
+            await api((plan.simulated ? "/runs/" : "/real/runs/") + id + "/recover", {
+              method: "POST",
+            });
             await update();
           }),
         );
@@ -799,7 +849,10 @@ async function configurationEditor() {
   const startup = await api("/configuration/startup");
   const sections = [
     ["all", "Complete configuration"],
-    ["catalog.environments", session.mode === "real" ? "Environments & monitoring" : "Environments & simulation limits"],
+    [
+      "catalog.environments",
+      session.mode === "real" ? "Environments & monitoring" : "Environments & simulation limits",
+    ],
     ["catalog.services", "Services, namespaces & releases"],
     ["catalog.imageSources", "Mock image sources & versions"],
     ["catalog.scenarios", "Load scenario templates"],
@@ -811,13 +864,22 @@ async function configurationEditor() {
     ["connections.imageSources", "Real image-source mappings"],
   ].filter(([key]) => session.mode === "simulation" || key !== "catalog.imageSources");
   const selector = select(sections, sections[0][0]);
-  const editor = el("textarea", { rows: 20, spellcheck: "false", "aria-label": "Configuration JSON" });
+  const editor = el("textarea", {
+    rows: 20,
+    spellcheck: "false",
+    "aria-label": "Configuration JSON",
+  });
   let selected = selector.value;
-  const value = () => { if (selected === "all") return document; const [group, section] = selected.split("."); return document[group][section]; };
+  const value = () => {
+    if (selected === "all") return document;
+    const [group, section] = selected.split(".");
+    return document[group][section];
+  };
   const capture = () => {
     if (selected === "all") {
       const parsed = JSON.parse(editor.value);
-      if (!parsed || !parsed.catalog || !parsed.connections) throw new Error("Complete configuration requires catalog and connections.");
+      if (!parsed || !parsed.catalog || !parsed.connections)
+        throw new Error("Complete configuration requires catalog and connections.");
       document = { ...parsed, revision: document.revision };
       return;
     }
@@ -826,36 +888,68 @@ async function configurationEditor() {
   };
   editor.value = pretty(value());
   selector.addEventListener("change", () => {
-    try { capture(); selected = selector.value; editor.value = pretty(value()); }
-    catch { selector.value = selected; showError("Fix the JSON in this section before switching sections."); }
-  });
-  const status = el("p", { class: "muted", role: "status" }, "Changes apply when saved. Enter secret references only, never passwords or tokens.");
-  const save = button("Save configuration", async () => {
-    save.disabled = true;
     try {
       capture();
-      document = await api("/configuration", { method: "PUT", body: document });
-      await route();
-      toast("Configuration saved. New requests use the updated settings.");
-    } finally { save.disabled = false; }
-  }, "primary");
+      selected = selector.value;
+      editor.value = pretty(value());
+    } catch {
+      selector.value = selected;
+      showError("Fix the JSON in this section before switching sections.");
+    }
+  });
+  const status = el(
+    "p",
+    { class: "muted", role: "status" },
+    "Changes apply when saved. Enter secret references only, never passwords or tokens.",
+  );
+  const save = button(
+    "Save configuration",
+    async () => {
+      save.disabled = true;
+      try {
+        capture();
+        document = await api("/configuration", { method: "PUT", body: document });
+        await route();
+        toast("Configuration saved. New requests use the updated settings.");
+      } finally {
+        save.disabled = false;
+      }
+    },
+    "primary",
+  );
   const reload = button("Discard edits & reload", async () => {
     document = await api("/configuration");
     editor.value = pretty(value());
     status.textContent = "Loaded the current saved configuration.";
   });
-  const file = el("input", { type: "file", hidden: true, accept: ".json,application/json", "aria-label": "Import configuration JSON file" });
+  const file = el("input", {
+    type: "file",
+    hidden: true,
+    accept: ".json,application/json",
+    "aria-label": "Import configuration JSON file",
+  });
   const fileName = el("span", { class: "muted", role: "status" }, "JSON file · maximum 256 KiB");
-  const importButton = el("button", { type: "button", onclick: () => file.click() }, "Import JSON…");
+  const importButton = el(
+    "button",
+    { type: "button", onclick: () => file.click() },
+    "Import JSON…",
+  );
   file.addEventListener("change", async () => {
     const chosen = file.files[0];
     if (!chosen) return;
     try {
       if (chosen.size > 262144) throw new Error("Configuration must be at most 256 KiB.");
       const imported = JSON.parse(await chosen.text());
-      if (!imported || typeof imported !== "object" || Array.isArray(imported)
-          || Object.keys(imported).some(key => !["revision", "catalog", "connections"].includes(key))
-          || !imported.catalog || !imported.connections)
+      if (
+        !imported ||
+        typeof imported !== "object" ||
+        Array.isArray(imported) ||
+        Object.keys(imported).some(
+          (key) => !["revision", "catalog", "connections"].includes(key),
+        ) ||
+        !imported.catalog ||
+        !imported.connections
+      )
         throw new Error("Import a configuration export containing catalog and connections.");
       imported.connections.loki ||= {};
       imported.connections.bitbucket ||= {}; // Older exports did not include Bitbucket.
@@ -867,91 +961,192 @@ async function configurationEditor() {
       }
       if (imported.catalog.mode !== session.mode)
         throw new Error("Imported configuration must match the running mode.");
-      if (startup.environment && (Object.keys(imported.catalog.environments).length !== 1
-          || !imported.catalog.environments[startup.environment]
-          || imported.catalog.environments[startup.environment].clusterIdentity !== startup.configuration.catalog.environments[startup.environment].clusterIdentity))
-        throw new Error(`Import must match this instance's environment and cluster: ${startup.environment}`);
+      if (startup.environment && !imported.catalog.environments[startup.environment])
+        throw new Error(
+          `Keep the default environment in the imported catalog: ${startup.environment}`,
+        );
       document = { ...imported, revision: document.revision };
       selected = "all";
       selector.value = "all";
       fileName.textContent = chosen.name;
       editor.value = pretty(value());
-      status.textContent = "Imported into the editor only. Review all sections, then Save configuration to validate and apply. This replaces the complete runtime configuration.";
-    } catch (error) { showError(error.message); }
-    finally { file.value = ""; }
+      status.textContent =
+        "Imported into the editor only. Review all sections, then Save configuration to validate and apply. This replaces the complete runtime configuration.";
+    } catch (error) {
+      showError(error.message);
+    } finally {
+      file.value = "";
+    }
   });
   const exportSaved = button("Export active configuration", async () => {
     const active = await api("/configuration");
     const url = URL.createObjectURL(new Blob([pretty(active)], { type: "application/json" }));
-    const link = el("a", { href: url, download: `orchestrator-${session.mode}-configuration.json` });
+    const link = el("a", {
+      href: url,
+      download: `orchestrator-${session.mode}-configuration.json`,
+    });
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    status.textContent = "Exported active configuration. Unsaved editor changes are not included. Review internal URLs and any values you entered before sharing.";
+    status.textContent =
+      "Exported active configuration. Unsaved editor changes are not included. Review internal URLs and any values you entered before sharing.";
   });
   const restore = button("Load startup defaults into editor", async () => {
     const baseline = await api("/configuration/startup");
     document = { ...baseline.configuration, revision: document.revision };
     editor.value = pretty(value());
-    status.textContent = "Loaded startup configuration into the editor. Review and save to replace runtime settings. Saving clears dashboard overrides so future startup defaults apply. The runtime file remains as an empty override document.";
+    status.textContent =
+      "Loaded startup configuration into the editor. Review and save to replace runtime settings. Saving clears dashboard overrides so future startup defaults apply. The runtime file remains as an empty override document.";
   });
-  return el("details", { class: "card spacer" }, el("summary", {}, "Advanced JSON · import, export & restore"),
-    el("p", { class: "muted" }, startup.runtimeOverride
-      ? "Active source: startup settings plus saved dashboard changes. Only changed fields override startup defaults."
-      : "Active source: startup YAML / Helm settings. No saved runtime override is loaded."),
-    el("p", { class: "muted" }, "Saved settings survive restarts. Active runs retain their prepared inputs; older unsubmitted plans must be prepared again after catalog changes. Connection changes require a fresh Secret Server sign-in."),
-    startup.environment ? el("p", { class: "muted" }, `Instance environment: ${startup.environment}. Environment and cluster are fixed at startup; imports cannot switch them.`) : null,
-    labeled("Configuration section", selector), labeled("JSON", editor), status,
+  return el(
+    "details",
+    { class: "card spacer" },
+    el("summary", {}, "Advanced JSON · import, export & restore"),
+    el(
+      "p",
+      { class: "muted" },
+      startup.runtimeOverride
+        ? "Active source: startup settings plus saved dashboard changes. Only changed fields override startup defaults."
+        : "Active source: startup YAML / Helm settings. No saved runtime override is loaded.",
+    ),
+    el(
+      "p",
+      { class: "muted" },
+      "Saved settings survive restarts. Active runs retain their prepared inputs; older unsubmitted plans must be prepared again after catalog changes. Connection changes require a fresh Secret Server sign-in.",
+    ),
+    startup.environment
+      ? el(
+          "p",
+          { class: "muted" },
+          `Default environment: ${startup.environment}. Select a target when configuring each run.`,
+        )
+      : null,
+    labeled("Configuration section", selector),
+    labeled("JSON", editor),
+    status,
     el("div", { class: "card-actions" }, save, reload, exportSaved, restore),
-    el("div", { class: "card-actions config-import" }, importButton, fileName, file));
+    el("div", { class: "card-actions config-import" }, importButton, fileName, file),
+  );
 }
 
 async function settings(section) {
   const active = await api("/configuration");
   const startup = await api("/configuration/startup");
   const authStates = await api("/secret-auth");
-  app.append(heading("WORKSPACE SETTINGS", "Connections & catalog", "Manage connections and service settings. Changes apply when saved."),
-    el("p", { class: "banner" }, session.mode === "real"
-      ? "Real mode · Vault authentication, image discovery and Bitbucket references are available. Real execution requires startup cluster configuration; LogQL measurements require approved queries."
-      : "Simulation mode · Deployments and results are synthetic. Registry diagnostics use configured real connections."),
-    el("p", { class: "muted" }, startup.runtimeOverride
-      ? "Startup defaults + saved dashboard changes. Export your configuration below to keep a backup."
-      : "Showing startup defaults from application.yaml and local / Helm overrides."),
-    configurationManager(active, { api, mode: session.mode, authStates,
-      onSaved: async () => { await route(); toast("Settings updated."); },
-      onSignIn: id => busy(() => vaultPrompt.open(id)),
+  app.append(
+    heading(
+      "WORKSPACE SETTINGS",
+      "Connections & catalog",
+      "Manage connections and service settings. Changes apply when saved.",
+    ),
+    el(
+      "p",
+      { class: "banner" },
+      session.mode === "real"
+        ? "Real mode · Vault authentication, image discovery and Bitbucket references are available. Real execution requires startup cluster configuration; LogQL measurements require approved queries."
+        : "Simulation mode · Deployments and results are synthetic. Registry diagnostics use configured real connections.",
+    ),
+    el(
+      "p",
+      { class: "muted" },
+      startup.runtimeOverride
+        ? "Startup defaults + saved dashboard changes. Export your configuration below to keep a backup."
+        : "Showing startup defaults from application.yaml and local / Helm overrides.",
+    ),
+    configurationManager(active, {
+      api,
+      mode: session.mode,
+      authStates,
+      onSaved: async () => {
+        await route();
+        toast("Settings updated.");
+      },
+      onSignIn: (id) => busy(() => vaultPrompt.open(id)),
       onConnectionSession: (kind, id) => {
         const auth = operationAuthentication(active.connections[kind][id], { api, kind, id });
-        const dialog = el("dialog", { class: "deployment-dialog auth-dialog", "aria-label": "Connection session" },
-          el("h2", {}, `Connection: ${id}`), auth.node,
-          el("div", { class: "dialog-actions" }, el("button", { type: "button", onclick: () => dialog.close() }, "Close")));
-        dialog.addEventListener("close", () => { auth.clear(); dialog.remove(); });
-        document.body.append(dialog); dialog.showModal();
-      } }));
+        const dialog = el(
+          "dialog",
+          { class: "deployment-dialog auth-dialog", "aria-label": "Connection session" },
+          el("h2", {}, `Connection: ${id}`),
+          auth.node,
+          el(
+            "div",
+            { class: "dialog-actions" },
+            el("button", { type: "button", onclick: () => dialog.close() }, "Close"),
+          ),
+        );
+        dialog.addEventListener("close", () => {
+          auth.clear();
+          dialog.remove();
+        });
+        document.body.append(dialog);
+        dialog.showModal();
+      },
+    }),
+  );
   app.append(await configurationEditor());
-  const diagnostics = el("details", { class: "card spacer" }, el("summary", {}, "Connection diagnostics"),
-    el("p", { class: "muted" }, "Test registry tags and Bitbucket references with configured connections. These requests do not deploy anything."));
+  const diagnostics = el(
+    "details",
+    { class: "card spacer" },
+    el("summary", {}, "Connection diagnostics"),
+    el(
+      "p",
+      { class: "muted" },
+      "Test registry tags and Bitbucket references with configured connections. These requests do not deploy anything.",
+    ),
+  );
   app.append(diagnostics);
   const config = await api("/connections");
   const panel = connectionDiagnostics(active.catalog, config, api);
   diagnostics.append(panel.node);
-  if (section === "diagnostics") { diagnostics.open = true; diagnostics.scrollIntoView({ block: "start" }); }
+  if (section === "diagnostics") {
+    diagnostics.open = true;
+    diagnostics.scrollIntoView({ block: "start" });
+  }
   pageCleanup = () => panel.dispose();
-
 }
 function realOverview() {
   const enabled = session.capabilities.execution;
-  app.append(heading("REAL INTEGRATIONS", "Performance workspace", "Repository-backed Helm deployments and read-only service diagnostics."),
-    el("section", { class: "card" }, el("h2", {}, enabled ? "Run a real performance test" : "Real execution needs cluster configuration"),
-      el("p", {}, enabled
-        ? "Prepare service charts and a load profile from CKP directories, review pinned inputs, then deploy and run. Owned load is uninstalled at completion; services remain."
-        : "Configure orchestrator.execution.enabled, kube-context and expected-api-server, then restart. Git, Helm and kubectl must be installed on the application host."),
-      el("div", { class: "card-actions" },
+  app.append(
+    heading(
+      "REAL INTEGRATIONS",
+      "Performance workspace",
+      "Repository-backed Helm deployments and read-only service diagnostics.",
+    ),
+    el(
+      "section",
+      { class: "card" },
+      el(
+        "h2",
+        {},
+        enabled ? "Run a real performance test" : "Real execution needs cluster configuration",
+      ),
+      el(
+        "p",
+        {},
+        enabled
+          ? "Prepare service charts and a load profile from CKP directories, review pinned inputs, then deploy and run. Owned load is uninstalled at completion; services remain."
+          : "Configure orchestrator.execution.enabled, kube-context and expected-api-server, then restart. Git, Helm and kubectl must be installed on the application host.",
+      ),
+      el(
+        "div",
+        { class: "card-actions" },
         enabled ? link("Configure run", "#configure", "button primary") : null,
         link("Browse service diagnostics", "#settings/diagnostics", "button"),
-        link("Configure connections", "#settings", "button"))),
-    el("section", { class: "card spacer" }, el("h2", {}, "Measurement requirements"),
-      el("p", {}, "Load rates and destinations come from selected chart values. Supply organization-approved LogQL queries to measure actual traffic. Without measurements and thresholds, the performance verdict is inconclusive."),
-      link("View run history", "#history", "button")));
+        link("Configure connections", "#settings", "button"),
+      ),
+    ),
+    el(
+      "section",
+      { class: "card spacer" },
+      el("h2", {}, "Measurement requirements"),
+      el(
+        "p",
+        {},
+        "Load rates and destinations come from selected chart values. Supply organization-approved LogQL queries to measure actual traffic. Without measurements and thresholds, the performance verdict is inconclusive.",
+      ),
+      link("View run history", "#history", "button"),
+    ),
+  );
 }
 
 async function route() {
@@ -960,9 +1155,7 @@ async function route() {
   clearTimeout(poll);
   const generation = ++routeGeneration;
   app.replaceChildren(el("p", { class: "muted" }, "Loading workspace…"));
-  const [page = "dashboard", id] = (
-    location.hash.slice(1) || "dashboard"
-  ).split("/");
+  const [page = "dashboard", id] = (location.hash.slice(1) || "dashboard").split("/");
   document
     .querySelectorAll("nav a")
     .forEach((a) => a.classList.toggle("active", a.hash === "#" + page));
@@ -971,29 +1164,72 @@ async function route() {
     if (generation !== routeGeneration) return;
     app.replaceChildren();
     if (session.mode === "real" && page === "configure") {
-      app.append(heading("REAL EXECUTION", "Configure run", "Prepare and review the deployment before starting."));
-      const flow = await realFlow(api, { services: catalog.services, environment: session.targetEnvironment }, hash => { location.hash = hash; });
-      if (generation !== routeGeneration) { flow.dispose?.(); return; }
+      app.append(
+        heading(
+          "REAL EXECUTION",
+          "Configure run",
+          "Prepare and review the deployment before starting.",
+        ),
+      );
+      const flow = await realFlow(
+        api,
+        {
+          services: catalog.services,
+          environment: id ? decodeURIComponent(id) : session.targetEnvironment,
+          environments: Object.keys(catalog.env),
+        },
+        (hash) => {
+          location.hash = hash;
+        },
+      );
+      if (generation !== routeGeneration) {
+        flow.dispose?.();
+        return;
+      }
       app.append(flow);
       pageCleanup = () => flow.dispose?.();
-    }
-    else if (session.mode === "real" && page === "plan") {
+    } else if (session.mode === "real" && page === "plan") {
       const prepared = await api("/plans/" + id);
-      app.append(heading("PREPARED REAL PLAN", prepared.profile.name, prepared.clusterIdentity),
-        el("ul", {}, prepared.warnings.map(warning => el("li", {}, warning))),
-        el("pre", {}, pretty(prepared.services.map(s => ({ service: s.serviceId, namespace: s.namespace, release: s.releaseName, commit: s.sourceRevision, image: s.image, effectiveValues: s.effectiveValues })))),
-        link("Prepare another run", "#configure", "button"));
-    }
-    else if (session.mode === "real" && !["settings", "history", "run", "monitor"].includes(page)) realOverview();
+      app.append(
+        heading("PREPARED REAL PLAN", prepared.profile.name, prepared.clusterIdentity),
+        el(
+          "ul",
+          {},
+          prepared.warnings.map((warning) => el("li", {}, warning)),
+        ),
+        el(
+          "pre",
+          {},
+          pretty(
+            prepared.services.map((s) => ({
+              service: s.serviceId,
+              namespace: s.namespace,
+              release: s.releaseName,
+              commit: s.sourceRevision,
+              image: s.image,
+              effectiveValues: s.effectiveValues,
+            })),
+          ),
+        ),
+        link("Prepare another run", "#configure", "button"),
+      );
+    } else if (session.mode === "real" && !["settings", "history", "run", "monitor"].includes(page))
+      realOverview();
     else if (page === "configure") await configure(id);
     else if (page === "plan") await planScreen(id);
     else if (page === "history") await history();
     else if (page === "monitor") {
-      const view = await runMonitoring(api, id, {services: catalog.services, environment: session.targetEnvironment});
-      if (generation !== routeGeneration) {view.dispose();return;}
-      app.append(view);pageCleanup=()=>view.dispose();
-    }
-    else if (page === "run") await runDetails(id, generation);
+      const view = await runMonitoring(api, id, {
+        services: catalog.services,
+        environment: session.targetEnvironment,
+      });
+      if (generation !== routeGeneration) {
+        view.dispose();
+        return;
+      }
+      app.append(view);
+      pageCleanup = () => view.dispose();
+    } else if (page === "run") await runDetails(id, generation);
     else if (page === "settings") await settings(id);
     else await dashboard();
     if (session.mode === "real") await vaultPrompt?.refresh();
@@ -1002,12 +1238,30 @@ async function route() {
   }
 }
 session = await api("/session");
-vaultPrompt = secretSignInPrompt(api, async state => {
-  toast(state.state === "AUTHENTICATED" ? `Signed in as ${state.username} until ${time(state.expiresAt)}.` : `Vault token stored until ${time(state.expiresAt)}; access is verified when a secret is requested.`);
-  await route();
-}, session.mode === "real");
-$("#mode-badge").textContent = session.mode === "real" ? (session.capabilities.execution ? "REAL · EXECUTION" : "REAL · READ-ONLY") : "SIMULATION";
-$("#workspace-mode").textContent = session.mode === "real" ? `Environment: ${session.targetEnvironment || "unbound"} · Real integrations` : "Simulation mode · synthetic deployments and results";
-if (session.mode === "real") document.querySelector('nav a[href="#configure"]').hidden = !session.capabilities.execution;
+document.documentElement.dataset.styleNonce = session.styleNonce;
+vaultPrompt = secretSignInPrompt(
+  api,
+  async (state) => {
+    toast(
+      state.state === "AUTHENTICATED"
+        ? `Signed in as ${state.username} until ${time(state.expiresAt)}.`
+        : `Vault token stored until ${time(state.expiresAt)}; access is verified when a secret is requested.`,
+    );
+    await route();
+  },
+  session.mode === "real",
+);
+$("#mode-badge").textContent =
+  session.mode === "real"
+    ? session.capabilities.execution
+      ? "REAL · EXECUTION"
+      : "REAL · READ-ONLY"
+    : "SIMULATION";
+$("#workspace-mode").textContent =
+  session.mode === "real"
+    ? `Default: ${session.targetEnvironment || "unbound"} · Real integrations`
+    : "Simulation mode · synthetic deployments and results";
+if (session.mode === "real")
+  document.querySelector('nav a[href="#configure"]').hidden = !session.capabilities.execution;
 window.addEventListener("hashchange", route);
 await route();

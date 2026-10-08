@@ -1,7 +1,6 @@
 import { el, labeled, input, select } from "./dom.js";
 
-const actionLabel = (value) =>
-  value === "VERIFY_EXISTING" ? "Verify existing" : "Deploy";
+const actionLabel = (value) => (value === "VERIFY_EXISTING" ? "Verify existing" : "Deploy");
 const button = (text, callback, className = "") =>
   el(
     "button",
@@ -15,9 +14,7 @@ const button = (text, callback, className = "") =>
 
 // The editor consumes catalog data from the API; it does not depend on how that catalog is sourced.
 export function deploymentEditor({ catalog, api, environment, selections }) {
-  const chosen = new Map(
-    selections.map((value) => [value.serviceId, structuredClone(value)]),
-  );
+  const chosen = new Map(selections.map((value) => [value.serviceId, structuredClone(value)]));
   let target = environment,
     activeDialog;
   const list = el("div", { class: "deployment-list", "aria-live": "polite" });
@@ -45,12 +42,9 @@ export function deploymentEditor({ catalog, api, environment, selections }) {
     list,
   );
 
-  const destination = (serviceId) =>
-    catalog.services[serviceId]?.deploymentByEnvironment[target];
+  const destination = (serviceId) => catalog.services[serviceId]?.deploymentByEnvironment[target];
   const available = () =>
-    Object.keys(catalog.services).filter(
-      (id) => !chosen.has(id) && destination(id),
-    );
+    Object.keys(catalog.services).filter((id) => !chosen.has(id) && destination(id));
   const describeTarget = (serviceId) => {
     const mapping = destination(serviceId);
     return mapping
@@ -61,16 +55,17 @@ export function deploymentEditor({ catalog, api, environment, selections }) {
   function move(from, to) {
     const entries = [...chosen.entries()];
     if (from < 0 || to < 0 || from >= entries.length || to >= entries.length || from === to) return;
-    const [entry] = entries.splice(from, 1); entries.splice(to, 0, entry);
-    chosen.clear(); entries.forEach(([id, value]) => chosen.set(id, value));
-    render(); list.children[to]?.querySelector('.service-drag-handle')?.focus();
+    const [entry] = entries.splice(from, 1);
+    entries.splice(to, 0, entry);
+    chosen.clear();
+    entries.forEach(([id, value]) => chosen.set(id, value));
+    render();
+    list.children[to]?.querySelector(".service-drag-handle")?.focus();
   }
   function render() {
     count.textContent = `${chosen.size} ${chosen.size === 1 ? "service" : "services"} selected`;
     add.disabled = available().length === 0;
-    add.title = add.disabled
-      ? "All services mapped to this environment are already added"
-      : "";
+    add.title = add.disabled ? "All services mapped to this environment are already added" : "";
     list.replaceChildren();
     if (!chosen.size)
       list.append(
@@ -86,15 +81,33 @@ export function deploymentEditor({ catalog, api, environment, selections }) {
         ),
       );
     for (const [index, value] of [...chosen.values()].entries()) {
-      const handle = el('button', { type: 'button', class: 'service-drag-handle', draggable: 'true',
-        'aria-label': `Reorder ${value.serviceId}, position ${index + 1}`,
-        ondragstart: event => { draggedService = value.serviceId; event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', value.serviceId); },
-        ondragend: () => { draggedService = null; list.querySelectorAll('.service-drop-target').forEach(node => node.classList.remove('service-drop-target')); }
-      }, '⠿');
-      const up = button('↑', () => move(index, index - 1)); up.disabled = index === 0;
-      up.setAttribute('aria-label', `Move ${value.serviceId} up`);
-      const down = button('↓', () => move(index, index + 1)); down.disabled = index === chosen.size - 1;
-      down.setAttribute('aria-label', `Move ${value.serviceId} down`);
+      const handle = el(
+        "button",
+        {
+          type: "button",
+          class: "service-drag-handle",
+          draggable: "true",
+          "aria-label": `Reorder ${value.serviceId}, position ${index + 1}`,
+          ondragstart: (event) => {
+            draggedService = value.serviceId;
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", value.serviceId);
+          },
+          ondragend: () => {
+            draggedService = null;
+            list
+              .querySelectorAll(".service-drop-target")
+              .forEach((node) => node.classList.remove("service-drop-target"));
+          },
+        },
+        "⠿",
+      );
+      const up = button("↑", () => move(index, index - 1));
+      up.disabled = index === 0;
+      up.setAttribute("aria-label", `Move ${value.serviceId} up`);
+      const down = button("↓", () => move(index, index + 1));
+      down.disabled = index === chosen.size - 1;
+      down.setAttribute("aria-label", `Move ${value.serviceId} down`);
       const edit = button("Edit", () => openDialog(value.serviceId));
       edit.setAttribute("aria-label", `Edit ${value.serviceId}`);
       const remove = button(
@@ -110,10 +123,26 @@ export function deploymentEditor({ catalog, api, environment, selections }) {
       list.append(
         el(
           "article",
-          { class: "deployment-row", "aria-label": value.serviceId,
-            ondragover: event => { if (draggedService && draggedService !== value.serviceId) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; event.currentTarget.classList.add('service-drop-target'); } },
-            ondragleave: event => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.classList.remove('service-drop-target'); },
-            ondrop: event => { event.preventDefault(); event.currentTarget.classList.remove('service-drop-target'); if (draggedService) move([...chosen.keys()].indexOf(draggedService), index); draggedService = null; }
+          {
+            class: "deployment-row",
+            "aria-label": value.serviceId,
+            ondragover: (event) => {
+              if (draggedService && draggedService !== value.serviceId) {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                event.currentTarget.classList.add("service-drop-target");
+              }
+            },
+            ondragleave: (event) => {
+              if (!event.currentTarget.contains(event.relatedTarget))
+                event.currentTarget.classList.remove("service-drop-target");
+            },
+            ondrop: (event) => {
+              event.preventDefault();
+              event.currentTarget.classList.remove("service-drop-target");
+              if (draggedService) move([...chosen.keys()].indexOf(draggedService), index);
+              draggedService = null;
+            },
           },
           el(
             "div",
@@ -133,9 +162,7 @@ export function deploymentEditor({ catalog, api, environment, selections }) {
             el(
               "p",
               {
-                class: destination(value.serviceId)
-                  ? "subtle destination"
-                  : "error",
+                class: destination(value.serviceId) ? "subtle destination" : "error",
               },
               describeTarget(value.serviceId),
             ),
@@ -160,9 +187,7 @@ export function deploymentEditor({ catalog, api, environment, selections }) {
       [
         ["", "Choose a service"],
         ...Object.keys(catalog.services)
-          .filter(
-            (id) => (id === editingId || !chosen.has(id)) && destination(id),
-          )
+          .filter((id) => (id === editingId || !chosen.has(id)) && destination(id))
           .map((id) => [id, id]),
       ],
       editingId || "",
@@ -205,8 +230,7 @@ export function deploymentEditor({ catalog, api, environment, selections }) {
           !images.some((image) => image.version === selectedVersion)
         ) {
           error.hidden = false;
-          error.textContent =
-            "Choose a service and an available image version.";
+          error.textContent = "Choose a service and an available image version.";
           return;
         }
         chosen.set(service.value, {
@@ -233,9 +257,7 @@ export function deploymentEditor({ catalog, api, environment, selections }) {
       );
       version.replaceChildren(
         el("option", { value: "" }, "Choose a discovered version"),
-        ...filtered.map((image) =>
-          el("option", { value: image.version }, image.version),
-        ),
+        ...filtered.map((image) => el("option", { value: image.version }, image.version)),
       );
       version.value = selectedVersion;
     }
@@ -254,8 +276,7 @@ export function deploymentEditor({ catalog, api, environment, selections }) {
         return;
       }
       if (!usernameField.hidden && !username.value.trim()) {
-        status.textContent =
-          "Enter the artifact-owner username to discover versions.";
+        status.textContent = "Enter the artifact-owner username to discover versions.";
         return;
       }
       status.textContent = "Discovering simulated builds…";
@@ -266,9 +287,7 @@ export function deploymentEditor({ catalog, api, environment, selections }) {
         );
         if (request !== sequence || !dialog.open) return;
         images = result.items;
-        selectedVersion = images.some((image) => image.version === preserve)
-          ? preserve
-          : "";
+        selectedVersion = images.some((image) => image.version === preserve) ? preserve : "";
         filter();
         commit.disabled = !selectedVersion;
         status.textContent = images.length
@@ -282,17 +301,11 @@ export function deploymentEditor({ catalog, api, environment, selections }) {
       }
     }
     function setService(preserveSource = "", preserveVersion = "") {
-      const mappings =
-        catalog.services[service.value]?.installationBindings.sourceSelectors ||
-        {};
-      const sources = Object.entries(catalog.sources).filter(([id]) =>
-        Object.hasOwn(mappings, id),
-      );
+      const mappings = catalog.services[service.value]?.installationBindings.sourceSelectors || {};
+      const sources = Object.entries(catalog.sources).filter(([id]) => Object.hasOwn(mappings, id));
       source.replaceChildren(
         el("option", { value: "" }, "Choose an image source"),
-        ...sources.map(([id, data]) =>
-          el("option", { value: id }, data.displayName),
-        ),
+        ...sources.map(([id, data]) => el("option", { value: id }, data.displayName)),
       );
       source.value = sources.some(([id]) => id === preserveSource)
         ? preserveSource
@@ -336,11 +349,7 @@ export function deploymentEditor({ catalog, api, environment, selections }) {
       el(
         "div",
         { class: "dialog-heading" },
-        el(
-          "h2",
-          { id: "deployment-dialog-title" },
-          saved ? "Edit deployment" : "Add deployment",
-        ),
+        el("h2", { id: "deployment-dialog-title" }, saved ? "Edit deployment" : "Add deployment"),
         button("Close", () => dialog.close()),
       ),
       el(
@@ -357,12 +366,7 @@ export function deploymentEditor({ catalog, api, environment, selections }) {
         usernameField,
       ),
       mapping,
-      el(
-        "div",
-        { class: "version-search" },
-        labeled("Search versions", search),
-        refresh,
-      ),
+      el("div", { class: "version-search" }, labeled("Search versions", search), refresh),
       labeled("Available version", version),
       status,
       el(

@@ -164,7 +164,7 @@ The account must already exist with approved access to each service/load namespa
 
 Configure the vault with `authMode: interactive` and `tokenUrl: https://domain/SecretServer/oauth2/token`. `apiBaseUrl` remains `https://domain/SecretServer/api/v1`; both endpoints must use the same authority. Application and CKP defaults now use this mode. Existing saved dashboard overrides retain precedence: edit the vault and choose **AD sign-in or access token** if it still shows token-only mode.
 
-The initial prompt offers AD username/password or a supplied token. AD uses the password grant, discards the password after the request, retains only the token and username in the server session, and honors the returned expiry (capped at 8 hours). Sign-out, expiry and connection changes invalidate the identity. Your vault must permit this grant; MFA/browser-only policies may require the token option. Token-only login does not verify a username. AD usernames are captured in prepared plans and existing action audit records, including configuration updates. This remains integration authentication for a loopback application, not shared-user role authorization.
+The initial prompt offers AD username/password or a supplied token. AD uses the password grant, retains the AD credentials encrypted in server memory for cluster username/password prompts, keeps the vault token and username in the server session, and honors the returned expiry (capped at 8 hours). Sign-out, expiry and connection changes invalidate the identity. Your vault must permit this grant; MFA/browser-only policies may require the token option. Token-only login does not verify a username. AD usernames are captured in prepared plans and existing action audit records, including configuration updates. This remains integration authentication for a loopback application, not shared-user role authorization.
 
 [Secret Server password-grant documentation](https://docs.delinea.com/online-help/secret-server-11-6-x/api-scripting/authenticating/index.htm)
 
@@ -242,7 +242,7 @@ orchestrator:
     helm-repository-username: first.last
 ```
 
-The username must match the Artifactory token owner. Leaving it blank derives the short username from the current Secret Server AD login (`first.last@domain.net` or `DOMAIN\first.last` becomes `first.last`). A token-only Secret Server login has no verified username, so set it explicitly in that case. Secret Server still receives the full AD login. Its AD password is discarded after exchanging it for a Secret Server token; it is not reused for Helm. The `office` connection supplies an **Artifactory** token through its existing token session or credential reference, not the Secret Server token itself. Set `helm-repository-connection` to an empty string for anonymous repositories.
+The username must match the Artifactory token owner. Leaving it blank derives the short username from the current Secret Server AD login (`first.last@domain.net` or `DOMAIN\first.last` becomes `first.last`). A token-only Secret Server login has no verified username, so set it explicitly in that case. Secret Server still receives the full AD login. The AD password may be supplied through stdin to Kubernetes login prompts; Helm repository authentication continues to use the Artifactory token. The `office` connection supplies an **Artifactory** token through its existing token session or credential reference, not the Secret Server token itself. Set `helm-repository-connection` to an empty string for anonymous repositories.
 
 JFrog supports tokens for Helm repository authentication, but the organization must permit this token to read the selected Helm repository. The app passes the token via stdin, not argv or environment variables. Helm itself writes it to a private temporary repository configuration (directory mode 0700 on POSIX filesystems). That directory is deleted after dependency preparation, including ordinary failure, and is excluded from prepared snapshots. A process crash or filesystem cleanup failure can leave the temporary directory behind; remove abandoned preparation folders securely. No AD password is requested or saved for Helm.
 
@@ -333,3 +333,32 @@ The chart must support simultaneous releases: Kubernetes resource names and sele
 The run page records each addition's image, namespace, release, actor and installation/cleanup status; command activity is attached to the same run. An installation error attempts cleanup of only that additional release, leaving baseline traffic running. If that cleanup fails, the addition is marked CLEANUP_FAILED and cleanup is retried when the parent ends. “RUNNING” means Helm installation completed; use monitoring to verify actual traffic.
 
 Additional loads share the parent's remaining measurement window and overall deadline; they do not extend either. Choose a long enough window when configuring the baseline. Completion, cancellation and restart recovery clean up **all** load releases owned by the run, retaining service deployments. Cleanup failures retain the environment reservation and require recovery. This addition workflow is available in real mode; simulation retains its original single-load workflow.
+
+
+## Selecting environments and signing into CKP
+
+Keep all environment defaults in `application.yaml`. Add one execution mapping per environment:
+
+```yaml
+orchestrator:
+  target-environment: sandbox
+  execution:
+    enabled: true
+    targets:
+      sandbox:
+        kube-context: sandbox-nvan
+        expected-api-server: https://api.sandbox.example.net:6443
+      perf:
+        kube-context: perf-nvan
+        expected-api-server: https://api.perf.example.net:6443
+```
+
+Use the exact API server from each kubeconfig context, not the console URL. Legacy `execution.kube-context` and `expected-api-server`, when set, override only the default environment. Clear them to use its `targets` mapping instead. In Helm values the same map lives at `application.orchestrator.execution.targets`; environment values files override selected entries. Application startup defaults still yield to saved dashboard catalog overrides; target/context mappings themselves are administrator-controlled startup settings.
+
+Choose **Environment** in Configure run. Changing it clears unsaved form selections, reloads that environment's profiles and monitoring sets, and uses its values file defaults, service namespace/release overrides, cluster subdomain and monitoring credential references. Plans, running services, additional loads, and cleanup retain the originally selected target. The application passes `--kube-context` explicitly and never calls `kubectl config use-context`.
+
+On a laptop, complete AD sign-in to Secret Server. The server retains encrypted credentials in process memory, bounded by the browser session and vault-token expiry. For cluster commands only, it responds once to recognized username/password prompts through stdin. The password is omitted from argv, configuration, diagnostics and returned process output. Sign-out, session invalidation and restart destroy the retained credential; a token-only vault login supplies no AD password. Existing kubeconfig/helper caches may still satisfy login independently, and this app does not manage those external caches.
+
+The helper must accept prompts via stdin. A helper that requires `/dev/tty`, MFA or browser interaction needs prior terminal login; no generic automatic MFA/terminal driver is implemented. Your organization's `ckp-login` must be verified in sandbox; the automated test covers the prompt contract with a real subprocess. No password is supplied to arbitrary Git or chart-validation commands.
+
+On CKP, use the mounted service account for the local environment (`kube-context: in-cluster`). Remote environments require explicitly configured kubeconfig contexts and appropriate authorization; AD sign-in does not grant Kubernetes permissions. Do not assume a service account can access other clusters.

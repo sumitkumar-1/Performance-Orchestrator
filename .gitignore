@@ -1,5 +1,6 @@
 # Generated build output and runtime state
 /target/
+/node_modules/
 /data/
 /.local/
 *.log

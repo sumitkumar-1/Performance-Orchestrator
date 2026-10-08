@@ -1,7 +1,7 @@
 package com.example.perforchestrator.infrastructure.execution;
 
-import java.nio.file.*;
 import java.net.URI;
+import java.nio.file.*;
 import java.util.Map;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
@@ -11,40 +11,109 @@ import org.springframework.stereotype.Component;
 /** Startup-only cluster/process boundary. Service destinations remain in the runtime catalog. */
 @Component
 public class ExecutionSettings {
+
+  public record ClusterTarget(String kubeContext, String expectedApiServer) {}
+
+  public final Map<String, ClusterTarget> targets;
+  public final String defaultEnvironment;
   public final boolean enabled;
   public final String context, expectedServer;
   public final Path workspace;
   public final int timeoutSeconds;
   public final int preparationConcurrency;
   public final int defaultRunDurationSeconds, maxRunDurationSeconds;
-  public final Map<String,String> helmRepositories;
-  public final String helmRepositoryConnection,helmRepositoryUsername;
-  public ExecutionSettings(Environment env) {
+  public final Map<String, String> helmRepositories;
+  public final String helmRepositoryConnection, helmRepositoryUsername;
+
+  public ExecutionSettings(final Environment env) {
     enabled = env.getProperty("orchestrator.execution.enabled", Boolean.class, false);
+    defaultEnvironment = env.getProperty("orchestrator.target-environment", "sandbox");
+    targets = Map.copyOf(
+      Binder.get(env)
+        .bind("orchestrator.execution.targets", Bindable.mapOf(String.class, ClusterTarget.class))
+        .orElse(Map.of())
+    );
     context = env.getProperty("orchestrator.execution.kube-context", "");
     expectedServer = env.getProperty("orchestrator.execution.expected-api-server", "");
-    workspace = Path.of(env.getProperty("orchestrator.execution.workspace", "data/real/workspaces")).toAbsolutePath().normalize();
-    timeoutSeconds = env.getProperty("orchestrator.execution.command-timeout-seconds", Integer.class, 300);
-    preparationConcurrency=env.getProperty("orchestrator.execution.preparation-concurrency",Integer.class,3);
-    if(preparationConcurrency<1 || preparationConcurrency>8)throw new IllegalArgumentException("Preparation concurrency must be between 1 and 8");
-    if (timeoutSeconds < 10 || timeoutSeconds > 1800) throw new IllegalArgumentException("Execution command timeout must be 10–1800 seconds");
-    maxRunDurationSeconds = env.getProperty("orchestrator.execution.max-run-duration-seconds", Integer.class, 28800);
-    defaultRunDurationSeconds = env.getProperty("orchestrator.execution.default-run-duration-seconds", Integer.class, 900);
-    if (maxRunDurationSeconds < 60 || defaultRunDurationSeconds < 60 || defaultRunDurationSeconds > maxRunDurationSeconds)
-      throw new IllegalArgumentException("Execution default run duration must be at least 60 seconds and no greater than max-run-duration-seconds");
-    helmRepositoryConnection=env.getProperty("orchestrator.execution.helm-repository-connection","").strip();
-    helmRepositoryUsername=env.getProperty("orchestrator.execution.helm-repository-username","").strip();
-    helmRepositories=Map.copyOf(Binder.get(env).bind("orchestrator.execution.helm-repositories",
-        Bindable.mapOf(String.class,String.class)).orElse(Map.of()));
-    helmRepositories.forEach((name,url)->{
+    workspace = Path.of(env.getProperty("orchestrator.execution.workspace", "data/real/workspaces"))
+      .toAbsolutePath()
+      .normalize();
+    timeoutSeconds = env.getProperty(
+      "orchestrator.execution.command-timeout-seconds",
+      Integer.class,
+      300
+    );
+    preparationConcurrency = env.getProperty(
+      "orchestrator.execution.preparation-concurrency",
+      Integer.class,
+      3
+    );
+    if (
+      preparationConcurrency < 1 || preparationConcurrency > 8
+    ) throw new IllegalArgumentException("Preparation concurrency must be between 1 and 8");
+    if (timeoutSeconds < 10 || timeoutSeconds > 1800) throw new IllegalArgumentException(
+      "Execution command timeout must be 10–1800 seconds"
+    );
+    maxRunDurationSeconds = env.getProperty(
+      "orchestrator.execution.max-run-duration-seconds",
+      Integer.class,
+      28800
+    );
+    defaultRunDurationSeconds = env.getProperty(
+      "orchestrator.execution.default-run-duration-seconds",
+      Integer.class,
+      900
+    );
+    if (
+      maxRunDurationSeconds < 60 ||
+      defaultRunDurationSeconds < 60 ||
+      defaultRunDurationSeconds > maxRunDurationSeconds
+    ) throw new IllegalArgumentException(
+      "Execution default run duration must be at least 60 seconds and no greater than max-run-duration-seconds"
+    );
+    helmRepositoryConnection = env
+      .getProperty("orchestrator.execution.helm-repository-connection", "")
+      .strip();
+    helmRepositoryUsername = env
+      .getProperty("orchestrator.execution.helm-repository-username", "")
+      .strip();
+    helmRepositories = Map.copyOf(
+      Binder.get(env)
+        .bind(
+          "orchestrator.execution.helm-repositories",
+          Bindable.mapOf(String.class, String.class)
+        )
+        .orElse(Map.of())
+    );
+    helmRepositories.forEach((final var name, final var url) -> {
       try {
-        URI uri=URI.create(url);
-        if(!name.matches("[A-Za-z0-9][A-Za-z0-9_-]{0,99}") || !"https".equals(uri.getScheme())
-            || uri.getHost()==null || uri.getUserInfo()!=null || uri.getQuery()!=null || uri.getFragment()!=null)
-          throw new IllegalArgumentException();
-      } catch(IllegalArgumentException e) {
-        throw new IllegalArgumentException("Helm repository mappings require valid alias names and HTTPS URLs without credentials, query strings or fragments");
+        final URI uri = URI.create(url);
+        if (
+          !name.matches("[A-Za-z0-9][A-Za-z0-9_-]{0,99}") ||
+          !"https".equals(uri.getScheme()) ||
+          uri.getHost() == null ||
+          uri.getUserInfo() != null ||
+          uri.getQuery() != null ||
+          uri.getFragment() != null
+        ) throw new IllegalArgumentException();
+      } catch (final IllegalArgumentException e) {
+        throw new IllegalArgumentException(
+          "Helm repository mappings require valid alias names and HTTPS URLs without credentials, query strings or fragments"
+        );
       }
     });
+  }
+
+  public ClusterTarget target(final String environment) {
+    if (environment.equals(defaultEnvironment) && !context.isBlank()) return new ClusterTarget(
+      context,
+      expectedServer
+    );
+    final var target = targets.get(environment);
+    if (target == null) throw com.example.perforchestrator.domain.Problem.invalid(
+      "targetEnvironment",
+      "Configure an execution target for environment " + environment
+    );
+    return target;
   }
 }

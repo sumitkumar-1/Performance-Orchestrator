@@ -113,6 +113,9 @@ application:
       enabled: false
       kube-context: in-cluster
       expected-api-server: https://kubernetes.default.svc
+      # Optional additional environments: map environment -> kube-context + expected-api-server.
+      # Remote contexts require a mounted kubeconfig and authorization for those clusters.
+      targets: {}
       workspace: /app/data/real/workspaces
       preparation-concurrency: 3 # Parallel service reviews (1–8); deployment order is unchanged
       command-timeout-seconds: 300 # Per Helm operation; 10–1800 seconds

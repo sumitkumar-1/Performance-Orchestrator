@@ -9,9 +9,7 @@ export const el = (tag, attrs = {}, ...children) => {
   }
   for (const child of children.flat())
     if (child !== null && child !== undefined)
-      node.append(
-        child instanceof Node ? child : document.createTextNode(String(child)),
-      );
+      node.append(child instanceof Node ? child : document.createTextNode(String(child)));
   return node;
 };
 

@@ -11,20 +11,24 @@ import org.springframework.context.annotation.*;
 @Configuration
 @ConditionalOnProperty(name = "orchestrator.mode", havingValue = "real")
 public class RealAdapters {
+
   private static Problem unavailable() {
     return new Problem(
-        501,
-        "REAL_EXECUTION_UNAVAILABLE",
-        "mode",
-        "Real CKP deployment and load-generator contracts are not configured");
+      501,
+      "REAL_EXECUTION_UNAVAILABLE",
+      "mode",
+      "Real CKP deployment and load-generator contracts are not configured"
+    );
   }
 
   @Bean
-  Ports.ImageResolver realImages(ArtifactoryImages images) {
+  Ports.ImageResolver realImages(final ArtifactoryImages images) {
     return new Ports.ImageResolver() {
-      public Image resolve(String service, Build build) {
-        if (build == null)
-          throw Problem.invalid("build", "Choose a registered image source and version");
+      public Image resolve(final String service, final Build build) {
+        if (build == null) throw Problem.invalid(
+          "build",
+          "Choose a registered image source and version"
+        );
         return images.resolve(service, build.sourceRef(), build.username(), build.version());
       }
     };
@@ -33,15 +37,15 @@ public class RealAdapters {
   @Bean
   Ports.DeploymentGateway realDeployment() {
     return new Ports.DeploymentGateway() {
-      public String baseline(String cluster, String namespace, String service) {
+      public String baseline(final String cluster, final String namespace, final String service) {
         throw unavailable();
       }
 
-      public void deploy(String id, Plan plan, PreparedService service) {
+      public void deploy(final String id, final Plan plan, final PreparedService service) {
         throw unavailable();
       }
 
-      public boolean ready(Plan plan, PreparedService service) {
+      public boolean ready(final Plan plan, final PreparedService service) {
         throw unavailable();
       }
     };
@@ -50,19 +54,19 @@ public class RealAdapters {
   @Bean
   Ports.LoadGeneratorGateway realLoadGenerator() {
     return new Ports.LoadGeneratorGateway() {
-      public String start(String id, Plan plan) {
+      public String start(final String id, final Plan plan) {
         throw unavailable();
       }
 
-      public void stop(String id) {
+      public void stop(final String id) {
         throw unavailable();
       }
 
-      public boolean stopped(String id) {
+      public boolean stopped(final String id) {
         throw unavailable();
       }
 
-      public Map<String, Double> collect(String id, Plan plan) {
+      public Map<String, Double> collect(final String id, final Plan plan) {
         throw unavailable();
       }
     };
