@@ -602,19 +602,49 @@ class RunWorkflowTest {
    * <pre>
    * GIVEN ... a prepared real run whose release baseline has changed
    * WHEN ... execution validates the baseline
-   * THEN ... the run fails before deploying services
+   * THEN ... the run fails before deploying services and records the release mismatch in run diagnostics
    * </pre>
    */
   @Test
   @DisplayName("Baseline Drift Fails Before Deployment")
   void baselineDriftFailsBeforeDeployment() {
+    final var diagnostics =
+      new com.example.perforchestrator.infrastructure.diagnostics.DiagnosticLog(
+        new JdbcTemplate(db)
+      );
+    worker = new RunExecution(
+      store,
+      catalog,
+      connections,
+      preparation,
+      helm,
+      metrics,
+      images,
+      tx,
+      settings,
+      new AdditionalLoads(store, preparation, catalog, connections, images, helm, tx),
+      diagnostics
+    );
     final var plan = plan();
     final var run = worker.enqueue("drift-key", plan.id());
+    final String trace = diagnostics.create(null);
+    diagnostics.run(trace, run.id());
     worker.tick();
     when(helm.baseline(any(), any(), any())).thenReturn("CHANGED");
     worker.tick();
     assertThat(store.run(run.id()).state()).isEqualTo(State.CLEANING_UP);
     verify(helm, never()).apply(any(), any(), any(), any(), anyBoolean());
+    assertThat(Json.write(diagnostics.operations(diagnostics.forRun(run.id())))).contains(
+      "MISMATCH",
+      "release load-release",
+      "namespace load-ns",
+      "context sandbox",
+      "Release was absent during review but now exists"
+    );
+    assertThat(Json.write(store.events(run.id(), 0))).contains(
+      "Preflight stopped before service deployment",
+      "release load-release"
+    );
   }
 
   /**

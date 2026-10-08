@@ -197,6 +197,47 @@ public class RunExecution {
     return ((Map<String, String>) p.effectiveLoadConfiguration().get("charts")).get(s.serviceId());
   }
 
+  private void verifyReleaseBaseline(final Plan plan, final PreparedService service) {
+    final var cluster = target(plan);
+    final String identity =
+      "Service " +
+      service.serviceId() +
+      ", release " +
+      service.releaseName() +
+      ", namespace " +
+      service.namespace() +
+      ", context " +
+      cluster.get("context");
+    final var check = com.example.perforchestrator.infrastructure.diagnostics.DiagnosticLog.begin(
+      "CHECK",
+      "Helm release baseline: " + identity
+    );
+    final String current;
+    try {
+      current = helm.baseline(cluster, service.namespace(), service.releaseName());
+    } catch (final RuntimeException error) {
+      check.finish("LOOKUP FAILED · see preceding Helm command diagnostics");
+      throw error;
+    }
+    if (current.equals(service.baselineDigest())) {
+      check.finish("MATCH · release unchanged since review");
+      return;
+    }
+    final String change = service.baselineDigest().equals("ABSENT")
+      ? "Release was absent during review but now exists"
+      : current.equals("ABSENT")
+        ? "Release existed during review but is now absent"
+        : "Stored Helm release data or status differs from review";
+    check.finish("MISMATCH · " + change);
+    throw Problem.conflict(
+      "Helm release changed since preparation: " +
+        identity +
+        ". " +
+        change +
+        ". Preflight stopped before service deployment or load generation. Review and prepare a new run against the current release."
+    );
+  }
+
   @Scheduled(fixedDelay = 2000)
   public synchronized void tick() {
     if (!settings.enabled) return;
@@ -297,16 +338,7 @@ public class RunExecution {
         null
       );
       case PREFLIGHT -> {
-        for (final var service : plan.services())
-          if (
-            !helm
-              .baseline(target(plan), service.namespace(), service.releaseName())
-              .equals(service.baselineDigest())
-          ) throw Problem.conflict(
-            "Helm release changed since preparation: " +
-              service.serviceId() +
-              ". Preflight stopped before service deployment or load generation. Review and prepare a new run against the current release."
-          );
+        for (final var service : plan.services()) verifyReleaseBaseline(plan, service);
         write(
           run,
           State.DEPLOYING,
