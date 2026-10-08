@@ -1411,3 +1411,106 @@ select {
   border-radius: 0;
   padding: 0;
 }
+
+/* Readable, bounded snapshot of reviewed deployment inputs. */
+.pinned-inputs,
+.detail-grid > * {
+  min-width: 0;
+}
+.pinned-inputs > summary {
+  cursor: pointer;
+}
+.pinned-inputs-title {
+  font-weight: 700;
+}
+.pinned-inputs-caption {
+  display: block;
+  margin: 6px 0 0 20px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.pinned-inputs-body > .muted {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.pinned-inputs-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 20px;
+  margin: 16px 0;
+}
+.pinned-inputs-facts dt {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+.pinned-inputs-facts dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.pinned-inputs-services {
+  list-style: none;
+  padding: 0;
+  margin: 20px 0;
+  display: grid;
+  gap: 14px;
+}
+.pinned-inputs-service {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  background: #fafcf9;
+  min-width: 0;
+}
+.pinned-inputs-service-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.pinned-inputs-service-heading h3 {
+  margin: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  flex: 1 1 180px;
+}
+.pinned-inputs-role {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--green);
+  background: #eaf2ec;
+  border-radius: 5px;
+  padding: 4px 7px;
+}
+.pinned-inputs-source {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.pinned-inputs-source > summary {
+  color: var(--green);
+  font-size: 12px;
+}
+.pinned-inputs-source .pinned-inputs-facts {
+  grid-template-columns: minmax(0, 1fr);
+  margin-bottom: 0;
+}
+.pinned-inputs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  font-size: 13px;
+}
+@media (max-width: 480px) {
+  .pinned-inputs-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

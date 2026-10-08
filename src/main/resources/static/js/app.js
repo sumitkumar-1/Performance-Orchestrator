@@ -1,3 +1,4 @@
+import { pinnedInputs } from "./pinned-inputs.js";
 import { runMonitoring } from "./run-monitoring.js";
 import { additionalLoads } from "./additional-loads.js";
 import { runBuilder } from "./run-builder.js";
@@ -242,23 +243,7 @@ async function runDetails(id, generation) {
           monitoring,
           metrics,
         ),
-        el(
-          "details",
-          { class: "card spacer" },
-          el("summary", {}, "Pinned inputs"),
-          el("p", { class: "muted" }, "Inputs are frozen for this execution."),
-          link("Inspect original plan", "#plan/" + plan.id),
-          detail(
-            "Selected services",
-            plan.services.map((s) => ({
-              service: s.serviceId,
-              source: s.image.sourceRef,
-              version: s.image.version,
-              namespace: s.namespace,
-            })),
-          ),
-          link("Prepare a new run", "#configure", "button"),
-        ),
+        pinnedInputs(plan),
       ),
     ),
   );
