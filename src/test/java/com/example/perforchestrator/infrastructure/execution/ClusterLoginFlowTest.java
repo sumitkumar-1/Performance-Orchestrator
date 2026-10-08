@@ -10,6 +10,8 @@ import java.util.*;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.context.request.*;
 
@@ -41,24 +43,33 @@ class ClusterLoginFlowTest {
   /**
    * <b>Scenario:</b> Given Ad Session When Cluster Prompts Then Authenticate Without Password Arguments
    * <pre>
-   * GIVEN ... an AD-authenticated browser and a command prompting for credentials
+   * GIVEN ... an AD-authenticated browser with an email, domain-qualified, or short username
    * WHEN ... the command runner handles username and password prompts
-   * THEN ... credentials are sent through stdin, excluded from arguments, and redacted from output
+   * THEN ... the selected context receives the short username and password through stdin, with secrets redacted
    * </pre>
    */
-  @Test
+  @ParameterizedTest
+  @ValueSource(strings = { "first.last@example.net", "DOMAIN\\first.last", "first.last" })
   @DisplayName(
-    "Given an AD session, when a cluster helper prompts, then stdin supplies credentials and output redacts the password"
+    "Given an AD session, when a cluster helper prompts, then its selected context receives the short username securely"
   )
-  void givenAdSessionWhenClusterPromptsThenAuthenticateWithoutPasswordArguments() throws Exception {
+  void givenAdSessionWhenClusterPromptsThenAuthenticateWithoutPasswordArguments(
+    final String username
+  ) throws Exception {
+    AdSessionCredentials.remember(
+      request.getSession(),
+      username,
+      "private-password",
+      Instant.now().plusSeconds(60)
+    );
     // Given a real subprocess with the same prompt contract as the cluster helper.
     final Path helper = directory.resolve("helm");
     Files.writeString(
       helper,
-      "#!/bin/sh\nprintf 'Username: '\nread -r user\nprintf 'Password: '\nread -r password\n[ \"$user\" = 'first.last@example.net' ] || exit 3\n[ \"$password\" = 'private-password' ] || exit 4\nprintf 'authenticated %s' \"$password\"\n"
+      "#!/bin/sh\n[ \"$1\" = '--kube-context' ] && [ \"$2\" = 'perf3-nvan' ] || exit 5\nprintf 'Username: '\nread -r user\nprintf 'Password: '\nread -r password\n[ \"$user\" = 'first.last' ] || exit 3\n[ \"$password\" = 'private-password' ] || exit 4\nprintf 'authenticated %s' \"$password\"\n"
     );
     assertThat(helper.toFile().setExecutable(true)).isTrue();
-    final var arguments = List.of(helper.toString(), "--kube-context", "sandbox-nvan", "list");
+    final var arguments = List.of(helper.toString(), "--kube-context", "perf3-nvan", "list");
     // When Helm requests credentials through its helper.
     final var result = new CommandRunner().run(
       arguments,
@@ -66,6 +77,11 @@ class ClusterLoginFlowTest {
       Map.of(),
       Duration.ofSeconds(5)
     );
+    try (final var credentials = AdSessionCredentials.open()) {
+      assertThat(new String(credentials.response(false), StandardCharsets.UTF_8)).isEqualTo(
+        username + "\n"
+      );
+    }
     // Then the actual process succeeds without receiving credentials in its argv or returning them.
     assertThat(result.exit()).isZero();
     assertThat(result.output())

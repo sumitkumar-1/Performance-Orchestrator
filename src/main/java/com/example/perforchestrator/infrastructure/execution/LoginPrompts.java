@@ -46,7 +46,9 @@ final class LoginPrompts {
     if (!match.matches()) return;
     final boolean password = match.group(1).equalsIgnoreCase("password");
     if (password ? passwordSent : usernameSent) return;
-    final byte[] response = credentials.response(password);
+    final byte[] response = password
+      ? credentials.response(true)
+      : credentials.clusterUsernameResponse();
     try {
       input.write(response);
       input.flush();

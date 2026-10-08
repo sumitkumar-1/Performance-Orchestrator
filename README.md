@@ -50,9 +50,14 @@ orchestrator:
       sandbox:
         kube-context: sandbox-nvan
         expected-api-server: https://YOUR-APPROVED-API-SERVER:6443
+      perf3:
+        kube-context: perf3-nvan
+        expected-api-server: https://YOUR-PERF3-API-SERVER:6443
 ```
 
 Use the exact server from your kubeconfig. The process must inherit your working PATH, KUBECONFIG, login cache and network/CA configuration. On CKP use the configured service account/in-cluster target and approved RBAC. Commands specify the selected context; they do not change your global current context.
+
+For local execution, selecting perf3 automatically targets `perf3-nvan`, even if your terminal currently uses qa. After Secret Server AD sign-in, recognized cluster username/password prompts are answered from the encrypted session. CKP receives the short username (`first.last` from `first.last@domain.net` or `DOMAIN\first.last`); the vault and audit identity keep the original username. Passwords are sent through stdin, never command arguments. Token-only vault sign-in cannot supply an AD password. The kubeconfig helper must support prompts through stdin/stdout; helpers requiring a terminal still need a prior local login.
 
 1. Sign in to Secret Server, then verify Bitbucket references and Artifactory tags in connection diagnostics.
 2. Open **Configure run**, select an environment, and add services in their deployment order.

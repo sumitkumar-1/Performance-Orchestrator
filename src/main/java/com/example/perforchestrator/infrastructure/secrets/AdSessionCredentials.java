@@ -107,6 +107,19 @@ public final class AdSessionCredentials {
       return line;
     }
 
+    /** CKP expects the short AD name; retain the original identity for vault authentication. */
+    public synchronized byte[] clusterUsernameResponse() {
+      int start = 0;
+      int end = 0;
+      while (end < bytes.length && bytes[end] != '\n' && bytes[end] != '@') {
+        if (bytes[end] == '\\') start = end + 1;
+        end++;
+      }
+      final byte[] line = Arrays.copyOfRange(bytes, start, end + 1);
+      line[line.length - 1] = '\n';
+      return line;
+    }
+
     public String redact(final String output) {
       final String[] parts = new String(bytes, StandardCharsets.UTF_8).split("\n", 2);
       return parts.length == 2 ? output.replace(parts[1], "[REDACTED]") : output;
