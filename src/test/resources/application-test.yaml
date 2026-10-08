@@ -11,10 +11,8 @@ server:
   error:
     include-message: never
 spring:
-  profiles:
-    active: ${orchestrator.mode:simulation}
   datasource:
-    url: jdbc:h2:mem:test-simulation;DB_CLOSE_DELAY=-1
+    url: jdbc:h2:mem:test-orchestrator;DB_CLOSE_DELAY=-1
     username: sa
     password: '' # Embedded H2 pilot default; no database secret provisioning yet
   jackson:
@@ -25,12 +23,9 @@ spring:
     multipart:
       enabled: false
 orchestrator:
-  mode: simulation
-  target-environment: sandbox # Real-mode instance binding; fixed until restart
-  catalog: classpath:mocks/catalog.yaml
+  target-environment: sandbox # Application instance binding; fixed until restart
+  catalog: ''
   connections: '' # External bootstrap file overrides connection-defaults below
-  # Real catalog sections; supply organization mappings here or via external Spring YAML.
-  # Simulation uses the separate mock catalog selected above.
   catalog-defaults:
     # EXAMPLES: replace cluster identities, namespaces and paths before use.
     environments:
@@ -85,21 +80,19 @@ orchestrator:
           repository: ps-spoolers-ps-load-gen
           revision: REPLACE_WITH_APPROVED_GIT_TAG
           chartPath: ckp/helm/ps-spoolers-ps-load-gen
-        dependencies: []
+
         deploymentDefaults:
           namespace: ps-spoolers-smtp-data-producer
           releaseName: ps-spoolers-load-gen
           valuesFiles: [ckp/helm/ps-spoolers-ps-load-gen/values.yaml]
         # Optional per-environment exceptions; otherwise deploymentDefaults apply.
         deploymentByEnvironment: {}
-        # installationBindings omitted: real chart retrieval is not implemented yet
-        allowedOverridePaths: [] # Confirm editable chart fields before allowing overrides
-    imageSources: {} # Simulation-only versions; mocks supply these in simulation mode
+
     scenarios:
       baseline-example:
         displayName: Baseline (example - configure before use)
         revision: example-1
-        allowedOverridePaths: []
+
         defaults:
           profilePath: ckp/helm/ps-spoolers-ps-load-gen/values.yaml
           note: Replace with approved load-profile fields; this is not an executable profile
@@ -170,20 +163,6 @@ orchestrator:
         usernameFieldSlug: username
         passwordFieldSlug: password
     imageSources: {} # Legacy mappings remain importable; new mappings belong to services
-  configuration-file: target/test-config/simulation-${random.uuid}.json
-  artifact-root: target/test-artifacts/simulation
+  configuration-file: target/test-config/runtime-${random.uuid}.json
+  artifact-root: target/test-artifacts/runs
   tick-ms: 1200
-  worker-enabled: false
-
----
-spring:
-  config:
-    activate:
-      on-profile: real
-  datasource:
-    url: jdbc:h2:mem:test-real;DB_CLOSE_DELAY=-1
-orchestrator:
-  catalog: '' # Use inline real catalog examples; no simulation fixtures
-  configuration-file: target/test-config/real-${random.uuid}.json
-  artifact-root: target/test-artifacts/real
-  worker-enabled: false

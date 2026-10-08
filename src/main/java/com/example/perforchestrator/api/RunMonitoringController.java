@@ -5,7 +5,7 @@ import java.util.List;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/real/runs/{id}/monitoring")
+@RequestMapping("/api/v1/execution/runs/{id}/monitoring")
 public class RunMonitoringController {
 
   private final com.example.perforchestrator.infrastructure.diagnostics.DiagnosticLog diagnostics;
@@ -24,7 +24,7 @@ public class RunMonitoringController {
     return monitoring.view(id);
   }
 
-  public record Panels(List<RealPreparation.Metric> panels) {}
+  public record Panels(List<RunPreparation.Metric> panels) {}
 
   @PutMapping
   public Object save(final @PathVariable String id, final @RequestBody Panels input) {

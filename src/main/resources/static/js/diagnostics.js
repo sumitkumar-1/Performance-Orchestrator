@@ -51,7 +51,7 @@ export function diagnosticsPanel(api, { runId } = {}) {
   async function attempts() {
     if (runId) return;
     try {
-      const list = await api("/real/diagnostics");
+      const list = await api("/execution/diagnostics");
       if (closed) return;
       picker.replaceChildren(
         el("option", { value: "" }, "Select a preparation attempt"),
@@ -86,8 +86,8 @@ export function diagnosticsPanel(api, { runId } = {}) {
       const selected = trace;
       const data = await api(
         runId
-          ? `/real/runs/${encodeURIComponent(runId)}/diagnostics`
-          : `/real/diagnostics/${encodeURIComponent(trace)}`,
+          ? `/execution/runs/${encodeURIComponent(runId)}/diagnostics`
+          : `/execution/diagnostics/${encodeURIComponent(trace)}`,
       );
       if (closed || selected !== trace) return;
       error.hidden = true;
@@ -139,7 +139,7 @@ export function diagnosticsPanel(api, { runId } = {}) {
     attempts();
     refresh(true);
   }
-  const ready = api("/real/diagnostics/settings")
+  const ready = api("/execution/diagnostics/settings")
     .then((settings) => {
       enabled = !!settings.enabled;
       if (!closed) toggle.hidden = !enabled;
@@ -154,7 +154,7 @@ export function diagnosticsPanel(api, { runId } = {}) {
     start: async () => {
       await ready;
       if (!enabled || closed) return null;
-      const result = await api("/real/diagnostics", { method: "POST" });
+      const result = await api("/execution/diagnostics", { method: "POST" });
       if (closed) return result.id;
       trace = result.id || null;
       if (!node.hidden) {

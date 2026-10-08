@@ -1,9 +1,8 @@
-# Local real-mode quick start: ./scripts/run-local.sh build-run --mode real
-# Real-mode configuration sections below contain examples for every environment.
+# Local quick start: ./scripts/run-local.sh build-run
+# Application configuration sections below contain examples for every environment.
 # target-environment selects the initial/default environment. Replace example URLs, secret IDs and repository paths.
 # Existing dashboard overrides may hide defaults: load startup defaults and save to reset.
-# Empty optional exception/override lists are intentional; simulation-only imageSources
-# are supplied by mocks. Real image mappings are configured per service.
+# Image mappings are configured per service.
 server:
   address: 127.0.0.1
   port: 8080
@@ -14,10 +13,8 @@ server:
   error:
     include-message: never
 spring:
-  profiles:
-    active: ${orchestrator.mode:simulation}
   datasource:
-    url: jdbc:h2:file:./data/orchestrator;DB_CLOSE_ON_EXIT=FALSE
+    url: jdbc:h2:file:./data/real/orchestrator;DB_CLOSE_ON_EXIT=FALSE
     username: sa
     password: '' # Embedded H2 pilot default; no database secret provisioning yet
   jackson:
@@ -30,7 +27,6 @@ spring:
 orchestrator:
   diagnostics:
     enabled: false # Enable recording and optional run/monitoring diagnostic consoles; restart to apply
-  mode: simulation
   execution:
     enabled: false # Opt in after reviewing the target cluster and service Helm settings
     kube-context: '' # Explicit local context, or in-cluster on CKP
@@ -70,10 +66,8 @@ orchestrator:
       helm-stable-virtual: https://artifactory.domain/artifactory/helm-stable-virtual
       helm-release-virtual: https://artifactory.domain/artifactory/helm-release-virtual
   target-environment: sandbox # Default selection; each run chooses and pins its own target
-  catalog: classpath:mocks/catalog.yaml
+  catalog: ''
   connections: '' # External bootstrap file overrides connection-defaults below
-  # Real catalog sections; supply organization mappings here or via external Spring YAML.
-  # Simulation uses the separate mock catalog selected above.
   catalog-defaults:
     # EXAMPLES: replace cluster identities, namespaces and paths before use.
     # clusterIdentity is the CKP subdomain (no scheme); defaults both clusterSubdomain Helm values.
@@ -129,21 +123,19 @@ orchestrator:
           repository: ps-spoolers-ps-load-gen
           revision: REPLACE_WITH_APPROVED_GIT_TAG
           chartPath: ckp/helm/ps-spoolers-ps-load-gen
-        dependencies: []
+
         deploymentDefaults:
           namespace: ps-spoolers-smtp-data-producer
           releaseName: ps-spoolers-load-gen
           valuesFiles: [ckp/helm/ps-spoolers-ps-load-gen/values.yaml]
         # Optional per-environment exceptions; otherwise deploymentDefaults apply.
         deploymentByEnvironment: {}
-        # installationBindings omitted: real chart retrieval is not implemented yet
-        allowedOverridePaths: [] # Confirm editable chart fields before allowing overrides
-    imageSources: {} # Simulation-only versions; mocks supply these in simulation mode
+
     scenarios:
       baseline-example:
         displayName: Baseline (example - configure before use)
         revision: example-1
-        allowedOverridePaths: []
+
         defaults:
           profilePath: ckp/helm/ps-spoolers-ps-load-gen/values.yaml
           note: Replace with approved load-profile fields; this is not an executable profile
@@ -215,20 +207,6 @@ orchestrator:
         usernameFieldSlug: username
         passwordFieldSlug: password
     imageSources: {} # Legacy mappings remain importable; new mappings belong to services
-  configuration-file: data/configuration.json
-  artifact-root: data/artifacts
-  tick-ms: 1200
-  worker-enabled: true
-
----
-spring:
-  config:
-    activate:
-      on-profile: real
-  datasource:
-    url: jdbc:h2:file:./data/real/orchestrator;DB_CLOSE_ON_EXIT=FALSE
-orchestrator:
-  catalog: '' # Use inline real catalog examples; no simulation fixtures
   configuration-file: data/real/configuration.json
   artifact-root: data/real/artifacts
-  worker-enabled: false
+  tick-ms: 1200

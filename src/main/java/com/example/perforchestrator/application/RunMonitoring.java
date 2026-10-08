@@ -42,11 +42,10 @@ public class RunMonitoring {
 
   private Plan plan(final String id) {
     final var plan = store.plan(store.run(id).planId());
-    if (plan.simulated()) throw Problem.invalid("run", "Select a real run");
     return plan;
   }
 
-  public List<RealPreparation.Metric> panels(final String id) {
+  public List<RunPreparation.Metric> panels(final String id) {
     final var plan = plan(id);
     final var stored = db.query(
       "SELECT body FROM run_monitoring WHERE run_id=?",
@@ -56,9 +55,9 @@ public class RunMonitoring {
     final var array = stored.isEmpty()
       ? Json.MAPPER.valueToTree(plan.effectiveLoadConfiguration().get("metrics"))
       : Json.MAPPER.valueToTree(Json.read(stored.getFirst(), List.class));
-    final var result = new ArrayList<RealPreparation.Metric>();
+    final var result = new ArrayList<RunPreparation.Metric>();
     for (final var item : array)
-      result.add(Json.read(item.toString(), RealPreparation.Metric.class));
+      result.add(Json.read(item.toString(), RunPreparation.Metric.class));
     return result;
   }
 
@@ -91,7 +90,7 @@ public class RunMonitoring {
     );
   }
 
-  public Object save(final String id, final List<RealPreparation.Metric> panels) {
+  public Object save(final String id, final List<RunPreparation.Metric> panels) {
     plan(id);
     if (panels == null || panels.size() > 20) throw Problem.invalid(
       "monitoring",
@@ -112,7 +111,7 @@ public class RunMonitoring {
   }
 
   public static void validate(
-    final RealPreparation.Metric panel,
+    final RunPreparation.Metric panel,
     final Catalog catalog,
     final ConnectionConfig connections
   ) {
@@ -140,7 +139,7 @@ public class RunMonitoring {
   }
 
   public static String namespace(
-    final RealPreparation.Metric panel,
+    final RunPreparation.Metric panel,
     final Catalog.Service service,
     final String environment
   ) {
@@ -156,7 +155,7 @@ public class RunMonitoring {
   }
 
   public static String query(
-    final RealPreparation.Metric panel,
+    final RunPreparation.Metric panel,
     final String namespace,
     final String environment,
     final long seconds

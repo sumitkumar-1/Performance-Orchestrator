@@ -29,7 +29,6 @@ class MonitoringSetsTest {
 
   @BeforeEach
   void setup() {
-    when(catalog.mode()).thenReturn("real");
     when(catalog.boundEnvironment()).thenReturn("sandbox");
     when(catalog.selectedEnvironment(any())).thenAnswer((final var call) ->
       call.getArgument(0) == null ? catalog.boundEnvironment() : call.getArgument(0)
@@ -53,7 +52,7 @@ class MonitoringSetsTest {
     return new MonitoringSets.Definition(
       "SMTP traffic",
       List.of(
-        new RealPreparation.Metric(
+        new RunPreparation.Metric(
           "smtp",
           "rate",
           "sum(rate({namespace=\"{{namespace}}\"}[1m]))",
@@ -141,7 +140,7 @@ class MonitoringSetsTest {
         )
       )
     ).hasMessageContaining("metric panel");
-    final var invalid = new RealPreparation.Metric(
+    final var invalid = new RunPreparation.Metric(
       "smtp",
       "rate",
       "query",

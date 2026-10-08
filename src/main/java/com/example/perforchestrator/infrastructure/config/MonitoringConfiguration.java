@@ -68,10 +68,7 @@ public final class MonitoringConfiguration {
             serviceEntry.getKey(),
             new Catalog.Service(
               service.projectPath(),
-              service.dependencies(),
               service.deploymentByEnvironment(),
-              service.installationBindings(),
-              service.allowedOverridePaths(),
               service.deploymentDefaults(),
               service.containerImage(),
               service.sourceProject(),
@@ -95,25 +92,10 @@ public final class MonitoringConfiguration {
         remaining.isEmpty() ? null : remaining,
         ref
       );
-      return new Catalog.Environment(
-        env.displayName(),
-        env.clusterIdentity(),
-        env.serviceNamespaces(),
-        env.loadGeneratorNamespace(),
-        env.allowedActions(),
-        env.limits(),
-        env.dashboardUrl(),
-        monitoring
-      );
+      return new Catalog.Environment(env.displayName(), env.clusterIdentity(), monitoring);
     });
     return new Result(
-      new Catalog.Data(
-        catalog.mode(),
-        environments,
-        services,
-        catalog.imageSources(),
-        catalog.scenarios()
-      ),
+      new Catalog.Data(environments, services, catalog.scenarios()),
       new ConnectionConfig.Data(
         connections.artifactory(),
         connections.secretServers(),

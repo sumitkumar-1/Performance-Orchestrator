@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Performance Orchestrator local API",
+    "title": "Performance Orchestrator API",
     "version": "0.1.0",
-    "description": "Loopback simulation plus separately configured read-only registry discovery. CSRF token and session cookie from /session are required for every mutation."
+    "description": "CKP performance orchestration and integration configuration. Obtain the session cookie and CSRF header from /session for mutations. Execution is explicitly enabled through startup configuration."
   },
   "servers": [
     {
@@ -125,44 +125,6 @@
         "parameters": []
       }
     },
-    "/image-sources": {
-      "get": {
-        "summary": "Simulation sources",
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "400": {
-            "description": "Malformed input"
-          },
-          "403": {
-            "description": "Origin/CSRF check or upstream permission denied"
-          },
-          "404": {
-            "description": "Record or source not found"
-          },
-          "409": {
-            "description": "Revision, plan, idempotency or environment conflict"
-          },
-          "422": {
-            "description": "Validation failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "parameters": []
-      }
-    },
     "/scenarios": {
       "get": {
         "summary": "Scenario templates",
@@ -199,211 +161,6 @@
           }
         },
         "parameters": []
-      }
-    },
-    "/profiles": {
-      "get": {
-        "summary": "List profiles",
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "400": {
-            "description": "Malformed input"
-          },
-          "403": {
-            "description": "Origin/CSRF check or upstream permission denied"
-          },
-          "404": {
-            "description": "Record or source not found"
-          },
-          "409": {
-            "description": "Revision, plan, idempotency or environment conflict"
-          },
-          "422": {
-            "description": "Validation failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "parameters": []
-      },
-      "post": {
-        "summary": "Create profile",
-        "responses": {
-          "201": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "400": {
-            "description": "Malformed input"
-          },
-          "403": {
-            "description": "Origin/CSRF check or upstream permission denied"
-          },
-          "404": {
-            "description": "Record or source not found"
-          },
-          "409": {
-            "description": "Revision, plan, idempotency or environment conflict"
-          },
-          "422": {
-            "description": "Validation failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "X-CSRF-TOKEN",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Use the exact csrfHeader name and csrfToken from /session with its session cookie."
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProfileInput"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/profiles/{id}": {
-      "get": {
-        "summary": "Read profile",
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "400": {
-            "description": "Malformed input"
-          },
-          "403": {
-            "description": "Origin/CSRF check or upstream permission denied"
-          },
-          "404": {
-            "description": "Record or source not found"
-          },
-          "409": {
-            "description": "Revision, plan, idempotency or environment conflict"
-          },
-          "422": {
-            "description": "Validation failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "put": {
-        "summary": "Update profile with expected revision",
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "400": {
-            "description": "Malformed input"
-          },
-          "403": {
-            "description": "Origin/CSRF check or upstream permission denied"
-          },
-          "404": {
-            "description": "Record or source not found"
-          },
-          "409": {
-            "description": "Revision, plan, idempotency or environment conflict"
-          },
-          "422": {
-            "description": "Validation failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-CSRF-TOKEN",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Use the exact csrfHeader name and csrfToken from /session with its session cookie."
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProfileInput"
-              }
-            }
-          }
-        }
       }
     },
     "/plans/{id}": {
@@ -585,130 +342,7 @@
         ]
       }
     },
-    "/plans": {
-      "post": {
-        "summary": "Plan exactly one saved profileId or inline profile",
-        "responses": {
-          "201": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "400": {
-            "description": "Malformed input"
-          },
-          "403": {
-            "description": "Origin/CSRF check or upstream permission denied"
-          },
-          "404": {
-            "description": "Record or source not found"
-          },
-          "409": {
-            "description": "Revision, plan, idempotency or environment conflict"
-          },
-          "422": {
-            "description": "Validation failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "X-CSRF-TOKEN",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Use the exact csrfHeader name and csrfToken from /session with its session cookie."
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PlanInput"
-              }
-            }
-          }
-        }
-      }
-    },
     "/runs": {
-      "post": {
-        "summary": "Enqueue exactly one planId or profileId",
-        "responses": {
-          "202": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "400": {
-            "description": "Malformed input"
-          },
-          "403": {
-            "description": "Origin/CSRF check or upstream permission denied"
-          },
-          "404": {
-            "description": "Record or source not found"
-          },
-          "409": {
-            "description": "Revision, plan, idempotency or environment conflict"
-          },
-          "422": {
-            "description": "Validation failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "X-CSRF-TOKEN",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Use the exact csrfHeader name and csrfToken from /session with its session cookie."
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^[a-zA-Z0-9_-]{8,128}$"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Submission"
-              }
-            }
-          }
-        }
-      },
       "get": {
         "summary": "Filtered run history",
         "responses": {
@@ -781,88 +415,6 @@
           },
           {
             "name": "offset",
-            "in": "query",
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ]
-      }
-    },
-    "/services/{id}/images": {
-      "get": {
-        "summary": "Discover fixture versions",
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "400": {
-            "description": "Malformed input"
-          },
-          "403": {
-            "description": "Origin/CSRF check or upstream permission denied"
-          },
-          "404": {
-            "description": "Record or source not found"
-          },
-          "409": {
-            "description": "Revision, plan, idempotency or environment conflict"
-          },
-          "422": {
-            "description": "Validation failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "source",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "username",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "query",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "cursor",
             "in": "query",
             "schema": {
               "type": "integer"
@@ -1000,65 +552,9 @@
         ]
       }
     },
-    "/runs/{id}/recover": {
-      "post": {
-        "summary": "Verify stopped simulated load and release reservation",
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "400": {
-            "description": "Malformed input"
-          },
-          "403": {
-            "description": "Origin/CSRF check or upstream permission denied"
-          },
-          "404": {
-            "description": "Record or source not found"
-          },
-          "409": {
-            "description": "Revision, plan, idempotency or environment conflict"
-          },
-          "422": {
-            "description": "Validation failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-CSRF-TOKEN",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Use the exact csrfHeader name and csrfToken from /session with its session cookie."
-          }
-        ]
-      }
-    },
     "/runs/{id}/report": {
       "get": {
-        "summary": "Human-readable simulation report",
+        "summary": "Performance report",
         "responses": {
           "200": {
             "description": "Success",
@@ -1366,7 +862,866 @@
         "summary": "Read startup configuration and whether a saved runtime override is active",
         "responses": {
           "200": {
-            "description": "configuration: startup catalog/connections with current revision; runtimeOverride: whether overrides are active; environment: fixed real-mode instance environment (empty for simulation)."
+            "description": "configuration: startup catalog/connections with current revision; runtimeOverride: whether overrides are active; environment: default environment."
+          }
+        }
+      }
+    },
+    "/service-projects/{service}/references/query": {
+      "post": {
+        "summary": "List",
+        "parameters": [
+          {
+            "name": "service",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execution/monitoring-sets": {
+      "get": {
+        "summary": "List",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Save",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execution/monitoring-sets/{id}": {
+      "delete": {
+        "summary": "Delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/connection-auth/{kind}/{connection}": {
+      "get": {
+        "summary": "Status",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Login",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Logout",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execution/runs/{id}/monitoring": {
+      "get": {
+        "summary": "View",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Save",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execution/runs/{id}/monitoring/query": {
+      "post": {
+        "summary": "Query",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execution/settings": {
+      "get": {
+        "summary": "Settings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execution/profiles": {
+      "get": {
+        "summary": "Profiles",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Save",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execution/services/{service}/values": {
+      "post": {
+        "summary": "Values",
+        "parameters": [
+          {
+            "name": "service",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execution/preparations/{id}": {
+      "get": {
+        "summary": "Progress",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execution/plans": {
+      "post": {
+        "summary": "Prepare",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execution/runs/{id}/loads": {
+      "get": {
+        "summary": "Loads",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execution/runs/{id}/loads/review": {
+      "post": {
+        "summary": "Review load",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execution/runs/{id}/loads/{loadId}/start": {
+      "post": {
+        "summary": "Start load",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "loadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execution/runs": {
+      "post": {
+        "summary": "Run",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execution/runs/{id}/recover": {
+      "post": {
+        "summary": "Recover",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execution/diagnostics/settings": {
+      "get": {
+        "summary": "Settings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execution/diagnostics": {
+      "post": {
+        "summary": "Create",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Recent",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execution/diagnostics/{id}": {
+      "get": {
+        "summary": "Operations",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/execution/runs/{id}/diagnostics": {
+      "get": {
+        "summary": "Run",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/registry-sources/{source}/services/{service}/images/query": {
+      "post": {
+        "summary": "Query",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "service",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/secret-auth": {
+      "get": {
+        "summary": "Status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/secret-auth/{connection}/token": {
+      "post": {
+        "summary": "Use token",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/secret-auth/{connection}/ad": {
+      "post": {
+        "summary": "Login",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/secret-auth/{connection}": {
+      "delete": {
+        "summary": "Sign out",
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "4XX": {
+            "description": "Validation, authentication or conflict error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }
@@ -1374,207 +1729,6 @@
   },
   "components": {
     "schemas": {
-      "Profile": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
-          },
-          "targetEnvironment": {
-            "type": "string"
-          },
-          "services": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 50,
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "serviceId": {
-                  "type": "string"
-                },
-                "action": {
-                  "type": "string",
-                  "enum": [
-                    "DEPLOY",
-                    "VERIFY_EXISTING"
-                  ]
-                },
-                "build": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "sourceRef": {
-                      "type": "string"
-                    },
-                    "username": {
-                      "type": "string"
-                    },
-                    "version": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "sourceRef",
-                    "version"
-                  ]
-                },
-                "valuesOverlay": {
-                  "type": "string",
-                  "maxLength": 65536
-                }
-              },
-              "required": [
-                "serviceId",
-                "action",
-                "build"
-              ]
-            }
-          },
-          "loadGenerator": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "templateRef": {
-                "type": "string"
-              },
-              "virtualUsers": {
-                "type": "integer",
-                "minimum": 1
-              },
-              "requestsPerSecond": {
-                "type": "integer",
-                "minimum": 1
-              },
-              "warmupSeconds": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "measurementSeconds": {
-                "type": "integer",
-                "minimum": 1
-              },
-              "configurationOverlay": {
-                "type": "string",
-                "maxLength": 65536
-              }
-            },
-            "required": [
-              "templateRef",
-              "virtualUsers",
-              "requestsPerSecond",
-              "warmupSeconds",
-              "measurementSeconds"
-            ]
-          },
-          "maxRunDurationSeconds": {
-            "type": "integer",
-            "minimum": 15
-          },
-          "thresholds": {
-            "type": "array",
-            "maxItems": 20,
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "metric": {
-                  "type": "string",
-                  "enum": [
-                    "latency_p95_ms",
-                    "error_rate",
-                    "throughput_rps",
-                    "request_count"
-                  ]
-                },
-                "maximum": {
-                  "type": "number",
-                  "minimum": 0
-                },
-                "required": {
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "metric",
-                "maximum",
-                "required"
-              ]
-            }
-          },
-          "simulationCase": {
-            "type": "string",
-            "enum": [
-              "SUCCESS",
-              "DEPLOYMENT_FAILURE",
-              "READINESS_TIMEOUT",
-              "MISSING_METRICS",
-              "THRESHOLD_FAILURE",
-              "CLEANUP_FAILURE"
-            ]
-          }
-        },
-        "required": [
-          "name",
-          "targetEnvironment",
-          "services",
-          "loadGenerator",
-          "maxRunDurationSeconds",
-          "thresholds",
-          "simulationCase"
-        ]
-      },
-      "ProfileInput": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "revision": {
-            "type": "integer"
-          },
-          "profile": {
-            "$ref": "#/components/schemas/Profile"
-          }
-        },
-        "required": [
-          "profile"
-        ]
-      },
-      "PlanInput": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "profileId": {
-            "type": "string"
-          },
-          "revision": {
-            "type": "integer"
-          },
-          "profile": {
-            "$ref": "#/components/schemas/Profile"
-          }
-        },
-        "required": []
-      },
-      "Submission": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "planId": {
-            "type": "string"
-          },
-          "profileId": {
-            "type": "string"
-          },
-          "revision": {
-            "type": "integer"
-          }
-        },
-        "required": []
-      },
       "Problem": {
         "type": "object",
         "additionalProperties": false,

@@ -1,6 +1,6 @@
 # Real execution pilot
 
-Real mode now supports saved real profiles, CKP sparse checkout, pinned preparation, Helm deployment, timed load runs, cancellation, owned-load cleanup, optional LogQL measurements, run history and reports. Simulation remains separate. No organization cluster was contacted during development; perform the first run in sandbox.
+The application supports saved run profiles, CKP sparse checkout, pinned preparation, Helm deployment, timed load runs, cancellation, owned-load cleanup, optional LogQL measurements, run history and reports. No organization cluster was contacted during development; perform the first run in sandbox.
 
 ## 1. Local prerequisites and cluster binding
 
@@ -10,7 +10,6 @@ In `application.yaml`, configure:
 
 ```yaml
 orchestrator:
-  mode: real
   target-environment: sandbox
   execution:
     enabled: true
@@ -31,7 +30,7 @@ The application explicitly passes the configured context to every Helm/kubectl c
 Rebuild and start:
 
 ```sh
-./scripts/run-local.sh build-run --mode real
+./scripts/run-local.sh build-run
 ```
 
 The cluster binding is startup-only. Editable service/connection settings remain in Connections & catalog, with dashboard overrides retaining their existing precedence.
@@ -62,7 +61,7 @@ Review performs cluster/release checks, sparse CKP checkout, image resolution, H
 The review progress card shows each service's stage and elapsed time, plus completion/failure icons and an animation respecting reduced-motion preferences. It works independently of diagnostic recording. Progress is temporary, scoped to the browser session's latest review, and contains no command output or credentials. A failed review cancels outstanding preparation work and cleans up temporary workspaces before returning the error.
 
 1. Create or load a saved profile.
-2. Click **Add service** to configure a deployment in a dialog. Drag the service handles or use the up/down buttons to set deployment order. Services deploy top to bottom, with readiness checked before the next service. This order is saved with the run profile and frozen during review; changing it requires another review. Legacy catalog dependencies no longer control ordering; real and simulation runs both follow the saved profile’s service order. Choose the load generator in its own dialog; it cannot also be a service deployment and starts after all services are ready.
+2. Click **Add service** to configure a deployment in a dialog. Drag the service handles or use the up/down buttons to set deployment order. Services deploy top to bottom, with readiness checked before the next service. This order is saved with the run profile and frozen during review; changing it requires another review. Legacy catalog dependencies no longer control ordering; runs follow the saved profile’s service order. Choose the load generator in its own dialog; it cannot also be a service deployment and starts after all services are ready.
 3. Git branches/tags and all image-version pages load automatically. The selector contains branches and tags only. On editing a profile it restores the named reference when available; otherwise it prefers `master`, then the configured revision or an available reference. There is no Saved commit option. Exact commits remain pinned internally for the prepared deployment. The image dropdown includes release tags and development hashes, with a filter for long lists.
 4. CKP `values*.yaml` / `values*.yml` files load automatically from the selected Git revision. The environment values file is selected when present. Select one or more files; the editor immediately displays the selected YAML. For multiple files, the numbered editor selector shows merge order; use **Apply earlier** to reorder. Later files take precedence.
 5. Edit YAML if needed. Edits replace that file's contents for preparation and are saved with the run profile; repository files are untouched. **Restore file** discards edits to the displayed file. Helm still applies chart defaults; use YAML null where Helm requires removal of a default key. Older profiles retain their additional overlay under **Existing profile overlay**.
@@ -71,7 +70,7 @@ The review progress card shows each service's stage and elapsed time, plus compl
 
 Service namespace/release settings come from Services, including environment-specific destination exceptions. Preparation does not install charts. It fetches and snapshots CKP, resolves image digests, renders/lints charts and reads Helm release baselines. Plans expire after 15 minutes. Configuration changes, changed image tags or baseline drift require a new plan.
 
-For every service and load generator, `imageName`, `imageTag`, `global.imageTag` and `global.environment` are managed. Both `targetPlatform` and `global.targetPlatform` are always `ckp`. Both `clusterSubdomain` and `global.clusterSubdomain` default to the bound environment’s `clusterIdentity` (configure the CKP subdomain without a URL scheme). `global.deploymentSuffix` defaults to an empty string and `tags.moc` defaults to boolean `false`. Selected YAML/editor values and legacy overlays can override these subdomain, suffix and mock defaults; platform and image/environment selections remain enforced. Both image-tag values exactly match the selected version, including dated/hash versions; no digest is appended. The rendered chart must reference the selected image name and exact tag. The resolved registry digest remains in the plan and is checked again at submission. Kubernetes pulls by tag, so tags must remain immutable for reproducibility; this does not guarantee a digest-pinned runtime image. All other values—including rate, destinations and the load tool's own duration—come from the selected YAML/overlay. The orchestrator does not guess those field names. No values are silently rewritten to simulated virtual-user or request-rate fields.
+For every service and load generator, `imageName`, `imageTag`, `global.imageTag` and `global.environment` are managed. Both `targetPlatform` and `global.targetPlatform` are always `ckp`. Both `clusterSubdomain` and `global.clusterSubdomain` default to the bound environment’s `clusterIdentity` (configure the CKP subdomain without a URL scheme). `global.deploymentSuffix` defaults to an empty string and `tags.moc` defaults to boolean `false`. Selected YAML/editor values and legacy overlays can override these subdomain, suffix and mock defaults; platform and image/environment selections remain enforced. Both image-tag values exactly match the selected version, including dated/hash versions; no digest is appended. The rendered chart must reference the selected image name and exact tag. The resolved registry digest remains in the plan and is checked again at submission. Kubernetes pulls by tag, so tags must remain immutable for reproducibility; this does not guarantee a digest-pinned runtime image. All other values—including rate, destinations and the load tool's own duration—come from the selected YAML/overlay. The orchestrator does not guess those field names. Values are taken from the selected load-generator YAML.
 
 Use Kubernetes Secret references in values. Prepared chart snapshots and values are stored in the application database for repeatability; do not paste credentials into a profile. Git/Artifactory tokens are not persisted with the plan.
 
@@ -127,7 +126,7 @@ A positive `request_count` and configured thresholds are required for a PASS. Th
 [{"metric":"error_rate","maximum":0.01,"required":true}]
 ```
 
-Without approved measurements/thresholds, execution can complete but performance is INCONCLUSIVE. No synthetic numbers are generated in real mode.
+Without approved measurements/thresholds, execution can complete but performance is INCONCLUSIVE. No synthetic numbers are generated in the application.
 
 ## 6. CKP deployment
 
@@ -136,7 +135,6 @@ The Dockerfile includes Git, Helm and kubectl; select organization-approved base
 Helm values:
 
 ```yaml
-mode: real
 targetEnvironment: sandbox
 serviceAccount:
   name: YOUR_APPROVED_ORCHESTRATOR_SERVICE_ACCOUNT
@@ -180,7 +178,7 @@ Queries are bounded to 500 log entries, approximately 1000 time samples per seri
 
 ## Service settings and version ordering
 
-Dependencies require those services to be selected and deployed first. The allowed-values list is a simulation allowlist and is hidden in real mode; real values YAML remains editable. Image versions put stable `major.minor.patch` releases first, in ascending numeric order, then development builds ordered newest first by their `YYMMDD` segment (for example, `1.11.0.260811-...` before `1.11.0.260810-...`). Tags without a valid date follow dated builds; equal-date and undated tags use natural sorting. Run-configuration errors now appear in a sticky alert at the top and receive focus.
+Dependencies require those services to be selected and deployed first. Values YAML remains editable. Image versions put stable `major.minor.patch` releases first, in ascending numeric order, then development builds ordered newest first by their `YYMMDD` segment (for example, `1.11.0.260811-...` before `1.11.0.260810-...`). Tags without a valid date follow dated builds; equal-date and undated tags use natural sorting. Run-configuration errors now appear in a sticky alert at the top and receive focus.
 
 Pass/fail rules live in each metric panel in Configure run. Existing saved threshold rules are restored into those controls. Log panels have no numeric checks. Editing a live dashboard does not change the already-prepared verdict rules. When reopening a service selects a newer Git commit, the dialog calls out the refreshed source; review any retained YAML edits before saving.
 
@@ -324,7 +322,7 @@ If the helper is specifically `kubectl` and exits with code 1, the executable wa
 
 ## Add traffic to an active run
 
-In real mode, open the run and use **Load installations → Add load** while the baseline is running. Select a configured load-generator service, Git reference, image version and values files. Edit its YAML for the new traffic pattern, choose **Review additional load**, check the generated release name and effective values, then choose **Install additional load**.
+Open the run and use **Load installations → Add load** while the baseline is running. Select a configured load-generator service, Git reference, image version and values files. Edit its YAML for the new traffic pattern, choose **Review additional load**, check the generated release name and effective values, then choose **Install additional load**.
 
 Each addition gets a unique `load-<UUID>` Helm release in the service's configured namespace. The same load-generator service can be added multiple times with different values. Preparation checks out CKP, replaces chart version placeholders, resolves dependencies and validates the chart using that new release name. Existing baseline load and services are not upgraded or uninstalled by adding traffic. Repeated installation submissions do not create duplicate releases.
 
@@ -332,7 +330,7 @@ The chart must support simultaneous releases: Kubernetes resource names and sele
 
 The run page records each addition's image, namespace, release, actor and installation/cleanup status; command activity is attached to the same run. An installation error attempts cleanup of only that additional release, leaving baseline traffic running. If that cleanup fails, the addition is marked CLEANUP_FAILED and cleanup is retried when the parent ends. “RUNNING” means Helm installation completed; use monitoring to verify actual traffic.
 
-Additional loads share the parent's remaining measurement window and overall deadline; they do not extend either. Choose a long enough window when configuring the baseline. Completion, cancellation and restart recovery clean up **all** load releases owned by the run, retaining service deployments. Cleanup failures retain the environment reservation and require recovery. This addition workflow is available in real mode; simulation retains its original single-load workflow.
+Additional loads share the parent's remaining measurement window and overall deadline; they do not extend either. Choose a long enough window when configuring the baseline. Completion, cancellation and restart recovery clean up **all** load releases owned by the run, retaining service deployments. Cleanup failures retain the environment reservation and require recovery. Additional load installations are part of the standard run workflow.
 
 
 ## Selecting environments and signing into CKP

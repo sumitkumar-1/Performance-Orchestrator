@@ -16,7 +16,6 @@ Use this guide with the exact application build you transfer to work. Start with
 | Real load start/status/stop/results | Not implemented | Requires a load-generator adapter |
 | Grafana metrics and Loki logs | Not implemented | Requires telemetry adapters and datasource/query contracts |
 
-Real mode deliberately rejects execution with `REAL_EXECUTION_UNAVAILABLE`. A successful registry test proves the read-only integration, not a deployed service or a performance result. The complete simulation remains useful for learning the UI, but its measurements are synthetic.
 
 ## 2. Prepare the office handoff
 
@@ -86,25 +85,25 @@ Supply a Secret Server Bearer token in its sign-in dialog. The registry can use 
 
 For this read-only test, the service key under `imagePaths` is sufficient. You do not need to configure a deployment environment, chart, namespace, release or load scenario yet. Adding those catalog entries cannot enable real execution.
 
-## 5. Start and verify real mode
+## 5. Start and verify the application
+
+Open http://127.0.0.1:8080. The app starts with configured integrations and no seeded runs. Enable `orchestrator.execution.enabled` and configure approved cluster targets before using run review/deployment. Follow [the execution guide](real-execution.md) after validating connections.
 
 Run from the same project/installation directory each time: default state paths are relative to the working directory. Stop any previous app using Ctrl-C in its terminal first.
 
 macOS/Linux with the source scripts:
 
 ```sh
-./scripts/run-local.sh run --mode real -- --orchestrator.connections=.local/connections.yaml
+./scripts/run-local.sh run -- --orchestrator.connections=.local/connections.yaml
 ```
 
 Direct Java, also suitable for Windows PowerShell:
 
 ```sh
-java -jar target/perf-orchestrator-0.1.0.jar --orchestrator.mode=real --orchestrator.connections=.local/connections.yaml
+java -jar target/perf-orchestrator-0.1.0.jar --orchestrator.connections=.local/connections.yaml
 ```
 
-Open `http://127.0.0.1:8080` on that laptop. Expect **REAL · READ-ONLY**, no mock builds and no executable real run. If the port is occupied, append `--server.port=8081` and use that port consistently. Keep the terminal open for startup errors. Stop with Ctrl-C.
 
-Checkpoint: the UI opens in real mode and Connections & catalog shows your source and Secret Server. If you see demo builds, confirm the launch command, port and running process before continuing.
 
 Java uses its trust configuration, which may differ from the browser's. A successful browser visit does not prove Java can connect. Have IT configure approved CA trust/proxy settings for this Java runtime. Do not disable TLS verification; do not assume `HTTP_PROXY` alone configures the application. Outbound requests require HTTPS and do not follow redirects.
 
@@ -129,7 +128,7 @@ For bulk changes or backups, expand **Advanced JSON · import, export & restore*
 
 Checkpoint: changes apply immediately and survive restart. A conflict means another edit used a newer revision; reload and reapply your change. A rejected save leaves the previous configuration active.
 
-To test different bootstrap files independently, supply a new, unused configuration path, for example `--orchestrator.configuration-file=.local/pilot-b-runtime.json`. Keep using that path when restarting that pilot. This isolates settings only, not the database. Do not delete the database merely to update connections, and do not point simulation and real mode at the same state files.
+To test different bootstrap files independently, supply a new, unused configuration path, for example `--orchestrator.configuration-file=.local/pilot-b-runtime.json`. Keep using that path when restarting that pilot. This isolates settings only, not the database. Do not delete the database merely to update connections, and keep the database path stable across restarts.
 
 After an application update, stop the old process, back up office state, replace the JAR and restart with the same arguments. Record the new checksum. Database migrations can affect downgrade compatibility; retain the stopped-state backup with the previous JAR instead of assuming an older build can open newer data.
 
@@ -150,7 +149,6 @@ After an application update, stop the old process, back up office state, replace
 | Empty tag list | Check image path/repository and reader access; confirm an existing tag independently with the repository owner |
 | Manifest/digest error | Capture code/field/message and the expected representation; confirm tag exists, is not `latest`, and digest header matches manifest bytes |
 | Mutation rejected after refresh/restart | Reload UI to obtain a fresh local session/CSRF state; use the same `127.0.0.1` origin and port |
-| `REAL_EXECUTION_UNAVAILABLE` | Expected implementation boundary, not a missing secret or environment toggle |
 
 Current outbound limits are 5 seconds to connect, 15 seconds for the total response and 2 MiB per response; no automatic retries. Avoid retrying a rejected login repeatedly: consult the vault owner about account policy. Never enable broad HTTP wire logging to collect credentials. Use the browser UI for authenticated requests; manual API mutations additionally need the session cookie and CSRF header.
 
@@ -188,4 +186,4 @@ This is the future test plan, not a currently executable workflow:
 7. Verify report evidence, release/namespace ownership, cleanup policy and preservation of unrelated resources.
 8. Repeat in perf with explicit environment mapping and an owner-approved load ceiling.
 
-Deploying the orchestrator itself into CKP is optional and separate from deploying target services. Start on the laptop to keep diagnosis simpler. When moving the application to CKP, follow the [README packaging steps](../../README.md#ckp-packaging-and-deployment), explicitly set `mode: real`, provide cluster CA/network access and persistent storage, and use port-forwarding. Service/Ingress shared access is intentionally disabled until shared-user authentication exists. Laptop connectivity does not prove pod connectivity. No live CKP deployment has been validated yet.
+Deploying the orchestrator itself into CKP is optional and separate from deploying target services. Start on the laptop to keep diagnosis simpler. When moving the application to CKP, follow the [README packaging steps](../../README.md#ckp-packaging-and-deployment), provide cluster CA/network access and persistent storage, and use port-forwarding. Service/Ingress shared access is intentionally disabled until shared-user authentication exists. Laptop connectivity does not prove pod connectivity. No live CKP deployment has been validated yet.

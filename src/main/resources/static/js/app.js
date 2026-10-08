@@ -1,19 +1,17 @@
 import { runMonitoring } from "./run-monitoring.js";
 import { additionalLoads } from "./additional-loads.js";
-import { realFlow } from "./real-flow.js";
+import { runBuilder } from "./run-builder.js";
 import { diagnosticsPanel } from "./diagnostics.js";
 import { el, labeled, input, select } from "./dom.js";
 import { secretSignInPrompt } from "./secret-sign-in.js";
 import { operationAuthentication } from "./operation-auth.js";
 import { connectionDiagnostics } from "./connection-diagnostics.js";
 import { configurationManager } from "./configuration-manager.js";
-import { deploymentEditor } from "./deployments.js";
 const app = document.querySelector("#app");
 const terminal = new Set(["SUCCEEDED", "FAILED", "CANCELLED", "NEEDS_ATTENTION"]);
 let vaultPrompt;
 let session,
   catalog,
-  profiles = [],
   poll,
   routeGeneration = 0;
 let pageCleanup = () => {};
@@ -110,11 +108,10 @@ function stat(title, value, foot) {
   );
 }
 async function loadCatalog() {
-  const [env, services, sources, scenarios] = await Promise.all(
-    ["/environments", "/services", "/image-sources", "/scenarios"].map((p) => api(p)),
+  const [env, services, scenarios] = await Promise.all(
+    ["/environments", "/services", "/scenarios"].map((p) => api(p)),
   );
-  catalog = { env, services, sources, scenarios };
-  profiles = await api("/profiles");
+  catalog = { env, services, scenarios };
 }
 function runTable(runs) {
   if (!runs.length)
@@ -153,330 +150,6 @@ function runTable(runs) {
           ),
         ),
       ),
-    ),
-  );
-}
-async function launch(body) {
-  const run = await api("/runs", {
-    method: "POST",
-    body,
-    headers: { "Idempotency-Key": crypto.randomUUID() },
-  });
-  location.hash = "#run/" + run.id;
-}
-async function dashboard() {
-  const runs = await api("/runs");
-  const active = runs.filter((r) => !terminal.has(r.state)).length;
-  app.append(
-    heading(
-      "WORKSPACE OVERVIEW",
-      "Performance, with a plan.",
-      "Prepare environments. Run repeatable tests. Keep the evidence.",
-      link("+ Configure a run", "#configure", "button primary"),
-    ),
-    el(
-      "div",
-      { class: "banner" },
-      "Simulation workspace — deployments and performance measurements are synthetic. Your clusters and source projects remain untouched.",
-    ),
-    el(
-      "div",
-      { class: "stats" },
-      stat("Active runs", active, "Persistent execution, independent of your browser"),
-      stat(
-        "Available environments",
-        Object.values(catalog.env).filter((e) => e.available).length,
-        "One mutating run per environment",
-      ),
-      stat("Saved profiles", profiles.length, "Repeatable configurations, ready to run"),
-    ),
-  );
-  app.append(
-    el(
-      "div",
-      { class: "section-heading" },
-      el("h2", {}, "Saved profiles"),
-      link("Create profile", "#configure"),
-    ),
-  );
-  app.append(
-    el(
-      "div",
-      { class: "grid" },
-      profiles.map((saved) =>
-        el(
-          "article",
-          { class: "card" },
-          el(
-            "div",
-            { class: "card-head" },
-            el(
-              "div",
-              {},
-              el("h3", {}, saved.profile.name),
-              el(
-                "span",
-                { class: "subtle" },
-                `${saved.profile.targetEnvironment} · revision ${saved.revision}`,
-              ),
-            ),
-            pill("SAVED"),
-          ),
-          el(
-            "p",
-            { class: "muted" },
-            `${saved.profile.loadGenerator.virtualUsers} virtual users · ${saved.profile.loadGenerator.measurementSeconds}s measurement · ${saved.profile.simulationCase.toLowerCase().replaceAll("_", " ")}`,
-          ),
-          el(
-            "div",
-            { class: "service-chips" },
-            saved.profile.services.map((s) =>
-              el("span", { class: "chip" }, `${s.serviceId} / ${s.build.sourceRef}`),
-            ),
-          ),
-          el(
-            "div",
-            { class: "card-actions" },
-            button(
-              "Run now",
-              () => launch({ profileId: saved.id, revision: saved.revision }),
-              "primary",
-            ),
-            link("Edit", "#configure/" + saved.id, "button"),
-          ),
-        ),
-      ),
-    ),
-  );
-  app.append(
-    el(
-      "div",
-      { class: "section-heading" },
-      el("h2", {}, "Recent runs"),
-      link("View history", "#history"),
-    ),
-    runTable(runs.slice(0, 6)),
-    el("div", { class: "section-heading" }, el("h2", {}, "Environment availability")),
-    el(
-      "div",
-      { class: "environment-list" },
-      Object.entries(catalog.env).map(([id, value]) =>
-        el(
-          "div",
-          { class: "environment" },
-          el("span", { class: "dot" }),
-          id,
-          el("small", {}, value.available ? "Available" : "Reserved"),
-        ),
-      ),
-    ),
-  );
-}
-function defaultProfile() {
-  return {
-    name: "",
-    targetEnvironment: "sandbox",
-    services: [],
-    loadGenerator: {
-      templateRef: "smoke",
-      virtualUsers: 10,
-      requestsPerSecond: 100,
-      warmupSeconds: 1,
-      measurementSeconds: 5,
-      configurationOverlay: "",
-    },
-    maxRunDurationSeconds: 60,
-    thresholds: [
-      { metric: "latency_p95_ms", maximum: 500, required: true },
-      { metric: "error_rate", maximum: 0.01, required: true },
-    ],
-    simulationCase: "SUCCESS",
-  };
-}
-async function configure(id) {
-  let saved = id ? await api("/profiles/" + id) : null,
-    p = saved?.profile || defaultProfile();
-  app.append(
-    heading(
-      "CONFIGURATION",
-      saved ? "Edit performance profile" : "Configure run",
-      "Choose each service’s source and version independently.",
-    ),
-  );
-  const form = el("form");
-  form.addEventListener("submit", (e) => e.preventDefault());
-  const name = input(p.name),
-    environment = select(
-      Object.keys(catalog.env).map((e) => [e, e]),
-      p.targetEnvironment,
-    );
-  const top = el(
-    "section",
-    { class: "card" },
-    el("h2", {}, "01  Profile & target"),
-    el(
-      "div",
-      { class: "form-grid spacer" },
-      labeled("Profile name", name),
-      labeled("Target environment", environment),
-    ),
-  );
-  form.append(top);
-  const targetHint = el("div", { class: "target-hint" });
-  const deployments = deploymentEditor({
-    catalog,
-    api,
-    environment: environment.value,
-    selections: p.services,
-  });
-  const describeEnvironment = () => {
-    const config = catalog.env[environment.value].configuration;
-    targetHint.replaceChildren(
-      el(
-        "p",
-        {},
-        "The target environment selects the cluster and each service’s namespace, release name and values files. It does not select an image source.",
-      ),
-      el(
-        "div",
-        { class: "service-chips" },
-        el("span", { class: "chip" }, `Cluster: ${config.clusterIdentity}`),
-        el("span", { class: "chip" }, `Load generator: ${config.loadGeneratorNamespace}`),
-      ),
-    );
-  };
-  environment.addEventListener("change", () => {
-    deployments.setEnvironment(environment.value);
-    describeEnvironment();
-  });
-  describeEnvironment();
-  top.append(targetHint);
-  form.append(deployments.element);
-  pageCleanup = () => deployments.dispose();
-  const load = p.loadGenerator;
-  const scenario = select(
-      Object.entries(catalog.scenarios).map(([id, s]) => [id, s.displayName]),
-      load.templateRef,
-    ),
-    users = input(load.virtualUsers, "number", { min: 1 }),
-    rps = input(load.requestsPerSecond, "number", { min: 1 }),
-    warmup = input(load.warmupSeconds, "number", { min: 0 }),
-    measurement = input(load.measurementSeconds, "number", { min: 1 }),
-    max = input(p.maxRunDurationSeconds, "number", { min: 15 }),
-    caseSelect = select(
-      [
-        "SUCCESS",
-        "DEPLOYMENT_FAILURE",
-        "READINESS_TIMEOUT",
-        "MISSING_METRICS",
-        "THRESHOLD_FAILURE",
-        "CLEANUP_FAILURE",
-      ].map((v) => [v, v.toLowerCase().replaceAll("_", " ")]),
-      p.simulationCase,
-    ),
-    loadOverlay = el("textarea", {}, load.configurationOverlay || "");
-  const thresholds = el("textarea", {}, pretty(p.thresholds));
-  form.append(
-    el(
-      "section",
-      { class: "card spacer" },
-      el("h2", {}, "03  Load & evaluation"),
-      el(
-        "div",
-        { class: "form-grid spacer" },
-        labeled("Scenario", scenario),
-        labeled("Simulation behavior", caseSelect),
-        labeled("Virtual users", users),
-        labeled("Requests per second", rps),
-        labeled("Warmup (seconds)", warmup),
-        labeled("Measurement (seconds)", measurement),
-        labeled("Maximum run duration (seconds)", max),
-        labeled("Scenario YAML overlay", loadOverlay),
-        labeled("Thresholds (JSON; maximum is inclusive)", thresholds),
-      ),
-    ),
-  );
-  const read = () => ({
-    name: name.value,
-    targetEnvironment: environment.value,
-    services: deployments.selections(),
-    loadGenerator: {
-      templateRef: scenario.value,
-      virtualUsers: Number(users.value),
-      requestsPerSecond: Number(rps.value),
-      warmupSeconds: Number(warmup.value),
-      measurementSeconds: Number(measurement.value),
-      configurationOverlay: loadOverlay.value,
-    },
-    maxRunDurationSeconds: Number(max.value),
-    simulationCase: caseSelect.value,
-    thresholds: JSON.parse(thresholds.value),
-  });
-  form.append(
-    el(
-      "div",
-      { class: "form-footer" },
-      button(
-        "Save profile",
-        async () => {
-          saved = await api(saved ? "/profiles/" + saved.id : "/profiles", {
-            method: saved ? "PUT" : "POST",
-            body: { revision: saved?.revision, profile: read() },
-          });
-          toast("Profile saved · revision " + saved.revision);
-        },
-        "primary",
-      ),
-      button("Preview execution plan", async () => {
-        const plan = await api("/plans", {
-          method: "POST",
-          body: { profile: read() },
-        });
-        location.hash = "#plan/" + plan.id;
-      }),
-    ),
-  );
-  app.append(form);
-}
-async function planScreen(id) {
-  const plan = await api("/plans/" + id);
-  app.append(
-    heading(
-      "IMMUTABLE EXECUTION PLAN",
-      plan.profile.name,
-      `${plan.profile.targetEnvironment} · ${plan.services.length} services · expires ${time(plan.expiresAt)}`,
-      button("Run this plan", () => launch({ planId: id }), "primary"),
-    ),
-    el(
-      "div",
-      { class: "banner" },
-      plan.warnings.map((w) => el("div", {}, w)),
-    ),
-    el(
-      "div",
-      { class: "grid" },
-      plan.services.map((s) =>
-        el(
-          "section",
-          { class: "card" },
-          el("div", { class: "card-head" }, el("h2", {}, s.serviceId), pill(s.action)),
-          el("p", { class: "muted" }, `${s.image.sourceRef} / ${s.image.version} → ${s.namespace}`),
-          detail("Before / after configuration", s.changes),
-          detail("Pinned image & prepared inputs", s),
-        ),
-      ),
-    ),
-    el(
-      "section",
-      { class: "card spacer" },
-      el("h2", {}, "Load settings & policy"),
-      el(
-        "p",
-        { class: "muted" },
-        "Service versions remain deployed. Only owned simulated load resources are stopped.",
-      ),
-      detail("Load configuration", plan.profile.loadGenerator),
-      detail("Plan checksum", plan.checksum),
     ),
   );
 }
@@ -524,15 +197,13 @@ async function history() {
 async function runDetails(id, generation) {
   const initial = await api("/runs/" + id),
     plan = await api("/plans/" + initial.planId);
-  const diagnostics = plan.simulated ? null : diagnosticsPanel(api, { runId: id });
-  const loads = plan.simulated
-    ? null
-    : additionalLoads(
-        api,
-        { services: catalog.services, environment: initial.environment },
-        id,
-        plan,
-      );
+  const diagnostics = diagnosticsPanel(api, { runId: id });
+  const loads = additionalLoads(
+    api,
+    { services: catalog.services, environment: initial.environment },
+    id,
+    plan,
+  );
   const status = el("div", { class: "card run-status-card" }),
     timeline = el("ol", { class: "timeline" }),
     metrics = el("div", { class: "metrics" }),
@@ -547,13 +218,11 @@ async function runDetails(id, generation) {
     el(
       "div",
       { class: "run-toolbar" },
-      plan.simulated
-        ? null
-        : el(
-            "a",
-            { href: "#monitor/" + id, target: "_blank", rel: "noopener", class: "button primary" },
-            "Open monitoring ↗",
-          ),
+      el(
+        "a",
+        { href: "#monitor/" + id, target: "_blank", rel: "noopener", class: "button primary" },
+        "Open monitoring ↗",
+      ),
       diagnostics?.toggle,
       actions,
     ),
@@ -588,12 +257,7 @@ async function runDetails(id, generation) {
               namespace: s.namespace,
             })),
           ),
-          plan.simulated
-            ? button("Rerun original pinned plan", () => launch({ planId: plan.id }))
-            : link("Prepare a new real run", "#configure", "button"),
-          plan.profileId
-            ? button("Run current saved profile", () => launch({ profileId: plan.profileId }))
-            : null,
+          link("Prepare a new run", "#configure", "button"),
         ),
       ),
     ),
@@ -802,9 +466,7 @@ async function runDetails(id, generation) {
         ),
       ),
     );
-    monitoring.textContent = plan.simulated
-      ? `Synthetic data · updated ${time(run.updatedAt)}. CPU, memory and logs unavailable.`
-      : `Real LogQL measurements · updated ${time(run.updatedAt)}. Missing measurements are unavailable, not zero.`;
+    monitoring.textContent = `LogQL measurements · updated ${time(run.updatedAt)}. Missing measurements are unavailable, not zero.`;
     actions.replaceChildren();
     if (!terminal.has(run.state))
       actions.append(
@@ -818,7 +480,7 @@ async function runDetails(id, generation) {
       if (run.state === "NEEDS_ATTENTION")
         actions.append(
           button("Verify cleanup & release", async () => {
-            await api((plan.simulated ? "/runs/" : "/real/runs/") + id + "/recover", {
+            await api("/execution/runs/" + id + "/recover", {
               method: "POST",
             });
             await update();
@@ -849,20 +511,16 @@ async function configurationEditor() {
   const startup = await api("/configuration/startup");
   const sections = [
     ["all", "Complete configuration"],
-    [
-      "catalog.environments",
-      session.mode === "real" ? "Environments & monitoring" : "Environments & simulation limits",
-    ],
+    ["catalog.environments", "Environments & monitoring"],
     ["catalog.services", "Services, namespaces & releases"],
-    ["catalog.imageSources", "Mock image sources & versions"],
     ["catalog.scenarios", "Load scenario templates"],
     ["connections.artifactory", "Artifactory connections"],
     ["connections.bitbucket", "Bitbucket connections"],
     ["connections.loki", "Shared Loki connections"],
     ["connections.secretServers", "Secret Server authentication"],
     ["connections.credentials", "Credential references & secret IDs"],
-    ["connections.imageSources", "Real image-source mappings"],
-  ].filter(([key]) => session.mode === "simulation" || key !== "catalog.imageSources");
+    ["connections.imageSources", "Image-source mappings"],
+  ];
   const selector = select(sections, sections[0][0]);
   const editor = el("textarea", {
     rows: 20,
@@ -959,8 +617,6 @@ async function configurationEditor() {
         if (!value || typeof value !== "object" || Array.isArray(value))
           throw new Error(`Missing configuration map: ${key}`);
       }
-      if (imported.catalog.mode !== session.mode)
-        throw new Error("Imported configuration must match the running mode.");
       if (startup.environment && !imported.catalog.environments[startup.environment])
         throw new Error(
           `Keep the default environment in the imported catalog: ${startup.environment}`,
@@ -983,7 +639,7 @@ async function configurationEditor() {
     const url = URL.createObjectURL(new Blob([pretty(active)], { type: "application/json" }));
     const link = el("a", {
       href: url,
-      download: `orchestrator-${session.mode}-configuration.json`,
+      download: "orchestrator-configuration.json",
     });
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -1041,9 +697,7 @@ async function settings(section) {
     el(
       "p",
       { class: "banner" },
-      session.mode === "real"
-        ? "Real mode · Vault authentication, image discovery and Bitbucket references are available. Real execution requires startup cluster configuration; LogQL measurements require approved queries."
-        : "Simulation mode · Deployments and results are synthetic. Registry diagnostics use configured real connections.",
+      "Manage integration connections, deployment environments, services and monitoring.",
     ),
     el(
       "p",
@@ -1054,7 +708,6 @@ async function settings(section) {
     ),
     configurationManager(active, {
       api,
-      mode: session.mode,
       authStates,
       onSaved: async () => {
         await route();
@@ -1104,22 +757,18 @@ async function settings(section) {
   }
   pageCleanup = () => panel.dispose();
 }
-function realOverview() {
+function overview() {
   const enabled = session.capabilities.execution;
   app.append(
     heading(
-      "REAL INTEGRATIONS",
+      "PERFORMANCE ORCHESTRATOR",
       "Performance workspace",
       "Repository-backed Helm deployments and read-only service diagnostics.",
     ),
     el(
       "section",
       { class: "card" },
-      el(
-        "h2",
-        {},
-        enabled ? "Run a real performance test" : "Real execution needs cluster configuration",
-      ),
+      el("h2", {}, enabled ? "Run a performance test" : "Execution needs cluster configuration"),
       el(
         "p",
         {},
@@ -1130,7 +779,7 @@ function realOverview() {
       el(
         "div",
         { class: "card-actions" },
-        enabled ? link("Configure run", "#configure", "button primary") : null,
+        link("Configure run", "#configure", "button primary"),
         link("Browse service diagnostics", "#settings/diagnostics", "button"),
         link("Configure connections", "#settings", "button"),
       ),
@@ -1163,15 +812,15 @@ async function route() {
     await loadCatalog();
     if (generation !== routeGeneration) return;
     app.replaceChildren();
-    if (session.mode === "real" && page === "configure") {
+    if (page === "configure") {
       app.append(
         heading(
-          "REAL EXECUTION",
+          "RUN CONFIGURATION",
           "Configure run",
           "Prepare and review the deployment before starting.",
         ),
       );
-      const flow = await realFlow(
+      const flow = await runBuilder(
         api,
         {
           services: catalog.services,
@@ -1188,10 +837,10 @@ async function route() {
       }
       app.append(flow);
       pageCleanup = () => flow.dispose?.();
-    } else if (session.mode === "real" && page === "plan") {
+    } else if (page === "plan") {
       const prepared = await api("/plans/" + id);
       app.append(
-        heading("PREPARED REAL PLAN", prepared.profile.name, prepared.clusterIdentity),
+        heading("PREPARED PLAN", prepared.profile.name, prepared.clusterIdentity),
         el(
           "ul",
           {},
@@ -1213,10 +862,7 @@ async function route() {
         ),
         link("Prepare another run", "#configure", "button"),
       );
-    } else if (session.mode === "real" && !["settings", "history", "run", "monitor"].includes(page))
-      realOverview();
-    else if (page === "configure") await configure(id);
-    else if (page === "plan") await planScreen(id);
+    } else if (!["settings", "history", "run", "monitor"].includes(page)) overview();
     else if (page === "history") await history();
     else if (page === "monitor") {
       const view = await runMonitoring(api, id, {
@@ -1231,8 +877,8 @@ async function route() {
       pageCleanup = () => view.dispose();
     } else if (page === "run") await runDetails(id, generation);
     else if (page === "settings") await settings(id);
-    else await dashboard();
-    if (session.mode === "real") await vaultPrompt?.refresh();
+    else overview();
+    await vaultPrompt?.refresh();
   } catch (error) {
     showError(error.message);
   }
@@ -1249,19 +895,11 @@ vaultPrompt = secretSignInPrompt(
     );
     await route();
   },
-  session.mode === "real",
+  true,
 );
-$("#mode-badge").textContent =
-  session.mode === "real"
-    ? session.capabilities.execution
-      ? "REAL · EXECUTION"
-      : "REAL · READ-ONLY"
-    : "SIMULATION";
-$("#workspace-mode").textContent =
-  session.mode === "real"
-    ? `Default: ${session.targetEnvironment || "unbound"} · Real integrations`
-    : "Simulation mode · synthetic deployments and results";
-if (session.mode === "real")
-  document.querySelector('nav a[href="#configure"]').hidden = !session.capabilities.execution;
+$("#execution-badge").textContent = session.capabilities.execution
+  ? "EXECUTION ENABLED"
+  : "READ-ONLY";
+$("#workspace-environment").textContent = `Default environment: ${session.targetEnvironment}`;
 window.addEventListener("hashchange", route);
 await route();

@@ -25,14 +25,13 @@ class DeploymentConfigurationTest {
         .withInitializer(new ConfigDataApplicationContextInitializer())
         .withPropertyValues(
           "spring.config.location=classpath:application-test.yaml",
-          "orchestrator.mode=real",
+
           "orchestrator.target-environment=" + target
         )
         .run((final var context) -> {
           final var environment = context.getEnvironment();
           final var catalog = new com.example.perforchestrator.infrastructure.config.Catalog(
             environment.getProperty("orchestrator.catalog"),
-            "real",
             "127.0.0.1",
             environment
           );
@@ -86,21 +85,18 @@ class DeploymentConfigurationTest {
   @Test
   @DisplayName("Test Configuration Uses Isolated In Memory Databases Without Requiring Secrets")
   void testConfigurationUsesIsolatedInMemoryDatabasesWithoutRequiringSecrets() {
-    for (final String mode : new String[] { "simulation", "real" }) {
+    {
       new ApplicationContextRunner()
         .withInitializer(new ConfigDataApplicationContextInitializer())
-        .withPropertyValues(
-          "spring.config.location=classpath:application-test.yaml",
-          "orchestrator.mode=" + mode
-        )
+        .withPropertyValues("spring.config.location=classpath:application-test.yaml")
         .run((final var context) -> {
           assertThat(context).hasNotFailed();
           final var environment = context.getEnvironment();
-          assertThat(environment.getActiveProfiles()).containsExactly(mode);
+          assertThat(environment.getActiveProfiles()).isEmpty();
           assertThat(environment.getProperty("spring.datasource.password")).isEmpty();
           assertThat(environment.getProperty("spring.config.import")).isNull();
           assertThat(environment.getProperty("spring.datasource.url")).isEqualTo(
-            "jdbc:h2:mem:test-" + mode + ";DB_CLOSE_DELAY=-1"
+            "jdbc:h2:mem:test-orchestrator;DB_CLOSE_DELAY=-1"
           );
         });
     }

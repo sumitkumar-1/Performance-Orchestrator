@@ -42,7 +42,6 @@ Connections are bounded by a 5-second connect timeout, 15-second total response 
 
 ## Execution boundary
 
-The real read-only registry browser is available in Settings and via the REST API. The simulation editor retains fixture image sources. Real registry results do not implicitly authorize deployment and are not attached to simulated plans as real deployed evidence. Linking real selected images to project-owned charts requires confirmed source-selector/Helm/digest bindings and actual rendering checks.
 
 ## Secret Server session API
 

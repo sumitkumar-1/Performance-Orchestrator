@@ -36,7 +36,7 @@ class ConfigurationOverridesTest {
     final var changed = factory.catalog();
     final ObjectNode defaults = Json.MAPPER.valueToTree(changed.data());
     ((ObjectNode) defaults.path("environments").path("sandbox"))
-      .put("dashboardUrl", "https://new.example.invalid/dashboard")
+      .put("clusterIdentity", "new-cluster")
       .put("displayName", "New default name");
     changed.replace(Json.read(Json.write(defaults), Catalog.Data.class));
     final var restarted = new RuntimeConfiguration(
@@ -45,12 +45,10 @@ class ConfigurationOverridesTest {
       directory.resolve("settings.json").toString()
     );
     assertThat(changed.environment("sandbox").displayName()).isEqualTo("Dashboard name");
-    assertThat(changed.environment("sandbox").dashboardUrl()).isEqualTo(
-      "https://new.example.invalid/dashboard"
-    );
+    assertThat(changed.environment("sandbox").clusterIdentity()).isEqualTo("new-cluster");
     assertThat(Files.readString(directory.resolve("settings.json")))
       .contains("schemaVersion")
-      .doesNotContain("dashboardUrl");
+      .doesNotContain("clusterIdentity");
     restarted.update(restarted.startup().configuration());
     assertThat(restarted.startup().runtimeOverride()).isFalse();
     assertThat(changed.environment("sandbox").displayName()).isEqualTo("New default name");
@@ -140,5 +138,39 @@ class ConfigurationOverridesTest {
     assertThat(
       Json.MAPPER.readTree(Files.readString(path)).path("schemaVersion").asInt()
     ).isEqualTo(2);
+  }
+
+  /**
+   * <b>Scenario:</b> Restore saved production overrides from an existing installation
+   * <pre>
+   * GIVEN ... saved dashboard edits whose envelope contains the retired real-mode marker
+   * WHEN ... configuration is loaded and saved after upgrading
+   * THEN ... the edits survive and the retired marker is no longer exported
+   * </pre>
+   */
+  @Test
+  @DisplayName("Legacy production overrides survive the single-workflow upgrade")
+  void legacyProductionOverridesSurviveUpgrade() throws Exception {
+    final var factory = new RuntimeConfigurationTest();
+    final Path file = directory.resolve("settings.json");
+    final var initial = new RuntimeConfiguration(
+      factory.catalog(),
+      new ConnectionConfig(""),
+      file.toString()
+    );
+    initial.update(factory.edited(initial.current(), "Retained dashboard name"));
+    final ObjectNode legacy = (ObjectNode) Json.MAPPER.readTree(Files.readString(file));
+    legacy.put("mode", "real");
+    Files.writeString(file, Json.write(legacy));
+    final var restarted = new RuntimeConfiguration(
+      factory.catalog(),
+      new ConnectionConfig(""),
+      file.toString()
+    );
+    assertThat(restarted.current().catalog().environments().get("sandbox").displayName()).isEqualTo(
+      "Retained dashboard name"
+    );
+    restarted.update(restarted.current());
+    assertThat(Json.MAPPER.readTree(Files.readString(file)).has("mode")).isFalse();
   }
 }

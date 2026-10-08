@@ -1,6 +1,6 @@
 package com.example.perforchestrator.infrastructure.execution;
 
-import com.example.perforchestrator.application.RealPreparation;
+import com.example.perforchestrator.application.RunPreparation;
 import com.example.perforchestrator.domain.*;
 import com.example.perforchestrator.domain.Model.*;
 import com.example.perforchestrator.infrastructure.config.*;
@@ -45,7 +45,7 @@ public class LokiMeasurements {
     final List<Query> queries = new ArrayList<>();
     final var array = Json.MAPPER.valueToTree(plan.effectiveLoadConfiguration().get("metrics"));
     for (final var item : array) {
-      final var metric = Json.read(item.toString(), RealPreparation.Metric.class);
+      final var metric = Json.read(item.toString(), RunPreparation.Metric.class);
       if (metric.logs()) continue;
       final var service = catalog.service(metric.serviceId());
       final var env = catalog.environment(plan.profile().targetEnvironment());

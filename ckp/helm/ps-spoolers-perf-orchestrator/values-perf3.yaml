@@ -1,3 +1,2 @@
 # Instance defaults for perf3; shared settings come from values.yaml.
-mode: real
 targetEnvironment: perf3

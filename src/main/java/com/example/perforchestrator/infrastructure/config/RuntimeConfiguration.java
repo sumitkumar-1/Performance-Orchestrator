@@ -29,9 +29,9 @@ public class RuntimeConfiguration {
   private final Document startup;
   private boolean runtimeOverride;
 
+  @com.fasterxml.jackson.annotation.JsonIgnoreProperties("mode")
   public record SavedOverrides(
     int schemaVersion,
-    String mode,
     String environment,
     java.util.List<ConfigurationOverrides.Change> overrides
   ) {}
@@ -61,11 +61,10 @@ public class RuntimeConfiguration {
         final SavedOverrides stored = Json.read(content, SavedOverrides.class);
         if (
           stored.schemaVersion() != 2 ||
-          !catalog.mode().equals(stored.mode()) ||
           !catalog.boundEnvironment().equals(stored.environment()) ||
           stored.overrides() == null
         ) throw new IllegalArgumentException(
-          "Runtime overrides belong to a different mode/environment or version"
+          "Runtime overrides belong to a different environment or version"
         );
         saved = Json.read(
           Json.write(
@@ -87,9 +86,7 @@ public class RuntimeConfiguration {
             error.field() +
             ". Source file: " +
             this.file +
-            ". Startup mode: " +
-            catalog.mode() +
-            "; target environment: " +
+            ". Startup configuration; target environment: " +
             (catalog.boundEnvironment().isBlank() ? "unbound" : catalog.boundEnvironment()) +
             ". Check orchestrator.configuration-file and the process working directory. " +
             error.getMessage()
@@ -229,9 +226,7 @@ public class RuntimeConfiguration {
         Json.MAPPER.valueToTree(startup),
         Json.MAPPER.valueToTree(new Document(null, next.catalog(), next.connections()))
       );
-      final String json = Json.write(
-        new SavedOverrides(2, catalog.mode(), catalog.boundEnvironment(), changes)
-      );
+      final String json = Json.write(new SavedOverrides(2, catalog.boundEnvironment(), changes));
       if (
         json.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 262144
       ) throw Problem.invalid("configuration", "Configuration exceeds 256 KiB");

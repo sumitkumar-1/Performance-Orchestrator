@@ -5,7 +5,7 @@ import java.util.*;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/real")
+@RequestMapping("/api/v1/execution")
 public class DiagnosticsController {
 
   private final DiagnosticLog log;

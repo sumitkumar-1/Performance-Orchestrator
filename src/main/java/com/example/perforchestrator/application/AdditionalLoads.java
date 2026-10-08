@@ -16,7 +16,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class AdditionalLoads {
 
   private final Store store;
-  private final RealPreparation preparation;
+  private final RunPreparation preparation;
   private final Catalog catalog;
   private final ConnectionConfig connections;
   private final ArtifactoryImages images;
@@ -25,7 +25,7 @@ public class AdditionalLoads {
 
   public AdditionalLoads(
     final Store store,
-    final RealPreparation preparation,
+    final RunPreparation preparation,
     final Catalog catalog,
     final ConnectionConfig connections,
     final ArtifactoryImages images,
@@ -50,8 +50,8 @@ public class AdditionalLoads {
     preparation.enabled();
     final var run = store.run(runId);
     final var plan = store.plan(run.planId());
-    if (plan.simulated() || run.state() != State.RUNNING_LOAD) throw Problem.conflict(
-      "Additional load can be added only while the real run's baseline load is running"
+    if (run.state() != State.RUNNING_LOAD) throw Problem.conflict(
+      "Additional load can be added only while the run's baseline load is running"
     );
     final var now = Instant.now();
     if (
@@ -72,7 +72,7 @@ public class AdditionalLoads {
     return (Map<String, Object>) plan.effectiveLoadConfiguration().get("target");
   }
 
-  public AdditionalLoad prepare(final String runId, final RealPreparation.Deployment selection) {
+  public AdditionalLoad prepare(final String runId, final RunPreparation.Deployment selection) {
     final var plan = activePlan(runId);
     if (
       !plan.catalogHash().equals(catalog.hash()) ||

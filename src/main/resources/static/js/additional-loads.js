@@ -77,11 +77,11 @@ export function additionalLoads(api, catalog, runId, plan) {
           : "Preparing the additional chart, dependencies and values…",
         async () => {
           if (reviewed) {
-            await api(`/real/runs/${runId}/loads/${reviewed.id}/start`, { method: "POST" });
+            await api(`/execution/runs/${runId}/loads/${reviewed.id}/start`, { method: "POST" });
             selected = null;
             reviewed = null;
           } else
-            reviewed = await api(`/real/runs/${runId}/loads/review`, {
+            reviewed = await api(`/execution/runs/${runId}/loads/review`, {
               method: "POST",
               body: selected,
             });
@@ -132,7 +132,7 @@ export function additionalLoads(api, catalog, runId, plan) {
   return {
     node,
     async update(run) {
-      const loads = await api(`/real/runs/${runId}/loads`);
+      const loads = await api(`/execution/runs/${runId}/loads`);
       if (disposed) return;
       const wasActive = active;
       active =

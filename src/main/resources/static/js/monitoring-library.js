@@ -38,7 +38,7 @@ export function monitoringLibrary(api, editor, onChange, { evaluation, environme
       return;
     await action(async () => {
       await api(
-        `/real/monitoring-sets/${encodeURIComponent(saved.id)}?revision=${saved.revision}&${scope}`,
+        `/execution/monitoring-sets/${encodeURIComponent(saved.id)}?revision=${saved.revision}&${scope}`,
         { method: "DELETE" },
       );
       if (disposed) return;
@@ -83,7 +83,7 @@ export function monitoringLibrary(api, editor, onChange, { evaluation, environme
   }
   async function fetchSets() {
     await action(async () => {
-      const result = await api(`/real/monitoring-sets?${scope}`);
+      const result = await api(`/execution/monitoring-sets?${scope}`);
       if (!disposed) {
         sets = result;
         render();
@@ -139,7 +139,7 @@ export function monitoringLibrary(api, editor, onChange, { evaluation, environme
             panels.some((p) => p.name === r.metric && p.kind !== "logs"),
           );
       try {
-        const result = await api(`/real/monitoring-sets?${scope}`, {
+        const result = await api(`/execution/monitoring-sets?${scope}`, {
           method: "POST",
           body: {
             id: previous?.id || null,

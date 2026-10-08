@@ -10,26 +10,14 @@ import org.springframework.stereotype.Component;
 @Component
 public class Catalog {
 
-  public record Limits(int maxRunDurationSeconds, int maxVirtualUsers, int maxRequestsPerSecond) {}
-
-  @com.fasterxml.jackson.annotation.JsonInclude(
-    com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL
-  )
-  public record Environment(
-    String displayName,
-    String clusterIdentity,
-    List<String> serviceNamespaces,
-    String loadGeneratorNamespace,
-    List<String> allowedActions,
-    Limits limits,
-    String dashboardUrl,
-    Monitoring monitoring
-  ) {
-    public Environment {
-      serviceNamespaces = ImmutableConfiguration.list(serviceNamespaces);
-      allowedActions = ImmutableConfiguration.list(allowedActions);
-    }
-  }
+  @com.fasterxml.jackson.annotation.JsonIgnoreProperties({
+    "serviceNamespaces",
+    "loadGeneratorNamespace",
+    "allowedActions",
+    "limits",
+    "dashboardUrl",
+  })
+  public record Environment(String displayName, String clusterIdentity, Monitoring monitoring) {}
 
   public record NamespaceCredentials(String logsCredentialRef, String metricsCredentialRef) {}
 
@@ -59,19 +47,6 @@ public class Catalog {
   public record Destination(String namespace, String releaseName, List<String> valuesFiles) {
     public Destination {
       valuesFiles = ImmutableConfiguration.list(valuesFiles);
-    }
-  }
-
-  public record Binding(
-    String file,
-    String exactLine,
-    int expectedOccurrences,
-    String helmValuesKey,
-    String selectorKey,
-    Map<String, String> sourceSelectors
-  ) {
-    public Binding {
-      sourceSelectors = ImmutableConfiguration.map(sourceSelectors);
     }
   }
 
@@ -105,12 +80,14 @@ public class Catalog {
     }
   }
 
+  @com.fasterxml.jackson.annotation.JsonIgnoreProperties({
+    "dependencies",
+    "installationBindings",
+    "allowedOverridePaths",
+  })
   public record Service(
     String projectPath,
-    List<String> dependencies,
     Map<String, Destination> deploymentByEnvironment,
-    Binding installationBindings,
-    List<String> allowedOverridePaths,
     Destination deploymentDefaults,
     ContainerImage containerImage,
     SourceProject sourceProject,
@@ -118,20 +95,22 @@ public class Catalog {
   ) {
     public Service(
       final String projectPath,
-      final List<String> dependencies,
       final Map<String, Destination> deploymentByEnvironment,
-      final Binding installationBindings,
-      final List<String> allowedOverridePaths,
+      final Destination deploymentDefaults
+    ) {
+      this(projectPath, deploymentByEnvironment, deploymentDefaults, null, null, Map.of());
+    }
+
+    public Service(
+      final String projectPath,
+      final Map<String, Destination> deploymentByEnvironment,
       final Destination deploymentDefaults,
       final ContainerImage containerImage,
       final SourceProject sourceProject
     ) {
       this(
         projectPath,
-        dependencies,
         deploymentByEnvironment,
-        installationBindings,
-        allowedOverridePaths,
         deploymentDefaults,
         containerImage,
         sourceProject,
@@ -139,47 +118,14 @@ public class Catalog {
       );
     }
 
-    public Service(
-      final String projectPath,
-      final List<String> dependencies,
-      final Map<String, Destination> deploymentByEnvironment,
-      final Binding installationBindings,
-      final List<String> allowedOverridePaths,
-      final Destination deploymentDefaults
-    ) {
-      this(
-        projectPath,
-        dependencies,
-        deploymentByEnvironment,
-        installationBindings,
-        allowedOverridePaths,
-        deploymentDefaults,
-        null,
-        null
-      );
-    }
-
     @org.springframework.boot.context.properties.bind.ConstructorBinding
     public Service {
-      monitoringCredentials = ImmutableConfiguration.map(
-        monitoringCredentials == null ? Map.of() : monitoringCredentials
-      );
-      dependencies = ImmutableConfiguration.list(dependencies == null ? List.of() : dependencies);
       deploymentByEnvironment = ImmutableConfiguration.map(
         deploymentByEnvironment == null ? Map.of() : deploymentByEnvironment
       );
-      allowedOverridePaths = ImmutableConfiguration.list(allowedOverridePaths);
-    }
-  }
-
-  public record Source(
-    String displayName,
-    boolean usernameRequired,
-    String repositoryTemplate,
-    List<String> versions
-  ) {
-    public Source {
-      versions = ImmutableConfiguration.list(versions);
+      monitoringCredentials = ImmutableConfiguration.map(
+        monitoringCredentials == null ? Map.of() : monitoringCredentials
+      );
     }
   }
 
@@ -190,43 +136,22 @@ public class Catalog {
     Map<String, Object> defaults
   ) {
     public Scenario {
-      allowedOverridePaths = ImmutableConfiguration.list(allowedOverridePaths);
+      allowedOverridePaths = ImmutableConfiguration.list(
+        allowedOverridePaths == null ? List.of() : allowedOverridePaths
+      );
       defaults = ImmutableConfiguration.values(defaults);
     }
   }
 
+  @com.fasterxml.jackson.annotation.JsonIgnoreProperties({ "mode", "imageSources" })
   public record Data(
-    String mode,
     Map<String, Environment> environments,
     Map<String, Service> services,
-    Map<String, Source> imageSources,
     Map<String, Scenario> scenarios
   ) {
     public Data {
-      if ("real".equals(mode) && environments != null) {
-        final Map<String, Environment> realEnvironments = new LinkedHashMap<>();
-        environments.forEach((final var id, final var env) ->
-          realEnvironments.put(
-            id,
-            env == null
-              ? null
-              : new Environment(
-                  env.displayName(),
-                  env.clusterIdentity(),
-                  null,
-                  null,
-                  null,
-                  null,
-                  null,
-                  env.monitoring()
-                )
-          )
-        );
-        environments = realEnvironments;
-      }
       environments = ImmutableConfiguration.map(environments);
       services = ImmutableConfiguration.map(services);
-      imageSources = ImmutableConfiguration.map(imageSources);
       scenarios = ImmutableConfiguration.map(scenarios);
     }
   }
@@ -234,9 +159,6 @@ public class Catalog {
   private record Snapshot(Data data, String hash) {}
 
   private volatile Snapshot snapshot;
-  private final Path root;
-  private final String resourceRoot;
-  private final String mode;
   private String boundEnvironment = "";
 
   public String selectedEnvironment(final String requested) {
@@ -252,66 +174,38 @@ public class Catalog {
   @org.springframework.beans.factory.annotation.Autowired
   public Catalog(
     final @Value("${orchestrator.catalog:}") String file,
-    final @Value("${orchestrator.mode}") String mode,
     final @Value("${server.address:127.0.0.1}") String address,
     final org.springframework.core.env.Environment environment
   ) throws IOException {
-    this(file, mode, address);
+    this(file, address);
     if (file.isBlank()) {
       final var defaults = org.springframework.boot.context.properties.bind.Binder.get(environment)
         .bind("orchestrator.catalog-defaults", Data.class)
-        .orElseGet(() -> new Data(mode, Map.of(), Map.of(), Map.of(), Map.of()));
+        .orElseGet(() -> new Data(Map.of(), Map.of(), Map.of()));
       replace(
         new Data(
-          mode,
           defaults.environments() == null ? Map.of() : defaults.environments(),
           defaults.services() == null ? Map.of() : defaults.services(),
-          defaults.imageSources() == null ? Map.of() : defaults.imageSources(),
           defaults.scenarios() == null ? Map.of() : defaults.scenarios()
         )
       );
     }
-    if (mode.equals("real")) {
-      final String target = environment.getProperty("orchestrator.target-environment", "");
-      if (target.isBlank()) throw new IllegalArgumentException(
-        "Real mode requires target-environment"
-      );
-      if (!target.isBlank()) {
-        final var selected = data().environments().get(target);
-        if (selected == null) throw new IllegalArgumentException(
-          "Unknown target environment: " + target
-        );
-        boundEnvironment = target;
-      }
-    }
+    final String target = environment.getProperty("orchestrator.target-environment", "sandbox");
+    if (!data().environments().containsKey(target)) throw new IllegalArgumentException(
+      "Unknown target environment: " + target
+    );
+    boundEnvironment = target;
   }
 
-  public Catalog(
-    final @Value("${orchestrator.catalog}") String file,
-    final @Value("${orchestrator.mode}") String mode,
-    final @Value("${server.address:127.0.0.1}") String address
-  ) throws IOException {
-    if (!Set.of("simulation", "real").contains(mode)) throw new IllegalStateException(
-      "Mode must be simulation or real"
-    );
+  public Catalog(final String file, final String address) throws IOException {
     if (!Set.of("127.0.0.1", "::1", "localhost").contains(address)) throw new IllegalStateException(
       "Only loopback access is enabled; shared access requires authentication"
     );
-    this.mode = mode;
-    if (file.isBlank() && mode.equals("real")) {
-      root = Path.of(".").toAbsolutePath().normalize();
-      resourceRoot = null;
-      replace(new Data(mode, Map.of(), Map.of(), Map.of(), Map.of()));
-      return;
-    }
-    if (file.startsWith("classpath:")) {
-      resourceRoot = file.substring(0, file.lastIndexOf('/') + 1);
-      root = null;
-    } else {
-      root = Path.of(file).toRealPath().getParent();
-      resourceRoot = null;
-    }
-    replace(parse(ConfigurationResources.read(file)));
+    replace(
+      file.isBlank()
+        ? new Data(Map.of(), Map.of(), Map.of())
+        : parse(ConfigurationResources.read(file))
+    );
   }
 
   public static Data parse(final String content) {
@@ -323,15 +217,10 @@ public class Catalog {
       candidate == null ||
       candidate.environments() == null ||
       candidate.services() == null ||
-      candidate.imageSources() == null ||
       candidate.scenarios() == null
     ) throw Problem.invalid(
       "catalog",
-      "Invalid catalog: environments, services, imageSources and scenarios maps are required"
-    );
-    if (!mode.equals(candidate.mode())) throw Problem.invalid(
-      "catalog.mode",
-      "Invalid catalog: saved/imported mode must match the startup mode"
+      "Invalid catalog: environments, services and scenarios maps are required"
     );
     if (
       !boundEnvironment.isBlank() && !candidate.environments().containsKey(boundEnvironment)
@@ -341,13 +230,6 @@ public class Catalog {
     );
     final String[] field = { "catalog" };
     try {
-      if (
-        mode.equals("simulation") &&
-        (candidate.environments().isEmpty() ||
-          candidate.services().isEmpty() ||
-          candidate.imageSources().isEmpty() ||
-          candidate.scenarios().isEmpty())
-      ) throw new IllegalArgumentException("Catalog sections cannot be empty");
       candidate.environments().forEach((final var id, final var env) -> {
         field[0] = "catalog.environments";
         identifier(id);
@@ -355,16 +237,6 @@ public class Catalog {
 
         required(env.displayName());
         required(env.clusterIdentity());
-        if (mode.equals("simulation")) required(env.loadGeneratorNamespace());
-        if (
-          mode.equals("simulation") &&
-          (env.serviceNamespaces().isEmpty() ||
-            env.allowedActions() == null ||
-            !Set.of("PLAN", "DEPLOY", "RUN_LOAD").containsAll(env.allowedActions()) ||
-            env.limits().maxRunDurationSeconds() < 15 ||
-            env.limits().maxVirtualUsers() < 1 ||
-            env.limits().maxRequestsPerSecond() < 1)
-        ) throw new IllegalArgumentException();
         if (env.monitoring() != null) {
           field[0] = "catalog.environments." + id + ".monitoring";
           final var monitoring = env.monitoring();
@@ -377,25 +249,6 @@ public class Catalog {
             ) com.example.perforchestrator.infrastructure.registry.ConnectionConfig.base(url);
           if (monitoring.connectionRef() != null) identifier(monitoring.connectionRef());
         }
-        if (
-          env.dashboardUrl() != null && !env.dashboardUrl().isBlank()
-        ) com.example.perforchestrator.infrastructure.registry.ConnectionConfig.base(
-          env.dashboardUrl()
-        );
-      });
-      candidate.imageSources().forEach((final var id, final var source) -> {
-        field[0] = "catalog.imageSources";
-        identifier(id);
-        field[0] += "." + id;
-        required(source.displayName());
-        required(source.repositoryTemplate());
-        if (
-          source.versions().isEmpty() ||
-          source
-            .versions()
-            .stream()
-            .anyMatch((final var v) -> v == null || !v.matches("[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}"))
-        ) throw new IllegalArgumentException();
       });
       candidate.services().forEach((final var id, final var service) -> {
         field[0] = "catalog.services";
@@ -403,12 +256,10 @@ public class Catalog {
         field[0] += "." + id;
         safeRelative(service.projectPath());
         if (
-          (mode.equals("simulation") && service.allowedOverridePaths() == null) ||
-          (service.deploymentByEnvironment().isEmpty() && service.deploymentDefaults() == null)
+          service.deploymentByEnvironment().isEmpty() && service.deploymentDefaults() == null
         ) throw new IllegalArgumentException();
-        if (mode.equals("real")) {
-          // Real service entries describe intended deployment inputs. Source retrieval
-          // and executable chart validation remain blocked by requireExecution().
+        {
+          // Validate deployment mappings; chart validation happens during run review.
           final Map<String, Destination> destinations = new LinkedHashMap<>(
             service.deploymentByEnvironment()
           );
@@ -431,30 +282,7 @@ public class Catalog {
             required(destination.releaseName());
             destination.valuesFiles().forEach(Catalog::safeRelative);
           });
-          return;
         }
-        final var binding = service.installationBindings();
-        required(binding.exactLine());
-        required(binding.helmValuesKey());
-        required(binding.selectorKey());
-        if (
-          binding.expectedOccurrences() < 1 ||
-          binding.sourceSelectors().isEmpty() ||
-          !candidate.imageSources().keySet().containsAll(binding.sourceSelectors().keySet())
-        ) throw new IllegalArgumentException();
-        read(service, binding.file());
-        service
-          .deploymentByEnvironment()
-          .forEach((final var environment, final var destination) -> {
-            final var env = candidate.environments().get(environment);
-            if (
-              env == null ||
-              !env.serviceNamespaces().contains(destination.namespace()) ||
-              destination.valuesFiles().isEmpty()
-            ) throw new IllegalArgumentException();
-            required(destination.releaseName());
-            destination.valuesFiles().forEach((final var file) -> read(service, file));
-          });
       });
       candidate.scenarios().forEach((final var id, final var scenario) -> {
         field[0] = "catalog.scenarios";
@@ -469,9 +297,7 @@ public class Catalog {
     } catch (final RuntimeException error) {
       throw Problem.invalid(
         field[0],
-        "Invalid catalog at " +
-          field[0] +
-          ": check required fields, paths, references and (for simulation) limits/project files"
+        "Invalid catalog at " + field[0] + ": check required fields, paths and references"
       );
     }
   }
@@ -507,21 +333,6 @@ public class Catalog {
     snapshot = new Snapshot(next, Json.hash(Json.write(next)));
   }
 
-  public String mode() {
-    return mode;
-  }
-
-  public void requireExecution() {
-    if (mode.equals("real")) throw new Problem(
-      501,
-      "REAL_EXECUTION_UNAVAILABLE",
-      "mode",
-      "Real deployment and load execution adapters are not configured. Real mode supports" +
-        " Artifactory discovery and Delinea authentication; no simulation fallback is" +
-        " used."
-    );
-  }
-
   public Data data() {
     return snapshot.data();
   }
@@ -540,45 +351,5 @@ public class Catalog {
     final var value = data().services().get(id);
     if (value == null) throw Problem.invalid("services", "Unknown service");
     return value;
-  }
-
-  public Path project(final Service service) {
-    try {
-      safeRelative(service.projectPath());
-      if (root == null) throw Problem.invalid(
-        "projectPath",
-        "Packaged mock projects are read as resources"
-      );
-      final Path path = root.resolve(service.projectPath()).toRealPath();
-      if (!path.startsWith(root)) throw Problem.invalid(
-        "projectPath",
-        "Project must stay within catalog fixture root"
-      );
-      return path;
-    } catch (final IOException e) {
-      throw Problem.invalid("projectPath", "Registered project is missing");
-    }
-  }
-
-  public String read(final Service service, final String relative) {
-    try {
-      safeRelative(service.projectPath());
-      safeRelative(relative);
-      if (resourceRoot != null) {
-        final String content = ConfigurationResources.read(
-          resourceRoot + service.projectPath() + "/" + relative
-        );
-        if (content.length() > 65536) throw Problem.invalid("chart.path", "Oversized project file");
-        return content;
-      }
-      final Path base = project(service);
-      final Path path = base.resolve(relative).toRealPath();
-      if (
-        !path.startsWith(base) || !Files.isRegularFile(path) || Files.size(path) > 65536
-      ) throw Problem.invalid("chart.path", "Invalid or oversized project file");
-      return Files.readString(path);
-    } catch (final IOException e) {
-      throw Problem.invalid("chart.path", "Registered chart/values file is missing");
-    }
   }
 }

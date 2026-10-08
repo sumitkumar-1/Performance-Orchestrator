@@ -5,7 +5,7 @@ import java.util.*;
 import org.yaml.snakeyaml.*;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 
-/** Helm values permit null (to remove defaults), unlike the simulation overlay format. */
+/** Helm values permit null (to remove defaults), including explicit deletion overrides. */
 public final class HelmValues {
 
   private HelmValues() {}

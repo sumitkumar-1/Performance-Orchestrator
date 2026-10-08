@@ -41,15 +41,6 @@ public final class Model {
     NOT_EVALUATED,
   }
 
-  public enum SimulationCase {
-    SUCCESS,
-    DEPLOYMENT_FAILURE,
-    READINESS_TIMEOUT,
-    MISSING_METRICS,
-    THRESHOLD_FAILURE,
-    CLEANUP_FAILURE,
-  }
-
   public record Build(String sourceRef, String username, String version) {}
 
   public record Selection(String serviceId, Action action, Build build, String valuesOverlay) {}
@@ -65,17 +56,15 @@ public final class Model {
 
   public record Threshold(String metric, double maximum, boolean required) {}
 
+  @com.fasterxml.jackson.annotation.JsonIgnoreProperties("simulationCase")
   public record Profile(
     String name,
     String targetEnvironment,
     List<Selection> services,
     Load loadGenerator,
     int maxRunDurationSeconds,
-    List<Threshold> thresholds,
-    SimulationCase simulationCase
+    List<Threshold> thresholds
   ) {}
-
-  public record SavedProfile(String id, int revision, Profile profile) {}
 
   public record Image(
     String sourceRef,
@@ -101,6 +90,7 @@ public final class Model {
     List<String> versionArguments
   ) {}
 
+  @com.fasterxml.jackson.annotation.JsonIgnoreProperties("simulated")
   public record Plan(
     String id,
     String checksum,
@@ -116,8 +106,7 @@ public final class Model {
     String scenarioRevision,
     Map<String, Object> effectiveLoadConfiguration,
     List<PreparedService> services,
-    List<String> warnings,
-    boolean simulated
+    List<String> warnings
   ) {}
 
   public record Run(

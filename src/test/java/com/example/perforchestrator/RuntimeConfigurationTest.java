@@ -16,7 +16,7 @@ class RuntimeConfigurationTest {
   Path directory;
 
   Catalog catalog() throws Exception {
-    return new Catalog("classpath:mocks/catalog.yaml", "simulation", "127.0.0.1");
+    return new Catalog("classpath:fixtures/catalog.yaml", "127.0.0.1");
   }
 
   ConnectionConfig connections() throws Exception {
@@ -146,26 +146,23 @@ class RuntimeConfigurationTest {
       new RuntimeConfiguration(catalog(), connections(), savedFile.toString())
     )
       .hasMessageContaining("Source file: " + savedFile.toAbsolutePath())
-      .hasMessageContaining("Startup mode: simulation")
+      .hasMessageContaining("Startup configuration")
       .hasMessageContaining("catalog");
     assertThat(Files.readString(savedFile)).isEqualTo(content);
   }
 
   /**
-   * <b>Scenario:</b> Persistence Failure Does Not Publish And Packaged Projects Are Readable
+   * <b>Scenario:</b> Persistence failure does not publish configuration
    * <pre>
-   * GIVEN ... packaged project content and an unwritable configuration destination
-   * WHEN ... the project is read and a configuration update is attempted
-   * THEN ... packaged content is readable and failed persistence leaves the prior configuration active
+   * GIVEN ... an unwritable configuration destination
+   * WHEN ... a configuration update is attempted
+   * THEN ... failed persistence leaves the prior configuration active
    * </pre>
    */
   @Test
-  @DisplayName("Persistence Failure Does Not Publish And Packaged Projects Are Readable")
-  void persistenceFailureDoesNotPublishAndPackagedProjectsAreReadable() throws Exception {
+  @DisplayName("Persistence failure does not publish configuration")
+  void persistenceFailureDoesNotPublish() throws Exception {
     final var catalog = catalog();
-    assertThat(catalog.read(catalog.service("auth-service"), "ckp/Chart.yaml")).contains(
-      "REPLACE_VERSION"
-    );
     final Path parentFile = directory.resolve("not-directory");
     Files.writeString(parentFile, "blocking file");
     final var config = new RuntimeConfiguration(

@@ -30,22 +30,12 @@ class MonitoringConfigurationTest {
       new Catalog.Environment(
         "Sandbox",
         "cluster",
-        null,
-        null,
-        null,
-        null,
-        null,
         new Catalog.Monitoring("https://loki.invalid/loki/api/v1", null, Map.of("smtp", same))
       ),
       "qa",
       new Catalog.Environment(
         "QA",
         "cluster",
-        null,
-        null,
-        null,
-        null,
-        null,
         new Catalog.Monitoring(
           "https://loki.invalid/loki/api/v1",
           "https://prometheus.invalid/api/v1",
@@ -55,15 +45,12 @@ class MonitoringConfigurationTest {
     );
     final var service = new Catalog.Service(
       "projects/smtp",
-      List.of(),
       Map.of(),
-      null,
-      List.of(),
       new Catalog.Destination("smtp", "smtp", List.of("values.yaml"))
     );
     final var document = new RuntimeConfiguration.Document(
       "v1",
-      new Catalog.Data("real", environments, Map.of("smtp", service), Map.of(), Map.of()),
+      new Catalog.Data(environments, Map.of("smtp", service), Map.of()),
       new ConnectionConfig.Data(Map.of(), Map.of(), Map.of(), Map.of())
     );
     assertThat(document.connections().loki()).hasSize(1);

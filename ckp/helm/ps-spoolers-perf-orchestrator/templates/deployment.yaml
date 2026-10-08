@@ -1,7 +1,3 @@
-{{- if not (has .Values.mode (list "simulation" "real")) }}
-{{- fail "mode must be simulation or real" }}
-{{- end }}
-{{- $state := ternary "/app/data/real" "/app/data" (eq .Values.mode "real") }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -41,10 +37,9 @@ spec:
             - --spring.config.additional-location=file:/app/config/application.yaml
             - --server.address=127.0.0.1
             - --server.port=8080
-            - --orchestrator.mode={{ .Values.mode }}
             - --orchestrator.target-environment={{ required "Set targetEnvironment" .Values.targetEnvironment }}
             - --orchestrator.connections=/app/config/connections.yaml
-            - --orchestrator.configuration-file={{ $state }}/configuration.json
+            - --orchestrator.configuration-file=/app/data/real/configuration.json
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

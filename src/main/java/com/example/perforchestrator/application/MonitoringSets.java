@@ -14,7 +14,7 @@ public class MonitoringSets {
 
   public record Definition(
     String name,
-    List<RealPreparation.Metric> panels,
+    List<RunPreparation.Metric> panels,
     List<Threshold> thresholds
   ) {}
 
@@ -60,7 +60,6 @@ public class MonitoringSets {
   ) {
     final String environment = catalog.selectedEnvironment(requested);
     if (
-      !catalog.mode().equals("real") ||
       definition == null ||
       definition.name() == null ||
       definition.name().isBlank() ||

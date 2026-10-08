@@ -47,13 +47,10 @@ class ConnectionAuthenticationTest {
   }
 
   Catalog catalog() throws Exception {
-    final var catalog = new Catalog("", "real", "127.0.0.1");
+    final var catalog = new Catalog("", "127.0.0.1");
     final var service = new Catalog.Service(
       "projects/receiver",
-      List.of(),
       Map.of(),
-      null,
-      List.of(),
       new Catalog.Destination("receiver", "receiver", List.of("ckp/helm/values.yaml")),
       new Catalog.ContainerImage(
         "registry",
@@ -63,9 +60,7 @@ class ConnectionAuthenticationTest {
       ),
       new Catalog.SourceProject("stash", "SP", "receiver", "v1", "ckp/helm/receiver")
     );
-    catalog.replace(
-      new Catalog.Data("real", Map.of(), Map.of("receiver", service), Map.of(), Map.of())
-    );
+    catalog.replace(new Catalog.Data(Map.of(), Map.of("receiver", service), Map.of()));
     return catalog;
   }
 

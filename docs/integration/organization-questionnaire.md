@@ -22,7 +22,6 @@ Provide sanitized files and examples through an approved channel. Include creden
 - Artifactory and Delinea Secret Server have separate URLs and authentication. Each Artifactory connection can reference a different credential.
 - Deployment permissions differ by user/environment, especially perf3/stg1.
 - Grafana already displays organizational metrics/logs, including a perf3 dashboard. Specific queries can be supplied later.
-- The current app executes simulations. Its separate JFrog/Delinea read-only adapters have not been validated against organizational servers. Git/bucket fetching, real Helm/load execution, direct telemetry, and shared authentication are not implemented yet.
 
 The questions below ask for exact contracts and mappings, rather than asking you to reconsider these established choices.
 

@@ -4,7 +4,7 @@ import com.example.perforchestrator.application.MonitoringSets;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/real/monitoring-sets")
+@RequestMapping("/api/v1/execution/monitoring-sets")
 public class MonitoringSetsController {
 
   private final MonitoringSets sets;

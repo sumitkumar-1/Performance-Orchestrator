@@ -92,54 +92,6 @@ public class Store {
     db.queryForObject("SELECT id FROM coordination WHERE id=1 FOR UPDATE", Integer.class);
   }
 
-  public List<SavedProfile> profiles() {
-    return db.query(
-      "SELECT id,revision,body FROM profiles ORDER BY id",
-      (final var r, final var n) ->
-        new SavedProfile(r.getString(1), r.getInt(2), Json.read(r.getString(3), Profile.class))
-    );
-  }
-
-  public SavedProfile profile(final String id) {
-    return db
-      .query(
-        "SELECT revision,body FROM profiles WHERE id=?",
-        (final var r, final var n) ->
-          new SavedProfile(id, r.getInt(1), Json.read(r.getString(2), Profile.class)),
-        id
-      )
-      .stream()
-      .findFirst()
-      .orElseThrow(() -> Problem.missing("Profile"));
-  }
-
-  public SavedProfile save(String id, final Integer expectedRevision, final Profile profile) {
-    int next = 1;
-    final String body = Json.write(profile);
-    if (id == null) {
-      id = UUID.randomUUID().toString();
-      db.update("INSERT INTO profiles VALUES (?,?,?)", id, next, body);
-    } else {
-      if (expectedRevision == null) throw Problem.invalid(
-        "revision",
-        "Expected revision is required"
-      );
-      next = expectedRevision + 1;
-      if (
-        db.update(
-          "UPDATE profiles SET revision=?,body=? WHERE id=? AND revision=?",
-          next,
-          body,
-          id,
-          expectedRevision
-        ) != 1
-      ) throw Problem.conflict("Profile changed or was removed. Reload before saving.");
-    }
-    db.update("INSERT INTO profile_revisions VALUES (?,?,?)", id, next, body);
-    audit("PROFILE_SAVED", id);
-    return new SavedProfile(id, next, profile);
-  }
-
   public void plan(final Plan plan) {
     db.update("INSERT INTO plans VALUES (?,?)", plan.id(), Json.write(plan));
   }

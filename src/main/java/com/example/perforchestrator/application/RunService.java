@@ -13,77 +13,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class RunService {
 
-  public record Submission(String planId, String profileId, Integer revision) {}
-
   private final Store store;
-  private final PlanningService planning;
-  private final Catalog catalog;
 
-  public RunService(final Store store, final PlanningService planning, final Catalog catalog) {
+  public RunService(final Store store) {
     this.store = store;
-    this.planning = planning;
-    this.catalog = catalog;
-  }
-
-  @Transactional
-  public Run enqueue(final String key, final Submission request) {
-    catalog.requireExecution();
-    if (key == null || !key.matches("[a-zA-Z0-9_-]{8,128}")) throw Problem.invalid(
-      "Idempotency-Key",
-      "Supply a unique key of 8–128 safe characters"
-    );
-    if ((request.planId() == null) == (request.profileId() == null)) throw Problem.invalid(
-      "planId",
-      "Supply exactly one planId or profileId"
-    );
-    final String requestHash = Json.hash(Json.write(request));
-    store.lock();
-    final var previous = store.submission(key);
-    if (previous.isPresent()) {
-      if (!previous.get().requestHash().equals(requestHash)) throw Problem.conflict(
-        "Idempotency key already belongs to a different request"
-      );
-      return store.run(previous.get().runId());
-    }
-    final Plan plan =
-      request.planId() != null
-        ? store.plan(request.planId())
-        : planning.create(request.profileId(), request.revision(), null);
-    if (!PlanningService.checksum(plan).equals(plan.checksum())) throw Problem.conflict(
-      "Plan checksum failed"
-    );
-    if (
-      Instant.now().isAfter(Instant.parse(plan.expiresAt())) ||
-      !plan.catalogHash().equals(catalog.hash())
-    ) throw Problem.conflict("Plan is stale; prepare a fresh plan");
-    final String scope = plan.clusterIdentity() + "/" + plan.profile().targetEnvironment();
-    if (!store.environmentAvailable(scope)) throw Problem.conflict(
-      "Environment is reserved by another run"
-    );
-    final Instant now = Instant.now();
-    final String id = UUID.randomUUID().toString();
-    final Run run = new Run(
-      id,
-      plan.id(),
-      plan.profile().targetEnvironment(),
-      State.QUEUED,
-      Verdict.NOT_EVALUATED,
-      now.toString(),
-      now.toString(),
-      null,
-      null,
-      null,
-      "Queued for simulation",
-      "PENDING",
-      Map.of(),
-      "SUCCEEDED",
-      null
-    );
-    store.insert(run);
-    store.reserveEnvironment(scope, id, "local-simulation", now, now.plusSeconds(30));
-    store.recordSubmission(key, requestHash, id);
-    store.audit("RUN_ENQUEUED", id);
-    return run;
   }
 
   @Transactional

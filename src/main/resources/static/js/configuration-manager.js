@@ -3,9 +3,8 @@ import { el, input, labeled, select } from "./dom.js";
 // Forms edit a copy of the complete document; the server validates references and revision atomically.
 export function configurationManager(
   active,
-  { api, mode, onSaved, onSignIn, onConnectionSession, authStates },
+  { api, onSaved, onSignIn, onConnectionSession, authStates },
 ) {
-  const real = mode === "real";
   const action = (text, fn) => el("button", { type: "button", onclick: fn }, text);
   const lines = (value) => (value || []).join("\n");
   function modal(title) {
@@ -144,10 +143,9 @@ export function configurationManager(
     if (key === "environments") {
       bind("Display name", "displayName", { required: true });
       bind("Cluster identity", "clusterIdentity", { required: true });
-      if (real)
-        note(
-          "Environment defaults are selected per run. Configure its Kubernetes context and API server in application.yaml execution.targets.",
-        );
+      note(
+        "Environment defaults are selected per run. Configure its Kubernetes context and API server in application.yaml execution.targets.",
+      );
       value.monitoring ||= {};
       bind("Shared Loki connection", "connectionRef", { choices: refs("loki") }, value.monitoring);
       note(
@@ -157,7 +155,6 @@ export function configurationManager(
         note(
           "Some legacy monitoring fields were preserved in Advanced JSON to avoid losing distinct credentials or unmatched namespaces. Review them before removing them.",
         );
-      if (!real) note("Simulator limits and action permissions remain available in Advanced JSON.");
     } else if (key === "loki") {
       bind("Loki API base URL", "apiBaseUrl", { required: true });
       note(
@@ -307,9 +304,9 @@ export function configurationManager(
     } else if (key === "services") {
       bind("Project path", "projectPath", { required: true });
       note(
-        "Relative checkout destination. Bitbucket reference discovery is available; Git checkout and Helm execution are not yet connected.",
+        "Relative checkout destination. The CKP directory is checked out from the selected Git reference during run preparation.",
       );
-      if (real) {
+      {
         const containerImage = (value.containerImage ||= {});
         note("Container image · Artifactory Docker tags");
         const imageConnection = bind(
@@ -368,7 +365,7 @@ export function configurationManager(
           value.sourceProject = gitConnection.value ? sourceProject : null;
         });
       }
-      if (real) {
+      {
         const credentials = (value.monitoringCredentials ||= {});
         note(
           "Loki monitoring · Uses the deployment namespace below for both logs and LogQL metrics.",
@@ -385,18 +382,9 @@ export function configurationManager(
           });
         }
       }
-      value.dependencies = [];
-      if (mode === "simulation")
-        bind(
-          "Allowed values override paths (simulation only, one per line)",
-          "allowedOverridePaths",
-          { multiline: true },
-        );
       value.deploymentByEnvironment ||= {};
-      const targets = real
-        ? Object.keys(active.catalog.environments)
-        : Object.keys(value.deploymentByEnvironment);
-      if (real) {
+      const targets = Object.keys(active.catalog.environments);
+      {
         const target = targets[0];
         const destination =
           value.deploymentByEnvironment[target] ||
@@ -410,14 +398,7 @@ export function configurationManager(
           { required: true, multiline: true },
           destination,
         );
-      } else
-        for (const target of targets) {
-          note(`Destination: ${target}`);
-          const destination = value.deploymentByEnvironment[target];
-          bind("Namespace", "namespace", { required: true }, destination);
-          bind("Helm release name", "releaseName", { required: true }, destination);
-          bind("Values files", "valuesFiles", { required: true, multiline: true }, destination);
-        }
+      }
     }
     ui.form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -525,8 +506,8 @@ export function configurationManager(
   ];
   const root = el("div", { class: "configuration-sections" });
   sections.forEach(([group, key, title, description]) => {
-    const locked = !real && key === "environments";
-    const canAdd = !locked && (real || key !== "services");
+    const locked = false;
+    const canAdd = true;
     const entries = Object.entries(active[group][key]);
     const section = el(
       "details",
@@ -612,7 +593,7 @@ export function configurationManager(
     el(
       "p",
       { class: "muted" },
-      "Read-only here. Templates come from startup configuration or JSON import. Creating real load profiles from the overview is not available yet.",
+      "Templates come from startup configuration or JSON import. Use Configure run to create and save deployment and load profiles.",
     ),
   );
   const humanize = (key) =>

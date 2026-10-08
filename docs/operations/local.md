@@ -1,33 +1,13 @@
 # Local operation
 
-Run `mvn verify`, then `./scripts/run-local.sh` from the checkout. Select JDK 21 or newer first. Configuration paths are relative to the repository root unless supplied as absolute paths. `--server.port=8081` can select a different local port. Non-loopback addresses fail startup. Choose `--mode simulation` for the mock workflow or `--mode real` for live read-only connections. Real execution adapters remain unavailable. Real mode stores its state separately under `data/real/` by default.
+Use Java 21+ and `./scripts/run-local.sh build-run`. The application has one configured-integration workflow; no mode flag is needed. See the [README](../../README.md) for startup and execution settings.
 
-The launch script applies umask 077. Data, profiles, plans, events, audit records, simulated deployments/loads and reservations live in the H2 database under `data/`. H2's file locking prevents two processes from opening the same database. Separate local databases do not coordinate with one another and must never be used as real shared-environment coordination.
+The launch script applies umask 077. The embedded H2 database, artifacts, overrides and preparation workspaces retain their existing `data/real/` locations. H2 locking prevents two processes opening the same database. Separate databases do not coordinate shared cluster reservations.
 
-## Backup and restore
+Before upgrading, finish active runs, stop the process, and back up persistent state. Restart with the same paths. Saved profiles and history remain; prepare new reviews after an upgrade. Do not release a reservation solely because a lease timestamp has expired.
 
-1. Stop the local Java process cleanly (Ctrl-C in its terminal).
-2. Back up the entire `data/` directory and the exact catalog/configuration files together to approved private storage. Credential references may be retained; secret values must remain in Delinea or the approved provider.
-3. Restore the directory while the application is stopped, with permissions restricted to the developer. Restore the matching fixture catalog and run the same application version before upgrading migrations.
-4. Start the app. A committed active simulated stage resumes; completed history and profiles remain available. Do not delete a reservation just because its expiry time has passed.
+Cancellation stops the run's owned baseline and additional load releases; service releases remain. Failed cleanup retains the environment reservation and reports NEEDS_ATTENTION. Use **Verify cleanup & release** to retry cleanup with the correct cluster permissions.
 
-This release has no automated retention/purge job. History remains until an administrator archives or replaces the stopped local database. Artifact files can be regenerated from retained database records. Do not delete active run data; take a full backup before resetting a disposable workspace. Data volume limits and retention policy must be set before shared use.
+For local cluster access, inherit PATH, KUBECONFIG and the existing login environment. On CKP configure a service account and RBAC, with in-cluster execution targets. Authentication to Secret Server alone does not grant Kubernetes permission. Use connection diagnostics and the optional per-run activity console to inspect failures without exposing credentials.
 
-## Failure recovery
-
-A deployment or readiness fixture failure routes through cleanup and never starts load. Cancellation is first acknowledged as CANCEL_REQUESTED, then stops the owned simulated load and finishes CANCELLED. Healthy services are kept. Missing metrics are unavailable rather than zero.
-
-The cleanup-failure fixture finishes NEEDS_ATTENTION and retains the environment reservation. Open the run and choose **Verify cleanup & release**. This simulation-only recovery checks that the load is stopped and records an audit event before releasing the reservation. Real uncertain outcomes must never use this simulated recovery path.
-
-## Troubleshooting
-
-- `release version 21 not supported`: select a JDK 21–25 in `JAVA_HOME` and `PATH`.
-- Maven download errors: allow access to Maven Central or configure your organization's approved Maven mirror.
-- Database already open: stop the other process using that exact data directory.
-- Port already in use: stop the previous local app or choose another port.
-- HTTP 403: use the same loopback host in browser and API; obtain a fresh `/api/v1/session` token and retain its session cookie for mutations. Cross-site requests are rejected.
-- Plan conflict: refresh the profile or plan; the environment may be reserved, catalog changed, or baseline drifted.
-- SOURCE_DENIED: verify referenced Delinea/JFrog permissions and externally supplied tokens. Remote response bodies are deliberately absent from application errors.
-- SECRET_SCHEMA: confirm Delinea API version, secret template and configured field slugs.
-
-Public networking, ingress, SSO, PostgreSQL backup/restore, shared artifact retention, telemetry queries, Kubernetes RBAC and real deployment operations remain organization-specific prerequisites; none are implied by successful local simulation.
+The pilot remains loopback-only. Use port-forwarding on CKP. Organization network access, trusted CAs, shared-user authorization, backups and RBAC require organization-approved setup.

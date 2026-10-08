@@ -29,16 +29,16 @@ class ConfigurationDesignTest {
   @Test
   @DisplayName("Snapshots Cannot Be Changed Without Validation And Persistence")
   void snapshotsCannotBeChangedWithoutValidationAndPersistence() throws Exception {
-    final var catalog = new Catalog("classpath:mocks/catalog.yaml", "simulation", "127.0.0.1");
+    final var catalog = new Catalog("classpath:fixtures/catalog.yaml", "127.0.0.1");
     final String hash = catalog.hash();
     assertThatThrownBy(() -> catalog.data().services().clear()).isInstanceOf(
       UnsupportedOperationException.class
     );
+    assertThatThrownBy(() -> catalog.data().environments().clear()).isInstanceOf(
+      UnsupportedOperationException.class
+    );
     assertThatThrownBy(() ->
-      catalog.environment("sandbox").serviceNamespaces().clear()
-    ).isInstanceOf(UnsupportedOperationException.class);
-    assertThatThrownBy(() ->
-      catalog.service("auth-service").installationBindings().sourceSelectors().clear()
+      catalog.service("auth-service").deploymentByEnvironment().clear()
     ).isInstanceOf(UnsupportedOperationException.class);
     final var connections = new RegistryContractTest().config();
     assertThatThrownBy(() ->
@@ -100,7 +100,7 @@ class ConfigurationDesignTest {
   @DisplayName("Configuration Put Under Context Path Acquires Write Scope Without Upgrade Deadlock")
   void configurationPutUnderContextPathAcquiresWriteScopeWithoutUpgradeDeadlock() throws Exception {
     final var access = new ConfigurationAccess();
-    final var catalog = new Catalog("classpath:mocks/catalog.yaml", "simulation", "127.0.0.1");
+    final var catalog = new Catalog("classpath:fixtures/catalog.yaml", "127.0.0.1");
     final var config = new RuntimeConfiguration(
       catalog,
       new ConnectionConfig(""),

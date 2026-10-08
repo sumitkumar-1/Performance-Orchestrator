@@ -151,7 +151,7 @@ export function deploymentDialog(api, catalog, { available, original, isLoad = t
     edits = {};
     renderFiles();
     try {
-      const result = await api(`/real/services/${encodeURIComponent(serviceId)}/values`, {
+      const result = await api(`/execution/services/${encodeURIComponent(serviceId)}/values`, {
         method: "POST",
         body: { revision: ref },
       });

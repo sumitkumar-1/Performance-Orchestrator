@@ -14,7 +14,7 @@ public final class ReviewProgress {
     stage = "Checking cluster connection";
   private final Map<String, Step> steps = new LinkedHashMap<>();
 
-  public ReviewProgress(final String id, final RealPreparation.Request request) {
+  public ReviewProgress(final String id, final RunPreparation.Request request) {
     this.id = id;
     if (request.services() != null) request
       .services()

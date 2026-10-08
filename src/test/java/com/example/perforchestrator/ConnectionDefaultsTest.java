@@ -41,13 +41,11 @@ class ConnectionDefaultsTest {
       );
     final var catalog = new com.example.perforchestrator.infrastructure.config.Catalog(
       "",
-      "real",
       "127.0.0.1",
       environment
     );
     assertThat(catalog.environment("dev").displayName()).isEqualTo("Dev");
     assertThat(catalog.data().services()).isEmpty();
-    assertThat(catalog.data().mode()).isEqualTo("real");
   }
 
   /**

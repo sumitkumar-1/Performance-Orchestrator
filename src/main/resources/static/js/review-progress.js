@@ -56,7 +56,7 @@ export function reviewProgress(api) {
   }
   async function poll(ticket) {
     try {
-      const value = await api(`/real/preparations/${id}`);
+      const value = await api(`/execution/preparations/${id}`);
       if (closed || ticket !== epoch) return;
       latest = value;
       render(value.state);
@@ -94,7 +94,7 @@ export function reviewProgress(api) {
       clearTimeout(timer);
       const ticket = ++epoch;
       try {
-        const value = await api(`/real/preparations/${id}`);
+        const value = await api(`/execution/preparations/${id}`);
         if (!closed && ticket === epoch) latest = value;
       } catch {}
       if (!closed && ticket === epoch) {

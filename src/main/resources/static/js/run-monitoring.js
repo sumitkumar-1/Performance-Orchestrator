@@ -4,7 +4,7 @@ import { diagnosticsPanel } from "./diagnostics.js";
 
 export async function runMonitoring(api, id, catalog) {
   const [config, connections] = await Promise.all([
-    api(`/real/runs/${id}/monitoring`),
+    api(`/execution/runs/${id}/monitoring`),
     api("/connections"),
   ]);
   const root = el("div", { class: "run-builder monitoring-page" }),
@@ -49,7 +49,7 @@ export async function runMonitoring(api, id, catalog) {
         save.disabled = true;
         error.hidden = true;
         try {
-          await api(`/real/runs/${id}/monitoring`, {
+          await api(`/execution/runs/${id}/monitoring`, {
             method: "PUT",
             body: { panels: editor.read() },
           });
@@ -210,7 +210,7 @@ export async function runMonitoring(api, id, catalog) {
           cards.push(
             display(
               panels[i],
-              await api(`/real/runs/${id}/monitoring/query`, {
+              await api(`/execution/runs/${id}/monitoring/query`, {
                 method: "POST",
                 body: { panel: i, start: from.toISOString(), end: to.toISOString() },
               }),

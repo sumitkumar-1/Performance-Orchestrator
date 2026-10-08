@@ -1,6 +1,4 @@
-# simulation: mock workflows; real: connections plus opt-in Helm execution.
-mode: simulation
-targetEnvironment: sandbox # Fixed instance environment in real mode
+targetEnvironment: sandbox # Default environment selected in the run builder
 image:
   repository: "" # Required: approved registry/repository
   tag: "" # Required: version published by your build
@@ -135,7 +133,7 @@ serviceAccount:
   automountToken: false # Enable when execution uses in-cluster authentication
 
 
-# Same structure as orchestrator.catalog-defaults in application.yaml (real mode).
+# Same structure as orchestrator.catalog-defaults in application.yaml.
 # Supply approved environment/service/scenario mappings; no invented defaults.
 catalog:
   # EXAMPLES: replace cluster/namespace/paths and limits before use.
@@ -191,21 +189,19 @@ catalog:
         repository: ps-spoolers-ps-load-gen
         revision: REPLACE_WITH_APPROVED_GIT_TAG
         chartPath: ckp/helm/ps-spoolers-ps-load-gen
-      dependencies: []
+
       deploymentDefaults:
         namespace: ps-spoolers-smtp-data-producer
         releaseName: ps-spoolers-load-gen
         valuesFiles: [ckp/helm/ps-spoolers-ps-load-gen/values.yaml]
       # Optional per-environment exceptions; otherwise deploymentDefaults apply.
       deploymentByEnvironment: {}
-      # installationBindings omitted: real chart retrieval is not implemented yet
-      allowedOverridePaths: [] # Confirm editable chart fields before allowing overrides
-  imageSources: {} # Simulation-only versions; mocks supply these in simulation mode
+
   scenarios:
     baseline-example:
       displayName: Baseline (example - configure before use)
       revision: example-1
-      allowedOverridePaths: []
+
       defaults:
         profilePath: ckp/helm/ps-spoolers-ps-load-gen/values.yaml
         note: Replace with approved load-profile fields; this is not an executable profile

@@ -17,37 +17,24 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1")
 public class ApiController {
 
-  public record ProfileInput(Integer revision, Profile profile) {}
-
-  public record PlanInput(String profileId, Integer revision, Profile profile) {}
-
   private final Catalog catalog;
   private final com.example.perforchestrator.infrastructure.execution.ExecutionSettings execution;
-  private final Optional<Ports.ImageDiscovery> images;
   private final Store store;
-  private final PlanningService planning;
   private final RunService runs;
   private final Reports reports;
-  private final WorkflowWorker worker;
 
   public ApiController(
     final Catalog catalog,
-    final Optional<Ports.ImageDiscovery> images,
     final Store store,
-    final PlanningService planning,
     final RunService runs,
     final Reports reports,
-    final WorkflowWorker worker,
     final com.example.perforchestrator.infrastructure.execution.ExecutionSettings execution
   ) {
     this.execution = execution;
     this.catalog = catalog;
-    this.images = images;
     this.store = store;
-    this.planning = planning;
     this.runs = runs;
     this.reports = reports;
-    this.worker = worker;
   }
 
   @GetMapping("/session")
@@ -58,8 +45,6 @@ public class ApiController {
     return Map.of(
       "actor",
       com.example.perforchestrator.infrastructure.secrets.SecretServerTokens.currentActor(),
-      "mode",
-      catalog.mode(),
       "styleNonce",
       EditorStyles.nonce(request),
       "targetEnvironment",
@@ -67,10 +52,10 @@ public class ApiController {
       "capabilities",
       Map.of(
         "execution",
-        catalog.mode().equals("simulation") || execution.enabled,
-        "realRegistryDiscovery",
+        execution.enabled,
+        "registryDiscovery",
         true,
-        "realSecretRetrieval",
+        "secretRetrieval",
         true,
         "liveMetrics",
         execution.enabled
@@ -107,96 +92,14 @@ public class ApiController {
     return catalog.data().services();
   }
 
-  @GetMapping("/image-sources")
-  public Object sources() {
-    return catalog.data().imageSources();
-  }
-
   @GetMapping("/scenarios")
   public Object scenarios() {
     return catalog.data().scenarios();
   }
 
-  @GetMapping("/services/{id}/images")
-  public Object images(
-    final @PathVariable String id,
-    final @RequestParam String source,
-    final @RequestParam(required = false) String username,
-    final @RequestParam(defaultValue = "") String query,
-    final @RequestParam(defaultValue = "0") int cursor,
-    final @RequestParam(defaultValue = "50") int limit
-  ) {
-    if (cursor < 0 || limit < 1 || limit > 100) throw Problem.invalid(
-      "cursor",
-      "Invalid pagination"
-    );
-    final var all = images
-      .orElseThrow(() ->
-        new Problem(
-          422,
-          "USE_REGISTRY_DISCOVERY",
-          "source",
-          "Use Connections & catalog for paginated real registry discovery"
-        )
-      )
-      .discover(id, source, username)
-      .stream()
-      .filter((final var i) -> i.version().contains(query))
-      .toList();
-    final var page = all.stream().skip(cursor).limit(limit).toList();
-    return Map.of(
-      "items",
-      page,
-      "nextCursor",
-      cursor + page.size() < all.size() ? String.valueOf(cursor + page.size()) : "",
-      "discoveredAt",
-      Instant.now().toString(),
-      "simulated",
-      catalog.mode().equals("simulation") || execution.enabled,
-      "ordering",
-      "tag descending lexicographic; not publication order"
-    );
-  }
-
-  @GetMapping("/profiles")
-  public Object profiles() {
-    return store.profiles();
-  }
-
-  @GetMapping("/profiles/{id}")
-  public Object profile(final @PathVariable String id) {
-    return store.profile(id);
-  }
-
-  @PostMapping("/profiles")
-  @ResponseStatus(HttpStatus.CREATED)
-  public Object create(final @RequestBody ProfileInput input) {
-    return planning.save(null, null, input.profile());
-  }
-
-  @PutMapping("/profiles/{id}")
-  public Object update(final @PathVariable String id, final @RequestBody ProfileInput input) {
-    return planning.save(id, input.revision(), input.profile());
-  }
-
-  @PostMapping("/plans")
-  @ResponseStatus(HttpStatus.CREATED)
-  public Object plan(final @RequestBody PlanInput input) {
-    return planning.create(input.profileId(), input.revision(), input.profile());
-  }
-
   @GetMapping("/plans/{id}")
   public Object plan(final @PathVariable String id) {
     return store.plan(id);
-  }
-
-  @PostMapping("/runs")
-  @ResponseStatus(HttpStatus.ACCEPTED)
-  public Object run(
-    final @RequestHeader("Idempotency-Key") String key,
-    final @RequestBody RunService.Submission input
-  ) {
-    return runs.enqueue(key, input);
   }
 
   @GetMapping("/runs")
@@ -274,11 +177,6 @@ public class ApiController {
   @ResponseStatus(HttpStatus.ACCEPTED)
   public Object cancel(final @PathVariable String id) {
     return runs.cancel(id);
-  }
-
-  @PostMapping("/runs/{id}/recover")
-  public Object recover(final @PathVariable String id) {
-    return worker.recover(id);
   }
 
   @GetMapping(value = "/runs/{id}/report", produces = MediaType.TEXT_HTML_VALUE)

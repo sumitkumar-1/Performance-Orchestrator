@@ -4,14 +4,14 @@ cd "$(dirname "$0")/.."
 umask 077
 usage() {
   cat <<'HELP'
-Usage: ./scripts/run-local.sh [build|run|build-run] [--mode simulation|real] [-- Spring Boot arguments...]
+Usage: ./scripts/run-local.sh [build|run|build-run] [-- Spring Boot arguments...]
   build       Run Maven verify (including tests) and package the application.
   run         Run the existing package (default); fail if it is missing.
   build-run   Build, test, then run locally.
 JAVA_HOME selects the JDK. Requires Java 21+; build also requires Maven.
 Examples:
-  ./scripts/run-local.sh build-run --mode simulation
-  ./scripts/run-local.sh run --mode real
+  ./scripts/run-local.sh build-run
+  ./scripts/run-local.sh run
   ./scripts/run-local.sh run -- --server.port=8081
   ./scripts/run-local.sh --server.port=8081  # backwards compatible
 HELP
@@ -23,12 +23,9 @@ case "${1:-}" in
   --*|'') ;;
   *) usage >&2; exit 2 ;;
 esac
-selected_mode=''
 if [[ ${1:-} == --mode ]]; then
-  [[ $# -ge 2 ]] || { echo '--mode requires simulation or real.' >&2; exit 2; }
-  case $2 in simulation|real) ;; *) echo 'Mode must be simulation or real.' >&2; exit 2;; esac
-  selected_mode=$2
-  shift 2
+  echo 'The --mode option has been removed. Use build-run or run; all integrations use configured services.' >&2
+  exit 2
 fi
 [[ ${1:-} != -- ]] || shift
 if [[ -n ${JAVA_HOME:-} ]]; then export PATH="$JAVA_HOME/bin:$PATH"; fi
@@ -42,15 +39,9 @@ fi
 if [[ $action == build && $# != 0 ]]; then echo 'build does not accept application arguments.' >&2; exit 2; fi
 if [[ $action != run ]]; then
   command -v mvn >/dev/null || { echo 'Maven is required to build.' >&2; exit 1; }
-  mvn -B verify
+  mvn -B clean verify
 fi
 [[ $action != build ]] || exit 0
 jar=target/perf-orchestrator-0.1.0.jar
 [[ -f $jar ]] || { echo 'Package missing. Run ./scripts/run-local.sh build-run.' >&2; exit 1; }
-if [[ -n $selected_mode ]]; then
-  for arg in "$@"; do
-    [[ $arg != --orchestrator.mode* && $arg != --spring.profiles.active* ]] || { echo 'Use --mode once; do not combine it with a mode/profile override.' >&2; exit 2; }
-  done
-  set -- "--orchestrator.mode=$selected_mode" "$@"
-fi
 exec java -jar "$jar" "$@"

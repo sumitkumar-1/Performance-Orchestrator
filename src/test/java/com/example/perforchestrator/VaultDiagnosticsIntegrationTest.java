@@ -22,7 +22,6 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest(
   properties = {
     "spring.config.location=classpath:application-test.yaml",
-    "orchestrator.mode=real",
     "spring.datasource.url=jdbc:h2:mem:vault-diagnostics;DB_CLOSE_DELAY=-1",
     "orchestrator.configuration-file=target/test-vault-diagnostics/${random.uuid}.json",
     "orchestrator.connection-defaults.bitbucket.office-stash.authMode=secret-server",

@@ -37,10 +37,7 @@ class RunMonitoringTest {
     when(store.run("run")).thenReturn(run);
     final var service = new Catalog.Service(
       "project",
-      List.of(),
       Map.of(),
-      null,
-      List.of(),
       new Catalog.Destination("deployment-ns", "release", List.of()),
       null,
       null,
@@ -82,7 +79,7 @@ class RunMonitoringTest {
     monitoring = new RunMonitoring(store, db, catalog, connections, credentials, http);
   }
 
-  void panels(final RealPreparation.Metric... panels) {
+  void panels(final RunPreparation.Metric... panels) {
     plan = Json.read(
       Json.write(
         Map.of(
@@ -120,7 +117,7 @@ class RunMonitoringTest {
   @DisplayName("Uses Panel Namespace And Mapped Secret For Each Query")
   void usesPanelNamespaceAndMappedSecretForEachQuery() {
     panels(
-      new RealPreparation.Metric(
+      new RunPreparation.Metric(
         "service",
         "rate",
         "sum(rate({namespace=\"{{namespace}}\"}[1m]))",
@@ -129,7 +126,7 @@ class RunMonitoringTest {
         "metric",
         null
       ),
-      new RealPreparation.Metric(
+      new RunPreparation.Metric(
         "service",
         "logs",
         "{namespace=\"{{namespace}}\"}",
@@ -180,7 +177,7 @@ class RunMonitoringTest {
   @Test
   @DisplayName("Rejects Oversized Windows Before Resolving Credentials")
   void rejectsOversizedWindowsBeforeResolvingCredentials() {
-    panels(new RealPreparation.Metric("service", "logs", "{namespace=\"{{namespace}}\"}"));
+    panels(new RunPreparation.Metric("service", "logs", "{namespace=\"{{namespace}}\"}"));
     assertThatThrownBy(() ->
       monitoring.query("run", 0, "2026-09-01T00:00:00Z", "2026-09-30T00:00:00Z")
     ).hasMessageContaining("7 days");
@@ -199,7 +196,7 @@ class RunMonitoringTest {
   @DisplayName("Dashboard Edits Persist Without Changing Prepared Verdict Queries")
   void dashboardEditsPersistWithoutChangingPreparedVerdictQueries() {
     panels(
-      new RealPreparation.Metric(
+      new RunPreparation.Metric(
         "service",
         "count",
         "sum(count_over_time({namespace=\"{{namespace}}\"}[1m]))"
@@ -214,7 +211,7 @@ class RunMonitoringTest {
     );
     jdbc.execute("CREATE TABLE run_monitoring (run_id VARCHAR(64) PRIMARY KEY,body CLOB NOT NULL)");
     monitoring = new RunMonitoring(store, jdbc, catalog, connections, credentials, http);
-    final var replacement = new RealPreparation.Metric(
+    final var replacement = new RunPreparation.Metric(
       "service",
       "logs",
       "{namespace=\"{{namespace}}\"}",

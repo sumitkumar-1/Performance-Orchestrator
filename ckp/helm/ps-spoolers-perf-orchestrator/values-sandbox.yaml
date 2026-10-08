@@ -1,3 +1,2 @@
 # Instance defaults for sandbox; shared settings come from values.yaml.
-mode: real
 targetEnvironment: sandbox

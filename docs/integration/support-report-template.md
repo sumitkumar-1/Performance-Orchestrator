@@ -21,7 +21,7 @@ Copy this template for each build/pilot. Keep the complete report internally; sh
 | Checkpoint | Pass / fail / not attempted | Time and notes |
 | --- | --- | --- |
 | Build and launch | | |
-| Real mode and source visible | | |
+| The application and source visible | | |
 | Delinea sign-in | | |
 | Secret retrieval / tag discovery | | |
 | Known tag found | | |
