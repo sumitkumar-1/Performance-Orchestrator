@@ -92,12 +92,12 @@ Saved profiles retain their previous overall timeout: edit **Advanced timing →
 
 Run status and the execution timeline identify each service as deployment starts, including its position, namespace and release. The current deployment shows a live elapsed timer; completion events retain the time until Helm readiness, and load-generator installation is tracked separately. These events persist independently of optional command diagnostics.
 
-Services use `helm upgrade --install --wait`. The application does not uninstall existing service releases before deployment: that can delete release-managed resources and disrupt persistent workloads. Helm updates chart-managed ConfigMaps during upgrade; application reload or pod restart behavior depends on the chart (for example, configuration checksum annotations). Only the run-owned load release is uninstalled during cleanup.
+Services use `helm upgrade --install --wait`. The application does not uninstall existing service releases before deployment: that can delete release-managed resources and disrupt persistent workloads. Helm updates chart-managed ConfigMaps during upgrade; application reload or pod restart behavior depends on the chart (for example, configuration checksum annotations). Automatic cleanup only removes run-owned load releases; service cleanup requires a separate explicit request.
 
 - Service charts run `helm upgrade --install --wait`. Service releases remain after the run; there is no automatic rollback.
 - The load release must be absent. Load uses `helm install`, never upgrades/claims an existing release. Select a dedicated namespace/release and prevent concurrent external operators from managing it during a run.
 - Load timing starts after Helm installation returns. Helm installation does not prove that traffic is flowing; use LogQL evidence for that. Hooks and the tool's natural completion are chart-defined. This pilot uses the configured measurement window rather than inferring natural completion from pod termination.
-- After the measurement window, metrics are collected and the owned load release is uninstalled with `--wait`. Cancellation uses the same cleanup path. An in-flight CLI command is bounded by the command timeout; cancellation is checked between commands.
+- After the measurement window, metrics are collected and loads remain installed in `AWAITING_LOAD_STOP`. Stop individual loads or stop the run and all loads explicitly; uninstalls use `--wait`. Failures, restart, and the overall deadline still trigger load cleanup. An in-flight CLI command is bounded by the command timeout; cancellation is checked between commands.
 - The run ID is recorded in the Helm release description. Cleanup refuses a release whose ownership marker changed. Failure keeps the environment reserved as NEEDS_ATTENTION. Verify cleanup & release retries this check; it never bypasses ownership.
 - Idempotency keys prevent duplicate run submission. One active run per instance environment is enforced. Multi-instance execution against the same cluster is not supported; use one replica and dedicated releases.
 - After restart, an interrupted real run attempts owned-load cleanup and ends failed/inconclusive rather than replaying deployments. Monitoring credentials are not recovered from disk. Leave execution enabled and the same cluster binding available for recovery. If the application cannot run, an operator must stop the load externally; this application cannot enforce a deadline while offline.
@@ -322,7 +322,7 @@ If the helper is specifically `kubectl` and exits with code 1, the executable wa
 
 ## Add traffic to an active run
 
-Open the run and use **Load installations → Add load** while the baseline is running. Select a configured load-generator service, Git reference, image version and values files. Edit its YAML for the new traffic pattern, choose **Review additional load**, check the generated release name and effective values, then choose **Install additional load**.
+Open the run and use **Load installations → Add load** while the run is accepting loads (during measurement or awaiting manual stop). Select a configured load-generator service, Git reference, image version and values files. Edit its YAML for the new traffic pattern, choose **Review additional load**, check the generated release name and effective values, then choose **Install additional load**.
 
 Each addition gets a unique `load-<UUID>` Helm release in the service's configured namespace. The same load-generator service can be added multiple times with different values. Preparation checks out CKP, replaces chart version placeholders, resolves dependencies and validates the chart using that new release name. Existing baseline load and services are not upgraded or uninstalled by adding traffic. Repeated installation submissions do not create duplicate releases.
 
@@ -330,7 +330,11 @@ The chart must support simultaneous releases: Kubernetes resource names and sele
 
 The run page records each addition's image, namespace, release, actor and installation/cleanup status; command activity is attached to the same run. An installation error attempts cleanup of only that additional release, leaving baseline traffic running. If that cleanup fails, the addition is marked CLEANUP_FAILED and cleanup is retried when the parent ends. “RUNNING” means Helm installation completed; use monitoring to verify actual traffic.
 
-Additional loads share the parent's remaining measurement window and overall deadline; they do not extend either. Choose a long enough window when configuring the baseline. Completion, cancellation and restart recovery clean up **all** load releases owned by the run, retaining service deployments. Cleanup failures retain the environment reservation and require recovery. Additional load installations are part of the standard run workflow.
+Measurement completion collects results and enters **Awaiting load stop** without uninstalling loads. Each row offers **Stop this load**, which uninstalls only that recorded release after verifying ownership. You can still add traffic patterns after measurement; these do not extend or recompute the completed measurement window. The load generator's YAML may stop traffic independently; an installed release does not guarantee traffic is still being generated.
+
+**Stop run & all loads** stops the run and cleans every remaining owned load. Stopping all loads individually lets the run finish successfully after results and cleanup checks. Failures, server restart, and the overall run deadline still trigger automatic load cleanup. The environment stays reserved until cleanup is confirmed; cleanup failures require recovery.
+
+After completion, **Clean up services** offers a separate confirmation listing service releases. Only services absent at review time and still owned by this run are eligible. Services the run upgraded from existing installations are retained. Cleanup never accepts an arbitrary release or namespace from the browser. Partial cleanup is recorded and can be retried; ownership changes block uninstall.
 
 
 ## Selecting environments and signing into CKP
@@ -360,3 +364,11 @@ On a laptop, complete AD sign-in to Secret Server. The server retains encrypted 
 The helper must accept prompts via stdin. A helper that requires `/dev/tty`, MFA or browser interaction needs prior terminal login; no generic automatic MFA/terminal driver is implemented. Your organization's `ckp-login` must be verified in sandbox; the automated test covers the prompt contract with a real subprocess. No password is supplied to arbitrary Git or chart-validation commands.
 
 On CKP, use the mounted service account for the local environment (`kube-context: in-cluster`). Remote environments require explicitly configured kubeconfig contexts and appropriate authorization; AD sign-in does not grant Kubernetes permissions. Do not assume a service account can access other clusters.
+
+## Cleanup before review
+
+In Configure run, select the environment, services and load generator, then optionally enable **Clean up selected releases before review**. **Review run** first opens a cleanup preview showing namespace, release and context. Confirm the listed uninstalls explicitly; the option defaults off. This includes pre-existing selected releases and may remove Helm-managed workloads and data. It does not scan namespaces, remove unrelated releases, or delete namespaces/PVCs separately. Dynamically named additional loads remain managed through their original run.
+
+Cleanup previews belong to one browser session, expire after five minutes, and can be submitted once. The app rechecks the catalog, cluster target and every release fingerprint before deleting anything, then rechecks each release before uninstall. Active or unresolved runs with environment reservations block cleanup. Queue admission is serialized with cleanup within the application instance. External cluster operators are not locked out: coordinate external changes, since Helm offers no atomic compare-and-delete of a release.
+
+A failed or partially completed cleanup stops the workflow before preparation and reports the failed release. Preview again to inspect what remains. After successful cleanup the app performs the normal chart/dependency preparation and review; it does not automatically start deployment. Commands appear in the review diagnostics trace when diagnostics are enabled.

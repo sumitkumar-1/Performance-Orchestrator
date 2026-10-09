@@ -33,6 +33,57 @@ class ExecutionContractsTest {
   }
 
   /**
+   * <b>Scenario:</b> Approved pre-review cleanup uninstalls only an unchanged destination
+   * <pre>
+   * GIVEN ... an explicitly approved pre-existing release fingerprint and cluster target
+   * WHEN ... cleanup runs or the release changes after approval
+   * THEN ... uninstall uses the exact namespace/context, confirms absence, and rejects drift before deletion
+   * </pre>
+   */
+  @Test
+  @DisplayName(
+    "Given approved cleanup, when the release is unchanged, then uninstall the exact target and confirm absence"
+  )
+  void approvedCleanupPinsTargetAndRejectsDrift() {
+    final var runner = mock(CommandRunner.class);
+    final var helm = spy(new HelmExecution(runner, settings()));
+    final var target = Map.<String, Object>of(
+      "context",
+      "perf3-nvan",
+      "server",
+      "https://cluster.invalid"
+    );
+    doReturn("fingerprint", "ABSENT").when(helm).baseline(target, "service-ns", "service-release");
+    when(runner.run(any(), any(), any(), any())).thenReturn(new CommandRunner.Result(0, ""));
+    helm.cleanupApprovedRelease(target, "service-ns", "service-release", "fingerprint");
+    verify(runner).run(
+      eq(
+        List.of(
+          "helm",
+          "--kube-context",
+          "perf3-nvan",
+          "uninstall",
+          "service-release",
+          "--namespace",
+          "service-ns",
+          "--wait",
+          "--timeout",
+          "300s"
+        )
+      ),
+      any(),
+      any(),
+      any()
+    );
+    clearInvocations(runner);
+    doReturn("changed").when(helm).baseline(target, "service-ns", "service-release");
+    assertThatThrownBy(() ->
+      helm.cleanupApprovedRelease(target, "service-ns", "service-release", "fingerprint")
+    ).hasMessageContaining("changed since cleanup preview");
+    verifyNoInteractions(runner);
+  }
+
+  /**
    * <b>Scenario:</b> Given Targets When Selecting Environment Then Pin Context And Reject Unknown Targets
    * <pre>
    * GIVEN ... sandbox and perf targets with configured cluster contexts

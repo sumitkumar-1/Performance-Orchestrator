@@ -299,6 +299,145 @@ class RunWorkflowTest {
   }
 
   /**
+   * <b>Scenario:</b> Stop one load without affecting siblings
+   * <pre>
+   * GIVEN ... a baseline and two independent additional load releases
+   * WHEN ... the user stops one additional load and then the baseline
+   * THEN ... the other load remains running, repeated stop is idempotent, and wrong-run IDs are rejected
+   * </pre>
+   */
+  @Test
+  @DisplayName("Given multiple loads, when one is stopped, then siblings remain running")
+  void manualStopOnlyTargetsSelectedLoad() {
+    final var run = running();
+    final var first = reviewExtra(run);
+    final var second = reviewExtra(run);
+    additions().enqueue(run.id(), first.id());
+    additions().enqueue(run.id(), second.id());
+    worker.tick();
+    worker.tick();
+    worker.stopLoad(run.id(), first.id());
+    worker.stopLoad(run.id(), first.id());
+    assertThat(store.additionalLoad(first.id()).state()).isEqualTo("STOPPED");
+    assertThat(store.additionalLoad(second.id()).state()).isEqualTo("RUNNING");
+    verify(helm, times(1)).stop(eq(first.id()), any(), eq(first.service()));
+    verify(helm, never()).stop(eq(run.id()), any(), any());
+    verify(helm, never()).stop(eq(second.id()), any(), any());
+    assertThatThrownBy(() ->
+      additions().stop(
+        new Run(
+          "other",
+          run.planId(),
+          run.environment(),
+          run.state(),
+          run.verdict(),
+          run.createdAt(),
+          run.updatedAt(),
+          run.startedAt(),
+          run.measurementStartedAt(),
+          run.measurementEndedAt(),
+          run.message(),
+          run.cleanupOutcome(),
+          run.metrics(),
+          run.desiredOutcome(),
+          run.loadOperationId()
+        ),
+        store.plan(run.planId()),
+        second.id()
+      )
+    ).hasMessageContaining("not found");
+    worker.stopLoad(run.id(), "baseline");
+    worker.stopLoad(run.id(), "baseline");
+    verify(helm, times(1)).stop(eq(run.id()), any(), any());
+    worker.tick();
+    assertThat(store.additionalLoad(second.id()).state()).isEqualTo("RUNNING");
+    assertThat(store.run(run.id()).state()).isEqualTo(State.RUNNING_LOAD);
+  }
+
+  /**
+   * <b>Scenario:</b> Unconfirmed manual stop remains retryable
+   * <pre>
+   * GIVEN ... two running loads and an uninstall that cannot confirm absence
+   * WHEN ... the user stops the baseline
+   * THEN ... it is not marked stopped and other loads are not removed
+   * </pre>
+   */
+  @Test
+  @DisplayName(
+    "Given failed cleanup, when stopping baseline, then preserve truthful state and allow retry"
+  )
+  void failedManualStopDoesNotClaimSuccess() {
+    final var run = running();
+    final var extra = reviewExtra(run);
+    additions().enqueue(run.id(), extra.id());
+    worker.tick();
+    when(helm.stop(eq(run.id()), any(), any())).thenReturn(false);
+    assertThatThrownBy(() -> worker.stopLoad(run.id(), "baseline")).hasMessageContaining(
+      "could not be confirmed"
+    );
+    assertThat(worker.baselineStopped(run.id())).isFalse();
+    assertThat(store.additionalLoad(extra.id()).state()).isEqualTo("RUNNING");
+    verify(helm, never()).stop(eq(extra.id()), any(), any());
+    when(helm.stop(eq(run.id()), any(), any())).thenReturn(true);
+    worker.stopLoad(run.id(), "baseline");
+    assertThat(worker.baselineStopped(run.id())).isTrue();
+  }
+
+  /**
+   * <b>Scenario:</b> Cleanup services explicitly without deleting pre-existing releases
+   * <pre>
+   * GIVEN ... a finished run with a new service and a service that existed before review
+   * WHEN ... the user requests service cleanup
+   * THEN ... only the new service is sent through ownership-checked uninstall
+   * </pre>
+   */
+  @Test
+  @DisplayName(
+    "Given a finished run, when cleaning services, then pre-existing releases are retained"
+  )
+  void explicitServiceCleanupPreservesExistingServices() {
+    final var run = running();
+    assertThatThrownBy(() -> worker.cleanupServices(run.id())).hasMessageContaining(
+      "Stop all loads"
+    );
+    new RunService(store).cancel(run.id());
+    worker.tick();
+    worker.tick();
+    final com.fasterxml.jackson.databind.node.ObjectNode planJson = Json.MAPPER.valueToTree(
+      store.plan(run.planId())
+    );
+    final var services = (com.fasterxml.jackson.databind.node.ArrayNode) planJson.get("services");
+    final var created = (
+      (com.fasterxml.jackson.databind.node.ObjectNode) services.get(0)
+    ).deepCopy();
+    created.put("serviceId", "new-service");
+    created.put("releaseName", "new-release");
+    services.add(created);
+    final var existing = created.deepCopy();
+    existing.put("serviceId", "existing-service");
+    existing.put("releaseName", "existing-release");
+    existing.put("baselineDigest", "EXISTED");
+    services.add(existing);
+    new JdbcTemplate(db).update(
+      "UPDATE plans SET body=? WHERE id=?",
+      Json.write(planJson),
+      run.planId()
+    );
+    clearInvocations(helm);
+    assertThat(worker.cleanupServices(run.id())).containsExactly("new-release");
+    verify(helm).stop(
+      eq(run.id()),
+      any(),
+      argThat((final var service) -> service.releaseName().equals("new-release"))
+    );
+    verify(helm, never()).stop(
+      any(),
+      any(),
+      argThat((final var service) -> service.releaseName().equals("existing-release"))
+    );
+  }
+
+  /**
    * <b>Scenario:</b> Failed Extra Installation Cleans Only Its Own Release And Keeps Baseline Running
    * <pre>
    * GIVEN ... a baseline run whose additional load installation fails
@@ -420,7 +559,7 @@ class RunWorkflowTest {
    * <pre>
    * GIVEN ... a prepared real run without measured performance evidence
    * WHEN ... the run is submitted repeatedly and executed
-   * THEN ... it queues once, cleans its owned load, and does not fabricate a passing verdict
+   * THEN ... it queues once, retains load after measurement, and cleans up only after manual stop without a synthetic pass
    * </pre>
    */
   @Test
@@ -458,9 +597,21 @@ class RunWorkflowTest {
     worker.tick();
     worker.tick();
     worker.tick();
+    assertThat(store.run(run.id()).state()).isEqualTo(State.AWAITING_LOAD_STOP);
+    verify(helm, never()).stop(any(), any(), any());
+    assertThat(store.environmentAvailable("cluster/sandbox")).isFalse();
+    final var extra = reviewExtra(store.run(run.id()));
+    additions().enqueue(run.id(), extra.id());
+    worker.tick();
+    assertThat(store.additionalLoad(extra.id()).state()).isEqualTo("RUNNING");
+    worker.stopLoad(run.id(), extra.id());
+    worker.stopLoad(run.id(), "baseline");
+    assertThat(worker.baselineStopped(run.id())).isTrue();
+    worker.tick();
+    worker.tick();
     assertThat(store.run(run.id()).state()).isEqualTo(State.SUCCEEDED);
     assertThat(store.run(run.id()).verdict()).isEqualTo(Verdict.INCONCLUSIVE);
-    verify(helm).stop(eq(run.id()), any(), any());
+    verify(helm, times(2)).stop(eq(run.id()), any(), any());
     assertThat(store.environmentAvailable("cluster/sandbox")).isTrue();
     verify(metrics).detach(run.id());
   }

@@ -50,20 +50,15 @@ public class AdditionalLoads {
     preparation.enabled();
     final var run = store.run(runId);
     final var plan = store.plan(run.planId());
-    if (run.state() != State.RUNNING_LOAD) throw Problem.conflict(
-      "Additional load can be added only while the run's baseline load is running"
-    );
+    if (
+      run.state() != State.RUNNING_LOAD && run.state() != State.AWAITING_LOAD_STOP
+    ) throw Problem.conflict("Additional load can be added only while the run is accepting loads");
     final var now = Instant.now();
     if (
       now.isAfter(
         Instant.parse(run.createdAt()).plusSeconds(plan.profile().maxRunDurationSeconds())
-      ) ||
-      !now.isBefore(
-        Instant.parse(run.measurementStartedAt()).plusSeconds(
-          plan.profile().loadGenerator().measurementSeconds()
-        )
       )
-    ) throw Problem.conflict("The run's measurement window has ended; start a new run");
+    ) throw Problem.conflict("The run's overall deadline has been reached; start a new run");
     return plan;
   }
 
@@ -157,6 +152,46 @@ public class AdditionalLoads {
     final var load = store.additionalLoad(id);
     if (!load.runId().equals(runId)) throw Problem.missing("Additional load");
     return load;
+  }
+
+  public boolean allStopped(final String runId) {
+    return list(runId)
+      .stream()
+      .allMatch((final var load) ->
+        Set.of("REVIEWED", "NOT_STARTED", "STOPPED", "FAILED_STOPPED", "REJECTED").contains(
+          load.state()
+        )
+      );
+  }
+
+  /** Serialized with installations by RunExecution. Never accepts a release name from the caller. */
+  public void stop(final Run run, final Plan plan, final String id) {
+    final var load = owned(run.id(), id);
+    if (
+      Set.of("STOPPED", "NOT_STARTED", "FAILED_STOPPED", "REJECTED").contains(load.state())
+    ) return;
+    if (Set.of("REVIEWED", "QUEUED").contains(load.state())) {
+      store.updateAdditionalLoad(
+        load.transition("NOT_STARTED", "Stopped by user before installation")
+      );
+      return;
+    }
+    try {
+      if (!helm.stop(load.id(), target(plan), load.service())) throw Problem.conflict(
+        "Additional load cleanup could not be confirmed"
+      );
+      store.updateAdditionalLoad(
+        load.transition("STOPPED", "Stopped by user; this load release was uninstalled")
+      );
+    } catch (final RuntimeException error) {
+      store.updateAdditionalLoad(
+        load.transition(
+          "CLEANUP_FAILED",
+          "Stop failed; other loads remain unchanged. " + safeMessage(error)
+        )
+      );
+      throw error;
+    }
   }
 
   /** Called only by the serialized real-run worker, so install and cleanup cannot overlap. */

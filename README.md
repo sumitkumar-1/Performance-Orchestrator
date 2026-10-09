@@ -71,6 +71,10 @@ You can add independent load installations under a running run. Completion or ca
 
 Detailed procedures: [execution guide](docs/integration/real-execution.md), [office laptop setup](docs/integration/office-laptop-runbook.md), and [open organization questions](docs/integration/open-questions.md).
 
+To remove dangling installations before review, enable **Clean up selected releases before review**. The app lists the exact configured service and load-generator releases, including pre-existing installations, and requires confirmation before uninstalling them. Active runs block cleanup. Preparation begins only after release absence is confirmed.
+
+Loads remain installed after the measurement window until you use **Stop this load** or **Stop run & all loads**. Additional loads can be stopped independently or added while awaiting manual stop. Failures, restart, and the overall deadline still clean up owned loads. After the run finishes, **Clean up services** can remove services created by this run; existing services that were upgraded are retained.
+
 ## CKP deployment
 
 The chart is in `ckp/helm/ps-spoolers-perf-orchestrator`. Base `values.yaml` and `values-{sandbox,dev,qa,stable,perf,perf3}.yaml` configure the application instance. `catalog`, `connections` and `application.orchestrator` are rendered into ConfigMaps; saved dashboard overrides still take precedence for runtime-editable fields.

@@ -1,3 +1,4 @@
+import { confirmEnvironmentCleanup } from "./environment-cleanup.js";
 import { monitoringConfig } from "./monitoring-config.js";
 import { diagnosticsPanel } from "./diagnostics.js";
 import { reviewProgress } from "./review-progress.js";
@@ -377,6 +378,8 @@ export async function runBuilder(api, catalog, navigate) {
       saveProfile.disabled = false;
     }
   });
+  const cleanupFirst = input("", "checkbox");
+  cleanupFirst.addEventListener("change", invalidate);
   const prepare = button(
     "Review run",
     async () => {
@@ -389,10 +392,45 @@ export async function runBuilder(api, catalog, navigate) {
       ];
       controls.forEach((node) => (node.disabled = true));
       status.textContent = "Preparing charts and checking the cluster…";
+      let reviewStarted = false;
       try {
         const profile = readProfile();
         const trace = await diagnostics.start();
+        if (cleanupFirst.checked) {
+          status.textContent = "Checking selected releases for cleanup…";
+          const headers = trace ? { "X-Diagnostic-ID": trace } : {};
+          const cleanup = await api("/execution/environment-cleanup/preview", {
+            method: "POST",
+            headers,
+            body: {
+              environment: profile.targetEnvironment,
+              services: [
+                ...profile.services.map((service) => service.serviceId),
+                profile.loadGenerator.serviceId,
+              ],
+            },
+          });
+          if (disposed) return;
+          const confirmedCleanup = await confirmEnvironmentCleanup(cleanup, (dialog) => {
+            activeDialog = dialog;
+          });
+          activeDialog = null;
+          if (!confirmedCleanup || disposed) {
+            status.textContent = "Cleanup cancelled. No review was started.";
+            return;
+          }
+          status.textContent = "Uninstalling confirmed releases and verifying cleanup…";
+          await api("/execution/environment-cleanup", {
+            method: "POST",
+            headers,
+            body: { previewId: cleanup.id },
+          });
+          if (disposed) return;
+          cleanupFirst.checked = false;
+        }
+        status.textContent = "Preparing charts and checking the cluster…";
         const reviewId = progress.start(profile);
+        reviewStarted = true;
         plan = await api("/execution/plans", {
           method: "POST",
           headers: { ...(trace ? { "X-Diagnostic-ID": trace } : {}), "X-Review-ID": reviewId },
@@ -474,7 +512,7 @@ export async function runBuilder(api, catalog, navigate) {
         error.textContent = reason.message;
         status.textContent = "";
       } finally {
-        await progress.finish(!!plan);
+        if (reviewStarted) await progress.finish(!!plan);
         working = false;
         controls.forEach((node) => (node.disabled = false));
         renderSelections();
@@ -552,7 +590,18 @@ export async function runBuilder(api, catalog, navigate) {
       el(
         "p",
         { class: "muted" },
-        "Services remain deployed. Only this run’s load-generator release is uninstalled after completion or cancellation.",
+        "Loads stay installed after measurement until stopped manually. Failures, restart, and the overall deadline still trigger load cleanup. Services remain deployed unless explicitly cleaned up.",
+      ),
+      el(
+        "label",
+        { class: "cleanup-confirmation" },
+        cleanupFirst,
+        "Clean up selected releases before review (confirmation required)",
+      ),
+      el(
+        "p",
+        { class: "muted" },
+        "Optional: remove the selected services’ and load generator’s configured Helm releases, including pre-existing installations. Unrelated releases and dynamically named loads are not included. Active runs block cleanup.",
       ),
       el("div", { class: "card-actions" }, saveProfile, prepare, diagnostics.toggle),
     ),

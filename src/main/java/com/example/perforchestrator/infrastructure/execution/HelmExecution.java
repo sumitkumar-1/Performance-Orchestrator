@@ -537,9 +537,7 @@ public class HelmExecution {
     final var info = (Map<?, ?>) status.get("info");
     if (
       info == null || !("perf-orchestrator:" + runId).equals(info.get("description"))
-    ) throw Problem.conflict(
-      "Load release ownership differs; refusing to uninstall another release"
-    );
+    ) throw Problem.conflict("Release ownership differs; refusing to uninstall another release");
     final var args = helm(target);
     args.addAll(
       List.of(
@@ -552,8 +550,48 @@ public class HelmExecution {
         settings.timeoutSeconds + "s"
       )
     );
-    call(args, settings.workspace, "Owned load-generator cleanup");
+    call(args, settings.workspace, "Owned Helm release cleanup");
     return baseline(target, load.namespace(), load.releaseName()).equals("ABSENT");
+  }
+
+  /** Only the explicitly confirmed environment-cleanup workflow may remove pre-existing releases. */
+  public void cleanupApprovedRelease(
+    final Map<String, Object> target,
+    final String namespace,
+    final String release,
+    final String expectedBaseline
+  ) {
+    final String current = baseline(target, namespace, release);
+    if (!expectedBaseline.equals(current)) throw Problem.conflict(
+      "Release changed since cleanup preview; preview again"
+    );
+    if (current.equals("ABSENT")) return;
+    final var args = helm(target);
+    args.addAll(
+      List.of(
+        "uninstall",
+        release,
+        "--namespace",
+        namespace,
+        "--wait",
+        "--timeout",
+        settings.timeoutSeconds + "s"
+      )
+    );
+    final var result = commands.run(
+      args,
+      settings.workspace,
+      environment(),
+      Duration.ofSeconds(settings.timeoutSeconds + 15L)
+    );
+    if (result.exit() != 0) throw Problem.conflict(
+      "Helm uninstall failed (exit " +
+        result.exit() +
+        "); inspect command diagnostics and cluster state before retrying"
+    );
+    if (!baseline(target, namespace, release).equals("ABSENT")) throw Problem.conflict(
+      "Release absence could not be confirmed after uninstall"
+    );
   }
 
   private String validationCall(

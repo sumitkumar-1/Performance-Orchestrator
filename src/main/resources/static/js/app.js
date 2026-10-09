@@ -455,13 +455,53 @@ async function runDetails(id, generation) {
     actions.replaceChildren();
     if (!terminal.has(run.state))
       actions.append(
-        button("Cancel run", () => api("/runs/" + id + "/cancel", { method: "POST" }), "danger"),
+        button(
+          "Stop run & all loads",
+          async () => {
+            if (
+              !window.confirm(
+                "Stop this run and uninstall all of its load releases? Application services will remain deployed.",
+              )
+            )
+              return;
+            await api("/runs/" + id + "/cancel", { method: "POST" });
+          },
+          "danger",
+        ),
       );
     else {
       actions.append(
         link("View report", `/api/v1/runs/${id}/report`, "button"),
         link("JSON summary", `/api/v1/runs/${id}/artifacts/summary.json`, "button"),
       );
+      const removable = plan.services.filter(
+        (service) =>
+          service.serviceId !== plan.effectiveLoadConfiguration.loadService &&
+          service.baselineDigest === "ABSENT",
+      );
+      if (run.state !== "NEEDS_ATTENTION" && removable.length)
+        actions.append(
+          button(
+            "Clean up services",
+            async () => {
+              const releases = removable
+                .map((service) => `${service.namespace} / ${service.releaseName}`)
+                .join("\n");
+              if (
+                !window.confirm(
+                  `Uninstall these service releases if they are still owned by this run?\n\n${releases}\n\nServices that existed before this run are retained.`,
+                )
+              )
+                return;
+              const result = await api(`/execution/runs/${id}/cleanup-services`, {
+                method: "POST",
+              });
+              toast(`Cleanup confirmed for ${result.removed.length} service release(s).`);
+              await update();
+            },
+            "danger",
+          ),
+        );
       if (run.state === "NEEDS_ATTENTION")
         actions.append(
           button("Verify cleanup & release", async () => {

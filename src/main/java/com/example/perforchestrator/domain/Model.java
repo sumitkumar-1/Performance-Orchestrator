@@ -21,6 +21,7 @@ public final class Model {
     STARTING_LOAD,
     RUNNING_LOAD,
     COLLECTING,
+    AWAITING_LOAD_STOP,
     EVALUATING,
     CANCEL_REQUESTED,
     CLEANING_UP,

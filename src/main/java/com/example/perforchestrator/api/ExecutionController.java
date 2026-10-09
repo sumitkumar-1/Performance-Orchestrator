@@ -145,6 +145,25 @@ public class ExecutionController {
     }
   }
 
+  @GetMapping("/runs/{id}/loads/baseline")
+  public Object baselineLoad(final @PathVariable String id) {
+    return java.util.Map.of("stopped", runs.baselineStopped(id));
+  }
+
+  @PostMapping("/runs/{id}/loads/{loadId}/stop")
+  public Object stopLoad(final @PathVariable String id, final @PathVariable String loadId) {
+    try (var scope = diagnostics.scope(diagnostics.forRun(id))) {
+      return runs.stopLoad(id, loadId);
+    }
+  }
+
+  @PostMapping("/runs/{id}/cleanup-services")
+  public Object cleanupServices(final @PathVariable String id) {
+    try (var scope = diagnostics.scope(diagnostics.forRun(id))) {
+      return java.util.Map.of("removed", runs.cleanupServices(id));
+    }
+  }
+
   private Object loadView(
     final com.example.perforchestrator.domain.AdditionalLoad load,
     final boolean includeValues

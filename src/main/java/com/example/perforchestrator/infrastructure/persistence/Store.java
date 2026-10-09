@@ -104,6 +104,20 @@ public class Store {
     return one("SELECT body FROM runs WHERE id=?", id, Run.class, "Run");
   }
 
+  public boolean baselineStopped(final String runId) {
+    return (
+      db.queryForObject(
+        "SELECT COUNT(*) FROM stopped_baseline_loads WHERE run_id=?",
+        Integer.class,
+        runId
+      ) > 0
+    );
+  }
+
+  public void baselineStoppedConfirmed(final String runId) {
+    db.update("MERGE INTO stopped_baseline_loads (run_id) KEY(run_id) VALUES (?)", runId);
+  }
+
   public List<AdditionalLoad> additionalLoads(final String runId) {
     return db
       .query(

@@ -1514,3 +1514,18 @@ select {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.cleanup-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.5;
+}
+.cleanup-confirmation input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+.environment-cleanup-dialog .run-selection > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

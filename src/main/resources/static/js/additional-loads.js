@@ -34,7 +34,7 @@ export function additionalLoads(api, catalog, runId, plan) {
     el(
       "p",
       { class: "muted" },
-      "Add a different traffic pattern alongside the baseline. Each addition uses a new Helm release. All run-owned loads stop when this run ends; adding load does not extend its measurement window or timeout.",
+      "Add a different traffic pattern alongside the baseline. Each addition uses a new Helm release. Stop each load independently, or stop all loads to end the run. Measurement completion does not uninstall loads. Failures, restart, and the overall deadline still trigger load cleanup. Additional loads do not extend that deadline.",
     ),
     status,
     error,
@@ -132,20 +132,36 @@ export function additionalLoads(api, catalog, runId, plan) {
   return {
     node,
     async update(run) {
-      const loads = await api(`/execution/runs/${runId}/loads`);
+      const [loads, baselineStatus] = await Promise.all([
+        api(`/execution/runs/${runId}/loads`),
+        api(`/execution/runs/${runId}/loads/baseline`),
+      ]);
       if (disposed) return;
       const wasActive = active;
       active =
-        run.state === "RUNNING_LOAD" &&
-        Date.now() <
-          Date.parse(run.measurementStartedAt) +
-            plan.profile.loadGenerator.measurementSeconds * 1000 &&
+        ["RUNNING_LOAD", "AWAITING_LOAD_STOP"].includes(run.state) &&
         Date.now() < Date.parse(run.createdAt) + plan.profile.maxRunDurationSeconds * 1000;
       add.disabled = busy || !active || !available.length;
       const baseline = plan.services.find(
         (service) => service.serviceId === plan.effectiveLoadConfiguration.loadService,
       );
-      const row = (title, service, state, message) =>
+      const stopButton = (loadId, service) => {
+        const stop = button("Stop this load", () => {
+          if (
+            !window.confirm(
+              `Uninstall load release ${service.releaseName} in ${service.namespace}? Other loads and application services will keep running.`,
+            )
+          )
+            return;
+          operation(`Stopping ${service.releaseName}…`, async () => {
+            await api(`/execution/runs/${runId}/loads/${loadId}/stop`, { method: "POST" });
+            await this.update(run);
+          });
+        });
+        stop.disabled = busy || !active;
+        return stop;
+      };
+      const row = (title, service, state, message, loadId, canStop) =>
         el(
           "article",
           { class: "run-selection" },
@@ -158,14 +174,30 @@ export function additionalLoads(api, catalog, runId, plan) {
             el("p", { class: "muted" }, message),
           ),
           el(
-            "span",
-            { class: /FAILED|REJECTED|NEEDS_ATTENTION/.test(state) ? "pill bad" : "pill" },
-            state.replaceAll("_", " "),
+            "div",
+            { class: "deployment-actions" },
+            el(
+              "span",
+              { class: /FAILED|REJECTED|NEEDS_ATTENTION/.test(state) ? "pill bad" : "pill" },
+              state.replaceAll("_", " "),
+            ),
+            canStop && active ? stopButton(loadId, service) : null,
           ),
         );
       rows.replaceChildren(
         ...(baseline
-          ? [row("Baseline", baseline, run.state, "Part of the original run plan")]
+          ? [
+              row(
+                "Baseline",
+                baseline,
+                baselineStatus.stopped ? "STOPPED" : active ? "INSTALLED" : run.state,
+                baselineStatus.stopped
+                  ? "This load release has been uninstalled"
+                  : "Part of the original run plan; traffic duration is controlled by its YAML",
+                "baseline",
+                !baselineStatus.stopped,
+              ),
+            ]
           : []),
         ...loads
           .filter((load) => load.state !== "REVIEWED")
@@ -175,6 +207,8 @@ export function additionalLoads(api, catalog, runId, plan) {
               load.service,
               load.state,
               `${load.message} · Added by ${load.actor}`,
+              load.id,
+              !["STOPPED", "NOT_STARTED", "FAILED_STOPPED", "REJECTED"].includes(load.state),
             ),
           ),
       );

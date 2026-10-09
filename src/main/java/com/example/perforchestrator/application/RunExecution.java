@@ -122,52 +122,54 @@ public class RunExecution {
     final String id = UUID.randomUUID().toString();
     metrics.attach(id, plan);
     try {
-      return tx.execute((final var status) -> {
-        store.lock();
-        final var previous = store.submission(key);
-        if (previous.isPresent()) {
-          metrics.detach(id);
-          if (!previous.get().requestHash().equals(Json.hash(planId))) throw Problem.conflict(
-            "Idempotency key belongs to another plan"
+      synchronized (store) {
+        return tx.execute((final var status) -> {
+          store.lock();
+          final var previous = store.submission(key);
+          if (previous.isPresent()) {
+            metrics.detach(id);
+            if (!previous.get().requestHash().equals(Json.hash(planId))) throw Problem.conflict(
+              "Idempotency key belongs to another plan"
+            );
+            return store.run(previous.get().runId());
+          }
+          final String scope = plan.clusterIdentity() + "/" + plan.profile().targetEnvironment();
+          if (!store.environmentAvailable(scope)) throw Problem.conflict(
+            "Environment is reserved by another run"
           );
-          return store.run(previous.get().runId());
-        }
-        final String scope = plan.clusterIdentity() + "/" + plan.profile().targetEnvironment();
-        if (!store.environmentAvailable(scope)) throw Problem.conflict(
-          "Environment is reserved by another run"
-        );
-        final String now = Instant.now().toString();
-        final var run = new Run(
-          id,
-          plan.id(),
-          plan.profile().targetEnvironment(),
-          State.QUEUED,
-          Verdict.NOT_EVALUATED,
-          now,
-          now,
-          null,
-          null,
-          null,
-          "Queued for Helm execution",
-          "PENDING",
-          Map.of(),
-          "SUCCEEDED",
-          null
-        );
-        store.insert(run);
-        store.reserveEnvironment(
-          scope,
-          id,
-          "real-execution",
-          Instant.now(),
-          Instant.now().plusSeconds(plan.profile().maxRunDurationSeconds())
-        );
-        store.recordSubmission(key, Json.hash(planId), id);
-        store.audit("RUN_ENQUEUED", id);
-        live.add(id);
-        AdSessionCredentials.attach(id);
-        return run;
-      });
+          final String now = Instant.now().toString();
+          final var run = new Run(
+            id,
+            plan.id(),
+            plan.profile().targetEnvironment(),
+            State.QUEUED,
+            Verdict.NOT_EVALUATED,
+            now,
+            now,
+            null,
+            null,
+            null,
+            "Queued for Helm execution",
+            "PENDING",
+            Map.of(),
+            "SUCCEEDED",
+            null
+          );
+          store.insert(run);
+          store.reserveEnvironment(
+            scope,
+            id,
+            "real-execution",
+            Instant.now(),
+            Instant.now().plusSeconds(plan.profile().maxRunDurationSeconds())
+          );
+          store.recordSubmission(key, Json.hash(planId), id);
+          store.audit("RUN_ENQUEUED", id);
+          live.add(id);
+          AdSessionCredentials.attach(id);
+          return run;
+        });
+      }
     } catch (final RuntimeException error) {
       metrics.detach(id);
       AdSessionCredentials.detach(id);
@@ -195,6 +197,78 @@ public class RunExecution {
   @SuppressWarnings("unchecked")
   private String chart(final Plan p, final PreparedService s) {
     return ((Map<String, String>) p.effectiveLoadConfiguration().get("charts")).get(s.serviceId());
+  }
+
+  public boolean baselineStopped(final String id) {
+    store.run(id);
+    return store.baselineStopped(id);
+  }
+
+  public synchronized Run stopLoad(final String id, final String loadId) {
+    preparation.enabled();
+    final var run = store.run(id);
+    if (
+      run.state() != State.RUNNING_LOAD && run.state() != State.AWAITING_LOAD_STOP
+    ) throw Problem.conflict(
+      "Individual loads can be stopped while the run is active; use run cleanup for failed runs"
+    );
+    final var plan = store.plan(run.planId());
+    if (loadId.equals("baseline")) {
+      if (!store.baselineStopped(id)) {
+        if (!helm.stop(id, target(plan), load(plan))) throw Problem.conflict(
+          "Baseline load cleanup could not be confirmed"
+        );
+        store.baselineStoppedConfirmed(id);
+      }
+    } else additionalLoads.stop(run, plan, loadId);
+    store.audit("LOAD_STOPPED", id + "/" + loadId);
+    return store.run(id);
+  }
+
+  /** Explicit opt-in only, after loads are cleaned up. Existing service releases are preserved. */
+  public synchronized List<String> cleanupServices(final String id) {
+    preparation.enabled();
+    final var run = store.run(id);
+    if (!run.state().terminal() || run.state() == State.NEEDS_ATTENTION) throw Problem.conflict(
+      "Stop all loads and finish run cleanup before removing services"
+    );
+    final var plan = store.plan(run.planId());
+    final var removed = new ArrayList<String>();
+    final var services = new ArrayList<>(plan.services());
+    Collections.reverse(services);
+    for (final var service : services) {
+      if (
+        service.serviceId().equals(load(plan).serviceId()) ||
+        !service.baselineDigest().equals("ABSENT")
+      ) continue;
+      if (!helm.stop(id, target(plan), service)) throw Problem.conflict(
+        "Cannot confirm service cleanup: " + service.releaseName()
+      );
+      removed.add(service.releaseName());
+      store.audit("SERVICE_CLEANED_UP", id + "/" + service.releaseName());
+      store.update(
+        new Run(
+          run.id(),
+          run.planId(),
+          run.environment(),
+          run.state(),
+          run.verdict(),
+          run.createdAt(),
+          Instant.now().toString(),
+          run.startedAt(),
+          run.measurementStartedAt(),
+          run.measurementEndedAt(),
+          "Manual service cleanup confirmed absent: " +
+            String.join(", ", removed) +
+            ". Pre-existing service releases are retained.",
+          "LOADS_STOPPED_SERVICE_CLEANUP_REQUESTED",
+          run.metrics(),
+          run.desiredOutcome(),
+          run.loadOperationId()
+        )
+      );
+    }
+    return removed;
   }
 
   private void verifyReleaseBaseline(final Plan plan, final PreparedService service) {
@@ -310,7 +384,7 @@ public class RunExecution {
         run,
         State.CLEANING_UP,
         Verdict.NOT_EVALUATED,
-        "Cancellation requested; stopping owned load",
+        "Stop run requested; stopping all remaining owned loads",
         run.metrics(),
         "CANCELLED",
         null,
@@ -398,7 +472,10 @@ public class RunExecution {
       }
       case RUNNING_LOAD -> {
         final var start = Instant.parse(run.measurementStartedAt());
-        if (now.isBefore(start.plusSeconds(plan.profile().loadGenerator().measurementSeconds()))) {
+        if (
+          !(store.baselineStopped(run.id()) && additionalLoads.allStopped(run.id())) &&
+          now.isBefore(start.plusSeconds(plan.profile().loadGenerator().measurementSeconds()))
+        ) {
           additionalLoads.advance(run, plan);
           return;
         }
@@ -406,7 +483,7 @@ public class RunExecution {
           run,
           State.COLLECTING,
           run.verdict(),
-          "Measurement window ended; collecting configured LogQL metrics",
+          "Measurement ended; collecting configured LogQL metrics. Loads remain installed until stopped.",
           run.metrics(),
           null,
           null,
@@ -419,9 +496,9 @@ public class RunExecution {
         final var verdict = PerformanceVerdicts.evaluate(plan, values);
         write(
           run,
-          State.CLEANING_UP,
+          State.AWAITING_LOAD_STOP,
           verdict,
-          "Performance verdict: " +
+          "Measurement complete; stop loads individually or stop all loads to finish. Performance verdict: " +
             verdict +
             "; missing or unconfigured metrics remain unavailable",
           values,
@@ -430,6 +507,22 @@ public class RunExecution {
           null,
           null
         );
+      }
+      case AWAITING_LOAD_STOP -> {
+        additionalLoads.advance(run, plan);
+        if (store.baselineStopped(run.id()) && additionalLoads.allStopped(run.id())) {
+          write(
+            run,
+            State.CLEANING_UP,
+            run.verdict(),
+            "All loads stopped by user; verifying cleanup",
+            run.metrics(),
+            null,
+            null,
+            null,
+            null
+          );
+        }
       }
       case CLEANING_UP -> {
         cleanupOwnedLoads(run, plan);
@@ -578,6 +671,7 @@ public class RunExecution {
       if (!helm.stop(run.id(), target(plan), load(plan))) throw Problem.conflict(
         "Cannot confirm baseline load cleanup"
       );
+      store.baselineStoppedConfirmed(run.id());
     } catch (final RuntimeException error) {
       if (failure == null) failure = error;
       else failure.addSuppressed(error);
